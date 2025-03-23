@@ -88,73 +88,67 @@ const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, onClose }
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center">
-      {/* 배경 오버레이 */}
-      <div className="fixed inset-0 bg-black bg-opacity-30" onClick={onClose}></div>
+    <div className="notification-dropdown absolute right-0 top-12 z-10 w-80 rounded-md border border-gray-200 bg-white shadow-lg">
+      {/* 모달 헤더 */}
+      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+        <h3 className="text-lg font-medium">알림</h3>
+        <button 
+          onClick={onClose}
+          className="rounded-full p-1 hover:bg-gray-100"
+        >
+          <FaTimes />
+        </button>
+      </div>
       
-      {/* 모달 컨테이너 */}
-      <div className="relative mt-16 w-full max-w-md rounded-lg bg-white shadow-lg">
-        {/* 모달 헤더 */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-          <h3 className="text-lg font-medium">알림</h3>
-          <button 
-            onClick={onClose}
-            className="rounded-full p-1 hover:bg-gray-100"
-          >
-            <FaTimes />
-          </button>
-        </div>
-        
-        {/* 모달 내용 */}
-        <div className="max-h-[70vh] overflow-y-auto">
-          {notifications.length > 0 ? (
-            <ul className="divide-y divide-gray-100">
-              {notifications.map((notification) => (
-                <li 
-                  key={notification.id} 
-                  className={`cursor-pointer p-4 transition hover:bg-gray-50 ${
-                    !notification.read ? 'bg-blue-50' : ''
-                  }`}
-                >
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0 pt-1">
-                      {getNotificationIcon(notification.type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900">
-                        {notification.from}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {notification.message}
-                      </p>
-                      <p className="mt-1 text-xs text-gray-400">
-                        {notification.time}
-                      </p>
-                    </div>
-                    {!notification.read && (
-                      <div className="h-2 w-2 rounded-full bg-blue-500"></div>
-                    )}
+      {/* 모달 내용 */}
+      <div className="max-h-[400px] overflow-y-auto">
+        {notifications.length > 0 ? (
+          <ul className="divide-y divide-gray-100">
+            {notifications.map((notification) => (
+              <li 
+                key={notification.id} 
+                className={`cursor-pointer p-4 transition hover:bg-gray-50 ${
+                  !notification.read ? 'bg-blue-50' : ''
+                }`}
+              >
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0 pt-1">
+                    {getNotificationIcon(notification.type)}
                   </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="flex flex-col items-center justify-center p-8 text-center">
-              <FaBell className="mb-2 text-3xl text-gray-300" />
-              <p className="text-gray-500">알림이 없습니다.</p>
-            </div>
-          )}
-        </div>
-        
-        {/* 모달 푸터 */}
-        <div className="border-t border-gray-200 p-3 text-center">
-          <button 
-            className="text-sm font-medium text-blue-600 hover:text-blue-800"
-            onClick={() => {/* 모든 알림 읽음 처리 로직 */}}
-          >
-            모든 알림 읽음 표시
-          </button>
-        </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">
+                      {notification.from}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {notification.message}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      {notification.time}
+                    </p>
+                  </div>
+                  {!notification.read && (
+                    <div className="h-2 w-2 rounded-full bg-blue-500"></div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="flex flex-col items-center justify-center p-8 text-center">
+            <FaBell className="mb-2 text-3xl text-gray-300" />
+            <p className="text-gray-500">알림이 없습니다.</p>
+          </div>
+        )}
+      </div>
+      
+      {/* 모달 푸터 */}
+      <div className="border-t border-gray-200 p-3 text-center">
+        <button 
+          className="text-sm font-medium text-blue-600 hover:text-blue-800"
+          onClick={() => {/* 모든 알림 읽음 처리 로직 */}}
+        >
+          모든 알림 읽음 표시
+        </button>
       </div>
     </div>
   );
