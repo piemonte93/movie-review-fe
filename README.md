@@ -1,54 +1,67 @@
-# React + TypeScript + Vite
+# Movie Social App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A social movie review application built with React (Vite) frontend and Spring Boot backend.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- View trending, top-rated, and upcoming movies
+- Browse movie details and reviews
+- Share your thoughts on movies
+- Connect with friends and see what they're watching
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Frontend
+- React with TypeScript
+- Vite for fast builds and development
+- Tailwind CSS for styling
+- React Router for navigation
+- Axios for API requests
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+### Backend (to be implemented)
+- Spring Boot with Gradle
+- MySQL database (movie_social_db)
+- TMDB API integration
+
+## Getting Started
+
+### Frontend
+
+1. Install dependencies:
+```
+cd movie-social-app
+bun install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+2. Start the development server:
+```
+bun run dev
+```
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+3. Open your browser to `http://localhost:5173`
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+### Backend (to be implemented)
+
+The backend will be implemented with Spring Boot and Gradle, featuring:
+- RESTful API endpoints for movies, users, and reviews
+- MySQL database integration
+- TMDB API proxy to fetch movie data
+
+## Project Structure
+
+```
+movie-social-app/
+├── src/
+│   ├── api/         # API service modules
+│   ├── components/  # Reusable UI components
+│   ├── hooks/       # Custom React hooks
+│   ├── pages/       # Page components
+│   ├── types/       # TypeScript type definitions
+│   ├── assets/      # Static assets like images and fonts
+│   ├── App.tsx      # Main application component
+│   └── main.tsx     # Entry point
+├── public/          # Public static files
+├── index.html       # HTML template
+├── package.json     # Node.js dependencies and scripts
+└── README.md        # Project documentation
 ```
