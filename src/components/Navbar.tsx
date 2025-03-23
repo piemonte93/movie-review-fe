@@ -1,8 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FaSearch, FaBell, FaUser } from 'react-icons/fa';
+import NotificationModal from './NotificationModal';
 
 const Navbar: React.FC = () => {
+  // 알람 모달 열림/닫힘 상태
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  
+  // 읽지 않은 알람 있음을 표시하는 상태 (예시로 true로 설정)
+  const hasUnreadNotifications = true;
+
   return (
     <header className="border-b border-gray-200 bg-white">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
@@ -49,8 +56,15 @@ const Navbar: React.FC = () => {
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 transform text-gray-400" />
           </div>
 
-          <button className="rounded-full p-2 hover:bg-gray-100">
+          <button 
+            className="relative rounded-full p-2 hover:bg-gray-100"
+            onClick={() => setIsNotificationModalOpen(true)}
+          >
             <FaBell />
+            {/* 읽지 않은 알람이 있을 경우 표시할 빨간 점 */}
+            {hasUnreadNotifications && (
+              <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500"></span>
+            )}
           </button>
 
           <button className="rounded-full p-2 hover:bg-gray-100">
@@ -58,6 +72,12 @@ const Navbar: React.FC = () => {
           </button>
         </div>
       </div>
+      
+      {/* 알람 모달 */}
+      <NotificationModal 
+        isOpen={isNotificationModalOpen} 
+        onClose={() => setIsNotificationModalOpen(false)} 
+      />
     </header>
   );
 };
