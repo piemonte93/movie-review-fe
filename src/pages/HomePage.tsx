@@ -1,65 +1,73 @@
 import React from "react";
-import MovieScrollList from "../components/MovieScrollList";
-import { useMovies, useTrendingAll } from "../hooks/useMovies";
+import ContentScrollList from "../components/ContentScrollList";
+import { useContents, useTrendingAll } from "../hooks/useContents";
+import { useAuth } from "../context/AuthContext";
 
 const HomePage: React.FC = () => {
+  const { isLoggedIn, user } = useAuth();
+
   const {
-    movies: trendingAllContent,
+    contents: trendingAllContent,
     loading: trendingAllLoading,
     error: trendingAllError,
   } = useTrendingAll();
 
   const {
-    movies: topRatedMovies,
+    contents: topRatedContents,
     loading: topRatedLoading,
     error: topRatedError,
-  } = useMovies("topRated");
+  } = useContents("topRated");
 
   const {
-    movies: upcomingMovies,
+    contents: upcomingContents,
     loading: upcomingLoading,
     error: upcomingError,
-  } = useMovies("upcoming");
+  } = useContents("upcoming");
 
   const {
-    movies: nowPlayingMovies,
+    contents: nowPlayingContents,
     loading: nowPlayingLoading,
     error: nowPlayingError,
-  } = useMovies("nowPlaying");
+  } = useContents("nowPlaying");
 
   return (
     <div className="container mx-auto px-5 py-10">
       <h1 className="mb-10 text-3xl font-bold">영화 정보</h1>
 
-      <MovieScrollList
+      <ContentScrollList
         title="현재 상영작"
-        movies={nowPlayingMovies}
+        contents={nowPlayingContents}
         loading={nowPlayingLoading}
         error={nowPlayingError}
         category="nowPlaying"
       />
 
-      <MovieScrollList
+      <ContentScrollList
         title="사이트 HOT 랭킹 (영화/TV)"
-        movies={trendingAllContent}
+        contents={trendingAllContent}
         loading={trendingAllLoading}
         error={trendingAllError}
         category="trendingAll"
       />
 
-      <MovieScrollList
-        title="User님의 친구가 보고있는 작품"
-        movies={topRatedMovies}
-        loading={topRatedLoading}
-        error={topRatedError}
-        category="topRated"
-      />
+      {isLoggedIn && (
+        <ContentScrollList
+          title={`${user?.username || "사용자"}님의 친구가 보고있는 작품`}
+          contents={topRatedContents}
+          loading={topRatedLoading}
+          error={topRatedError}
+          category="topRated"
+        />
+      )}
 
       <section className="my-14">
         <h2 className="mb-6 text-2xl font-bold">현재 HOT 코멘트🔥</h2>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
           {[1, 2, 3].map((review) => (
-            <div key={review} className="rounded-lg border border-gray-200 p-5 shadow-sm">
+            <div
+              key={review}
+              className="rounded-lg border border-gray-200 p-5 shadow-sm"
+            >
               <p className="mb-3 text-lg font-semibold">
                 "
                 {review === 1
@@ -81,9 +89,9 @@ const HomePage: React.FC = () => {
         </div>
       </section>
 
-      <MovieScrollList
+      <ContentScrollList
         title="공개 예정작"
-        movies={upcomingMovies}
+        contents={upcomingContents}
         loading={upcomingLoading}
         error={upcomingError}
         category="upcoming"

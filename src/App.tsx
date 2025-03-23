@@ -1,17 +1,21 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import VerifyCodePage from './pages/VerifyCodePage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
-import { AuthProvider } from './context/AuthContext';
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Navbar from "./components/Navbar";
+import HomePage from "./pages/HomePage";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import VerifyCodePage from "./pages/VerifyCodePage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import ContentDetailPage from "./pages/ContentDetailPage";
+import ContentVideosPage from "./pages/ContentVideosPage";
+import { AuthProvider } from "./context/AuthContext";
+import ScrollToTop from "./components/ScrollToTop";
 
 function App() {
   return (
     <AuthProvider>
       <Router>
+        <ScrollToTop />
         <div className="min-h-screen">
           <Navbar />
           <main>
@@ -22,6 +26,10 @@ function App() {
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/verify-code" element={<VerifyCodePage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/movie/:id" element={<ContentDetailPage />} />
+              <Route path="/movie/:id/videos" element={<ContentVideosPage />} />
+              <Route path="/tv/:id" element={<ContentDetailPage />} />
+              <Route path="/tv/:id/videos" element={<ContentVideosPage />} />
               {/* Add more routes as needed */}
             </Routes>
           </main>

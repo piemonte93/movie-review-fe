@@ -14,6 +14,12 @@ const Navbar: React.FC = () => {
   // 사용자 메뉴 열림/닫힘 상태
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
+  // 검색창 확장 상태
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+
+  // 검색어 상태
+  const [searchQuery, setSearchQuery] = useState("");
+
   // 읽지 않은 알람 있음을 표시하는 상태 (예시로 true로 설정)
   const hasUnreadNotifications = true;
 
@@ -35,12 +41,39 @@ const Navbar: React.FC = () => {
     navigate("/");
   };
 
-  // 외부 클릭 시 메뉴 닫기
+  // 검색 아이콘 클릭 핸들러
+  const handleSearchIconClick = () => {
+    setIsSearchExpanded(!isSearchExpanded);
+    if (!isSearchExpanded) {
+      // 검색창이 확장될 때 자동으로 포커스
+      setTimeout(() => {
+        const searchInput = document.getElementById("search-input");
+        if (searchInput) {
+          searchInput.focus();
+        }
+      }, 100);
+    }
+  };
+
+  // 검색 제출 핸들러
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
+      setIsSearchExpanded(false);
+      setSearchQuery("");
+    }
+  };
+
+  // 외부 클릭 시 메뉴와 검색창 닫기
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       if (!target.closest(".user-menu") && !target.closest(".user-icon")) {
         setIsUserMenuOpen(false);
+      }
+      if (!target.closest(".search-container")) {
+        setIsSearchExpanded(false);
       }
     };
 
@@ -85,13 +118,33 @@ const Navbar: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-4">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search..."
-              className="w-40 rounded-full border border-gray-300 py-1 pl-8 pr-2 text-sm focus:border-blue-500 focus:outline-none md:w-60"
-            />
-            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 transform text-gray-400" />
+          <div className="search-container relative">
+            <div className="flex items-center">
+              {isSearchExpanded ? (
+                <form onSubmit={handleSearchSubmit}>
+                  <input
+                    id="search-input"
+                    type="text"
+                    placeholder="Search..."
+                    className="w-40 rounded-full border border-gray-300 py-1 pl-8 pr-2 text-sm focus:border-blue-500 focus:outline-none md:w-60"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <FaSearch
+                    className="absolute left-3 top-1/2 -translate-y-1/2 transform text-gray-400 cursor-pointer"
+                    onClick={handleSearchSubmit}
+                  />
+                </form>
+              ) : (
+                <button
+                  className="rounded-full p-2 hover:bg-gray-100"
+                  onClick={handleSearchIconClick}
+                  aria-label="검색"
+                >
+                  <FaSearch className="text-gray-600" />
+                </button>
+              )}
+            </div>
           </div>
 
           {isLoggedIn && (
@@ -133,7 +186,9 @@ const Navbar: React.FC = () => {
               {isUserMenuOpen && (
                 <div className="user-menu absolute right-0 top-12 z-10 w-48 rounded-md border border-gray-200 bg-white shadow-lg">
                   <div className="border-b border-gray-100 p-3">
-                    <p className="font-medium">{user?.username || "사용자"}</p>
+                    <p className="font-medium text-gray-900">
+                      {user?.username || "사용자"}
+                    </p>
                     <p className="text-sm text-gray-500">
                       {user?.email || "user@example.com"}
                     </p>

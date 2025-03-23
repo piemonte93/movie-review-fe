@@ -1,10 +1,15 @@
 import { useState, useEffect } from "react";
-import { Movie } from "../types/movie";
+import { Content } from "../types/content";
 import { backendApi } from "../api/backendApi";
 
-type MovieCategory = "trending" | "topRated" | "upcoming" | "nowPlaying" | "trendingAll";
+type ContentCategory =
+  | "trending"
+  | "topRated"
+  | "upcoming"
+  | "nowPlaying"
+  | "trendingAll";
 
-// Sample movie posters for development
+// Sample content posters for development
 const SAMPLE_POSTERS = [
   "/tmU7GeKVybMWFButWEGl2M4GeiP.jpg",
   "/kjFDIlUCJkcpFxYKtE6OsGcAfQQ.jpg",
@@ -18,13 +23,13 @@ const SAMPLE_POSTERS = [
   "/r0J0Y9axoXVJ9D8CfCNrZUzJrMW.jpg",
 ];
 
-export const useMovies = (category: MovieCategory) => {
-  const [movies, setMovies] = useState<Movie[]>([]);
+export const useContents = (category: ContentCategory) => {
+  const [contents, setContents] = useState<Content[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchMovies = async () => {
+    const fetchContents = async () => {
       try {
         setLoading(true);
         setError(null);
@@ -52,24 +57,24 @@ export const useMovies = (category: MovieCategory) => {
             throw new Error("Unknown category");
         }
 
-        // 응답에서 영화 목록 가져오기
-        setMovies(response.results || []);
+        // 응답에서 컨텐츠 목록 가져오기
+        setContents(response.results || []);
       } catch (err) {
-        console.error("Error fetching movies:", err);
-        setError("영화 정보를 가져오는데 실패했습니다");
+        console.error("Error fetching contents:", err);
+        setError("컨텐츠 정보를 가져오는데 실패했습니다");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchMovies();
+    fetchContents();
   }, [category]);
 
-  return { movies, loading, error };
+  return { contents, loading, error };
 };
 
 // Generate different mock data based on category
-const getMockMovies = (category: MovieCategory): Movie[] => {
+const getMockContents = (category: ContentCategory): Content[] => {
   return Array(10)
     .fill(null)
     .map((_, index) => {
@@ -78,7 +83,7 @@ const getMockMovies = (category: MovieCategory): Movie[] => {
       const posterPath = SAMPLE_POSTERS[posterIndex];
 
       // Common properties
-      const movie: Movie = {
+      const content: Content = {
         id:
           index +
           1 +
@@ -92,18 +97,18 @@ const getMockMovies = (category: MovieCategory): Movie[] => {
         title: `${category === "trending" ? "Trending" : category === "topRated" ? "Top Rated" : category === "upcoming" ? "Upcoming" : "Now Playing"} Movie ${index + 1}`,
         poster_path: posterPath,
         backdrop_path: posterPath,
-        overview: `This is a mock ${category} movie description for development purposes.`,
+        overview: `This is a mock ${category} content description for development purposes.`,
         release_date: "2024-01-01",
         vote_average: Math.floor(Math.random() * 3) + 7, // Random rating between 7 and 9
         vote_count: Math.floor(Math.random() * 900) + 100, // Random between 100 and 999
         genre_ids: [28, 12, 16],
       };
 
-      return movie;
+      return content;
     });
 };
 
 // 트렌딩 영화와 TV 프로그램을 함께 가져오는 전용 훅
 export const useTrendingAll = () => {
-  return useMovies("trendingAll");
+  return useContents("trendingAll");
 };
