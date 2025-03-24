@@ -173,6 +173,7 @@ const RegisterPage: React.FC = () => {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // 이벤트 전파 중지 추가
 
     // 유효성 검사
     if (
@@ -236,23 +237,28 @@ const RegisterPage: React.FC = () => {
         // 백엔드가 없는 경우 모킹 (성공 시뮬레이션)
         console.log("백엔드 API가 없습니다. 모킹 데이터를 사용합니다.");
 
-        // 회원가입 후 자동 로그인 (모킹)
-        if (false) {
-          // 자동 로그인이 필요하다면 이 부분을 수정
-          const mockUser = {
-            id: 1,
-            username: formData.username,
-            email: formData.email,
-            roles: ["USER"],
-          };
-          login("mock-token", mockUser);
-          navigate("/");
-        } else {
-          setTimeout(() => {
-            navigate("/login", {
-              state: { message: "회원가입이 완료되었습니다. 로그인해주세요." },
-            });
-          }, 1000);
+        // 개발 환경에서만 모킹 기능 사용
+        if (import.meta.env.DEV) {
+          // 회원가입 후 자동 로그인 (모킹)
+          if (false) {
+            // 자동 로그인이 필요하다면 이 부분을 수정
+            const mockUser = {
+              id: 1,
+              username: formData.username,
+              email: formData.email,
+              roles: ["USER"],
+            };
+            login("mock-token", mockUser);
+            navigate("/");
+          } else {
+            setTimeout(() => {
+              navigate("/login", {
+                state: {
+                  message: "회원가입이 완료되었습니다. 로그인해주세요.",
+                },
+              });
+            }, 1000);
+          }
         }
       }
     } finally {
@@ -274,6 +280,7 @@ const RegisterPage: React.FC = () => {
         <form
           className="mb-6 rounded-lg border border-gray-200 bg-white p-8 shadow-md"
           onSubmit={handleRegister}
+          noValidate // HTML 기본 유효성 검사 비활성화
         >
           {/* 이메일 입력 및 중복 체크 */}
           <div className="mb-4">

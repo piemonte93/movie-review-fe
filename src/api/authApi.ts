@@ -60,13 +60,25 @@ apiClient.interceptors.response.use(
       requestUrl.includes("/check-username") ||
       requestUrl.includes("/update-username");
 
-    if (error.response && error.response.status === 401 && !isOAuthPath) {
-      console.log("401 오류 발생 - 로그아웃 처리 (OAuth 경로 제외)");
+    // 로그인 요청인지 확인 (로그아웃 처리 제외 대상)
+    const isLoginPath = requestUrl.includes("/auth/login");
+
+    if (
+      error.response &&
+      error.response.status === 401 &&
+      !isOAuthPath &&
+      !isLoginPath
+    ) {
+      console.log("401 오류 발생 - 로그아웃 처리 (OAuth 경로와 로그인 제외)");
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       window.location.href = "/login";
-    } else if (error.response && error.response.status === 401) {
-      console.log("OAuth 관련 401 오류 - 로그아웃 처리 생략");
+    } else if (
+      error.response &&
+      error.response.status === 401 &&
+      (isOAuthPath || isLoginPath)
+    ) {
+      console.log("OAuth 또는 로그인 관련 401 오류 - 로그아웃 처리 생략");
     }
 
     return Promise.reject(error);
