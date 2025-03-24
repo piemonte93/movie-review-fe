@@ -124,6 +124,11 @@ export interface TokenResponse {
   token: string;
 }
 
+export interface EmailVerificationRequest {
+  email: string;
+  code?: string;
+}
+
 // 인증 API
 export const authApi = {
   // 로그인 API
@@ -469,6 +474,50 @@ export const authApi = {
       // 오류가 발생해도 로컬 스토리지는 초기화
       localStorage.removeItem("token");
       localStorage.removeItem("user");
+      throw error;
+    }
+  },
+
+  // 이메일 중복 체크
+  checkEmail: async (email: string): Promise<boolean> => {
+    try {
+      const response = await apiClient.get<{ available: boolean }>(
+        `/auth/check-email?email=${encodeURIComponent(email)}`
+      );
+      return response.data.available;
+    } catch (error) {
+      console.error("이메일 중복 체크 실패:", error);
+      throw error;
+    }
+  },
+
+  // 이메일 인증 코드 요청
+  sendVerificationCode: async (email: string): Promise<MessageResponse> => {
+    try {
+      const response = await apiClient.post<MessageResponse>(
+        "/auth/send-verification-code",
+        { email }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("이메일 인증 코드 요청 실패:", error);
+      throw error;
+    }
+  },
+
+  // 이메일 인증 코드 확인
+  verifyEmail: async (
+    email: string,
+    code: string
+  ): Promise<MessageResponse> => {
+    try {
+      const response = await apiClient.post<MessageResponse>(
+        "/auth/verify-email",
+        { email, code }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("이메일 인증 코드 확인 실패:", error);
       throw error;
     }
   },
