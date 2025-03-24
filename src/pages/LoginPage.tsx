@@ -42,6 +42,7 @@ const LoginPage: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault(); // 폼 기본 동작 방지 (페이지 새로고침 방지)
+    e.stopPropagation(); // 이벤트 전파 중지 추가
     console.log("로그인 시도 - preventDefault 호출됨");
 
     // 유효성 검사
@@ -73,8 +74,18 @@ const LoginPage: React.FC = () => {
 
       if (err.response) {
         // 서버 응답이 있는 에러
-        console.log("서버 응답 오류:", err.response.status);
-        if (err.response.status === 401 || err.response.status === 403) {
+        console.log("서버 응답 오류:", err.response.status, err.response.data);
+
+        // 특정 응답 메시지 처리
+        const errorMessage = err.response.data?.message;
+        if (
+          errorMessage &&
+          errorMessage.includes("구글 로그인으로 가입된 계정입니다")
+        ) {
+          setError(
+            "이 계정은 구글 로그인으로 가입된 계정입니다. 구글 로그인 버튼을 이용해주세요."
+          );
+        } else if (err.response.status === 401 || err.response.status === 403) {
           setError("이메일 또는 비밀번호가 틀렸습니다.");
         } else {
           setError("로그인에 실패했습니다. 나중에 다시 시도해주세요.");
@@ -84,24 +95,26 @@ const LoginPage: React.FC = () => {
         console.log("응답 없음:", err.request);
         setError("서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요.");
 
-        // 백엔드가 없는 경우 모킹
-        console.log("백엔드 API가 없습니다. 모킹 데이터를 사용합니다.");
+        // 백엔드가 없는 경우 모킹 (개발 환경에서만 사용)
+        if (import.meta.env.DEV) {
+          console.log("백엔드 API가 없습니다. 모킹 데이터를 사용합니다.");
 
-        // 모킹 데이터로 로그인
-        const mockUser: User = {
-          id: 1,
-          username: email.split("@")[0],
-          email,
-          roles: ["USER"],
-        };
+          // 모킹 데이터로 로그인
+          const mockUser: User = {
+            id: 1,
+            username: email.split("@")[0],
+            email,
+            roles: ["USER"],
+          };
 
-        // 컨텍스트에 로그인 상태 업데이트
-        login("mock-token", mockUser);
+          // 컨텍스트에 로그인 상태 업데이트
+          login("mock-token", mockUser);
 
-        // 로그인 성공 시뮬레이션 (1초 지연)
-        setTimeout(() => {
-          navigate("/");
-        }, 1000);
+          // 로그인 성공 시뮬레이션 (1초 지연)
+          setTimeout(() => {
+            navigate("/");
+          }, 1000);
+        }
       } else {
         // 요청 설정하는 중에 발생한 오류
         console.log("요청 설정 오류:", err.message);

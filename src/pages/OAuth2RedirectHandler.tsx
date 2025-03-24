@@ -34,6 +34,25 @@ const OAuth2RedirectHandler: React.FC = () => {
     setDebugInfo(JSON.stringify(Object.fromEntries([...params])));
 
     const handleAuth = async () => {
+      // 일반 회원가입으로 가입된 이메일 계정으로 구글 로그인 시도 시 오류 처리
+      if (error === "email_exists_regular_account") {
+        setError(
+          "이 이메일은 일반 회원가입으로 이미 가입된 계정입니다. 일반 로그인을 이용해주세요."
+        );
+        setProcessing(false);
+        setTimeout(
+          () =>
+            navigate("/login", {
+              state: {
+                message:
+                  "이 이메일은 일반 회원가입으로 이미 가입된 계정입니다. 일반 로그인을 이용해주세요.",
+              },
+            }),
+          3000
+        );
+        return;
+      }
+
       if (error) {
         console.error("OAuth 인증 오류:", error);
         setError(`인증 과정에서 오류가 발생했습니다: ${error}`);
