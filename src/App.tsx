@@ -8,14 +8,15 @@ import VerifyCodePage from "./pages/VerifyCodePage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ContentDetailPage from "./pages/ContentDetailPage";
 import ContentVideosPage from "./pages/ContentVideosPage";
+import OAuth2RedirectHandler from "./pages/OAuth2RedirectHandler";
 import { AuthProvider } from "./context/AuthContext";
 import ScrollToTop from "./components/ScrollToTop";
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <ScrollToTop />
+    <Router>
+      <ScrollToTop />
+      <AuthProvider>
         <div className="min-h-screen">
           <Navbar />
           <main>
@@ -30,12 +31,16 @@ function App() {
               <Route path="/movie/:id/videos" element={<ContentVideosPage />} />
               <Route path="/tv/:id" element={<ContentDetailPage />} />
               <Route path="/tv/:id/videos" element={<ContentVideosPage />} />
+              <Route
+                path="/oauth2/redirect"
+                element={<OAuth2RedirectHandler />}
+              />
               {/* Add more routes as needed */}
             </Routes>
           </main>
         </div>
-      </Router>
-    </AuthProvider>
+      </AuthProvider>
+    </Router>
   );
 }
 

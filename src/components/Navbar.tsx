@@ -184,9 +184,9 @@ const Navbar: React.FC = () => {
 
               {/* 사용자 드롭다운 메뉴 */}
               {isUserMenuOpen && (
-                <div className="user-menu absolute right-0 top-12 z-10 w-48 rounded-md border border-gray-200 bg-white shadow-lg">
-                  <div className="border-b border-gray-100 p-3">
-                    <p className="font-medium text-gray-900">
+                <div className="user-menu absolute right-0 top-12 z-10 w-56 rounded-md border border-gray-200 bg-white shadow-lg">
+                  <div className="border-b border-gray-100 p-4">
+                    <p className="text-lg font-medium text-gray-900">
                       {user?.username || "사용자"}
                     </p>
                     <p className="text-sm text-gray-500">
@@ -197,29 +197,29 @@ const Navbar: React.FC = () => {
                     <li>
                       <Link
                         to="/profile"
-                        className="flex items-center px-4 py-2 text-sm hover:bg-gray-50"
+                        className="flex items-center px-5 py-3 text-base hover:bg-gray-50"
                         onClick={() => setIsUserMenuOpen(false)}
                       >
-                        <FaUser className="mr-2 text-gray-500" />
+                        <FaUser className="mr-3 text-gray-500" />
                         프로필
                       </Link>
                     </li>
                     <li>
                       <Link
                         to="/settings"
-                        className="flex items-center px-4 py-2 text-sm hover:bg-gray-50"
+                        className="flex items-center px-5 py-3 text-base hover:bg-gray-50"
                         onClick={() => setIsUserMenuOpen(false)}
                       >
-                        <FaCog className="mr-2 text-gray-500" />
+                        <FaCog className="mr-3 text-gray-500" />
                         설정
                       </Link>
                     </li>
                     <li className="border-t border-gray-100">
                       <button
-                        className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-50"
+                        className="flex w-full items-center px-5 py-3 text-base text-red-600 hover:bg-gray-50"
                         onClick={handleLogout}
                       >
-                        <FaSignOutAlt className="mr-2" />
+                        <FaSignOutAlt className="mr-3" />
                         로그아웃
                       </button>
                     </li>

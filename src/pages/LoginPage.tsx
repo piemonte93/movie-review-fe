@@ -3,9 +3,18 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { FaGoogle } from "react-icons/fa";
 import { authApi } from "../api/authApi";
 import { useAuth } from "../context/AuthContext";
+import axios from "axios";
 
 interface LocationState {
   message?: string;
+}
+
+// User 인터페이스 추가
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  roles: string[];
 }
 
 const LoginPage: React.FC = () => {
@@ -23,16 +32,17 @@ const LoginPage: React.FC = () => {
     const state = location.state as LocationState;
     if (state?.message) {
       setSuccessMessage(state.message);
-      // 5초 후 메시지 제거
+      // 10초 후 메시지 제거 (기존 5초에서 변경)
       const timer = setTimeout(() => {
         setSuccessMessage(null);
-      }, 5000);
+      }, 10000);
       return () => clearTimeout(timer);
     }
   }, [location.state]);
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault(); // 폼 기본 동작 방지 (페이지 새로고침 방지)
+    console.log("로그인 시도 - preventDefault 호출됨");
 
     // 유효성 검사
     if (!email || !password) {
@@ -44,31 +54,41 @@ const LoginPage: React.FC = () => {
     setError(null);
 
     try {
+      console.log("로그인 API 호출 전");
       // 실제 API 호출하기
       const response = await authApi.login({ email, password });
+      console.log("로그인 API 호출 성공:", response);
 
       // 컨텍스트에 로그인 상태 업데이트
-      login(response.token, response.user);
-
-      // 로그인 성공 시 홈페이지로 이동
-      navigate("/");
+      if (response && response.token && response.user) {
+        login(response.token, response.user);
+        console.log("로그인 성공, 홈으로 리다이렉트");
+        // 로그인 성공 시 홈페이지로 이동
+        navigate("/");
+      } else {
+        throw new Error("로그인 응답이 유효하지 않습니다.");
+      }
     } catch (err: any) {
+      console.error("로그인 오류:", err);
+
       if (err.response) {
         // 서버 응답이 있는 에러
+        console.log("서버 응답 오류:", err.response.status);
         if (err.response.status === 401 || err.response.status === 403) {
           setError("이메일 또는 비밀번호가 틀렸습니다.");
         } else {
           setError("로그인에 실패했습니다. 나중에 다시 시도해주세요.");
         }
-      } else {
-        // 네트워크 오류 등
+      } else if (err.request) {
+        // 요청은 했으나 응답이 없는 경우
+        console.log("응답 없음:", err.request);
         setError("서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요.");
 
         // 백엔드가 없는 경우 모킹
         console.log("백엔드 API가 없습니다. 모킹 데이터를 사용합니다.");
 
         // 모킹 데이터로 로그인
-        const mockUser = {
+        const mockUser: User = {
           id: 1,
           username: email.split("@")[0],
           email,
@@ -82,6 +102,10 @@ const LoginPage: React.FC = () => {
         setTimeout(() => {
           navigate("/");
         }, 1000);
+      } else {
+        // 요청 설정하는 중에 발생한 오류
+        console.log("요청 설정 오류:", err.message);
+        setError(`요청 중 오류가 발생했습니다: ${err.message}`);
       }
     } finally {
       setLoading(false);
@@ -89,8 +113,29 @@ const LoginPage: React.FC = () => {
   };
 
   const handleGoogleLogin = () => {
-    // Google OAuth 로그인 구현 (실제로는 OAuth 인증 플로우가 필요)
+    // Google OAuth 로그인 구현
     console.log("Google 로그인 시도");
+    try {
+      // 구글 OAuth 로그인 함수 호출
+      authApi.googleLogin();
+    } catch (error) {
+      console.error("구글 로그인 오류:", error);
+      setError("구글 로그인 중 오류가 발생했습니다. 다시 시도해주세요.");
+    }
+  };
+
+  // 에러 메시지 닫기 핸들러 추가
+  const handleCloseError = () => {
+    setError(null);
+  };
+
+  // 인풋 변경 핸들러
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEmail(e.target.value);
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(e.target.value);
   };
 
   return (
@@ -99,6 +144,7 @@ const LoginPage: React.FC = () => {
         <form
           className="mb-6 rounded-lg border border-gray-200 bg-white p-8 shadow-md"
           onSubmit={handleLogin}
+          noValidate // HTML 기본 유효성 검사 비활성화
         >
           {successMessage && (
             <div className="mb-4 rounded-md bg-green-50 p-3 text-sm text-green-600">
@@ -119,7 +165,7 @@ const LoginPage: React.FC = () => {
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none"
               placeholder="이메일"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={handleEmailChange}
               required
             />
           </div>
@@ -137,14 +183,21 @@ const LoginPage: React.FC = () => {
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none"
               placeholder="패스워드"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={handlePasswordChange}
               required
             />
           </div>
 
           {error && (
-            <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-600">
-              {error}
+            <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-600 flex justify-between items-center">
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={handleCloseError}
+                className="text-red-500 hover:text-red-700 focus:outline-none"
+              >
+                ×
+              </button>
             </div>
           )}
 
