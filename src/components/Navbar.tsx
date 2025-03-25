@@ -172,58 +172,57 @@ const Navbar: React.FC = () => {
           )}
 
           {isLoggedIn ? (
-            // 로그인 상태일 때는 프로필 메뉴 표시
-            <div className="relative">
+            <div className="relative user-menu">
               <button
-                className="user-icon rounded-full p-2 hover:bg-gray-100"
+                className="user-icon relative rounded-full p-2 hover:bg-gray-100"
                 onClick={handleUserIconClick}
-                aria-label="사용자 메뉴"
+                aria-label="프로필"
               >
-                <FaUser />
+                {user?.profileImageUrl ? (
+                  <img
+                    src={user.profileImageUrl}
+                    alt="프로필"
+                    className="w-6 h-6 rounded-full object-cover"
+                  />
+                ) : (
+                  <FaUser className="text-gray-600" />
+                )}
               </button>
 
-              {/* 사용자 드롭다운 메뉴 */}
               {isUserMenuOpen && (
-                <div className="user-menu absolute right-0 top-12 z-10 w-56 rounded-md border border-gray-200 bg-white shadow-lg">
-                  <div className="border-b border-gray-100 p-4">
-                    <p className="text-lg font-medium text-gray-900">
+                <div className="absolute right-0 mt-2 w-48 rounded-md bg-white py-2 shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                  <div className="border-b border-gray-100 px-4 py-2 mb-1">
+                    <div className="font-medium text-sm">
                       {user?.username || "사용자"}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {user?.email || "user@example.com"}
-                    </p>
+                    </div>
+                    <div className="text-xs text-gray-500 truncate">
+                      {user?.email || "email@example.com"}
+                    </div>
                   </div>
-                  <ul className="py-2">
-                    <li>
-                      <Link
-                        to="/profile"
-                        className="flex items-center px-5 py-3 text-base hover:bg-gray-50"
-                        onClick={() => setIsUserMenuOpen(false)}
-                      >
-                        <FaUser className="mr-3 text-gray-500" />
-                        프로필
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="/settings"
-                        className="flex items-center px-5 py-3 text-base hover:bg-gray-50"
-                        onClick={() => setIsUserMenuOpen(false)}
-                      >
-                        <FaCog className="mr-3 text-gray-500" />
-                        설정
-                      </Link>
-                    </li>
-                    <li className="border-t border-gray-100">
-                      <button
-                        className="flex w-full items-center px-5 py-3 text-base text-red-600 hover:bg-gray-50"
-                        onClick={handleLogout}
-                      >
-                        <FaSignOutAlt className="mr-3" />
-                        로그아웃
-                      </button>
-                    </li>
-                  </ul>
+                  <Link
+                    to="/profile"
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => setIsUserMenuOpen(false)}
+                  >
+                    <FaUser className="mr-2 text-gray-400" />
+                    마이페이지
+                  </Link>
+                  <Link
+                    to="/settings"
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => setIsUserMenuOpen(false)}
+                  >
+                    <FaCog className="mr-2 text-gray-400" />
+                    설정
+                  </Link>
+                  <div className="border-t border-gray-100"></div>
+                  <button
+                    onClick={handleLogout}
+                    className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    <FaSignOutAlt className="mr-2 text-red-500" />
+                    로그아웃
+                  </button>
                 </div>
               )}
             </div>

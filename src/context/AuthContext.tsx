@@ -13,6 +13,7 @@ interface User {
   username: string;
   email: string;
   roles: string[];
+  profileImageUrl?: string;
 }
 
 interface AuthContextType {
@@ -21,6 +22,7 @@ interface AuthContextType {
   login: (token: string, user: User) => void;
   logout: () => void;
   refreshAuthStatus: () => void;
+  updateUserInfo: (updatedUser: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -202,9 +204,48 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     console.log("AuthContext - 로그아웃 처리 완료");
   };
 
+  // 사용자 정보 업데이트 함수
+  const updateUserInfo = (updatedUser: Partial<User>) => {
+    if (!user) return;
+
+    try {
+      // 현재 사용자 정보 가져오기
+      const userStr = localStorage.getItem("user");
+      if (!userStr) {
+        console.error("사용자 정보가 없습니다.");
+        return;
+      }
+
+      // 기존 사용자 정보 파싱
+      const currentUser = JSON.parse(userStr);
+
+      // 업데이트된 정보로 객체 병합
+      const newUserInfo = {
+        ...currentUser,
+        ...updatedUser,
+      };
+
+      // 로컬 스토리지 업데이트
+      localStorage.setItem("user", JSON.stringify(newUserInfo));
+
+      // 상태 업데이트
+      setUser(newUserInfo);
+      console.log("사용자 정보 업데이트 완료:", newUserInfo);
+    } catch (e) {
+      console.error("사용자 정보 업데이트 중 오류 발생:", e);
+    }
+  };
+
   return (
     <AuthContext.Provider
-      value={{ isLoggedIn, user, login, logout, refreshAuthStatus }}
+      value={{
+        isLoggedIn,
+        user,
+        login,
+        logout,
+        refreshAuthStatus,
+        updateUserInfo,
+      }}
     >
       {children}
     </AuthContext.Provider>
