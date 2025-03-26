@@ -174,5 +174,40 @@ export const backendApi = {
     }
   },
 
+  // 영화 출연진 정보 가져오기
+  getMovieCredits: async (movieId: number) => {
+    try {
+      const response = await axios.get(
+        `${TMDB_BASE_URL}/movie/${movieId}/credits`,
+        {
+          params: {
+            api_key: TMDB_API_KEY,
+            language: "ko-KR",
+          },
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching movie credits:", error);
+      throw error;
+    }
+  },
+
+  // TV 프로그램 출연진 정보 가져오기
+  getTvCredits: async (tvId: number) => {
+    try {
+      const response = await axios.get(`${TMDB_BASE_URL}/tv/${tvId}/credits`, {
+        params: {
+          api_key: TMDB_API_KEY,
+          language: "ko-KR",
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching TV credits:", error);
+      throw error;
+    }
+  },
+
   // User related endpoints will be added later
 };

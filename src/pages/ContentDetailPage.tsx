@@ -4,6 +4,7 @@ import { backendApi } from "../api/backendApi";
 import { FaStar } from "react-icons/fa";
 import { ContentDetail, Review, Video } from "../types/content";
 import VideoPlayerModal from "../components/VideoPlayerModal";
+import CastCarousel from "../components/CastCarousel";
 
 /* // 임시 데이터는 주석 처리
 const mockMovieDetails = {
@@ -77,6 +78,7 @@ const ContentDetailPage = () => {
   const [content, setContent] = useState<ContentDetail | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
+  const [cast, setCast] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isTV, setIsTV] = useState(false);
@@ -110,6 +112,10 @@ const ContentDetailPage = () => {
             const tvResponse = await backendApi.getTvDetails(parseInt(id));
             setContent(tvResponse);
 
+            // TV 출연진 정보 가져오기
+            const creditsResponse = await backendApi.getTvCredits(parseInt(id));
+            setCast(creditsResponse.cast || []);
+
             // TV 리뷰 가져오기
             const reviewsResponse = await backendApi.getTvReviews(parseInt(id));
             setReviews(reviewsResponse.results || []);
@@ -129,6 +135,12 @@ const ContentDetailPage = () => {
               parseInt(id)
             );
             setContent(movieResponse);
+
+            // 영화 출연진 정보 가져오기
+            const creditsResponse = await backendApi.getMovieCredits(
+              parseInt(id)
+            );
+            setCast(creditsResponse.cast || []);
 
             // 리뷰 정보 가져오기
             const reviewsResponse = await backendApi.getMovieReviews(
@@ -317,6 +329,9 @@ const ContentDetailPage = () => {
             </div>
           </div>
         </div>
+
+        {/* 출연진 섹션 */}
+        {cast.length > 0 && <CastCarousel cast={cast} />}
 
         {/* 리뷰 섹션 */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
