@@ -17,6 +17,7 @@
     "react-icons": "^5.5.0",
     "react-intersection-observer": "^9.16.0",
     "react-router-dom": "^7.4.0",
+    "swiper": "^11.2.6",
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
