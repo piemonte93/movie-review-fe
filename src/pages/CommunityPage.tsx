@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
-import { FaUser, FaComment, FaSearch, FaPen, FaReply, FaCaretDown, FaTimes, FaThumbsUp, FaThumbsDown } from "react-icons/fa";
+import { FaUser, FaComment, FaSearch, FaPen, FaReply, FaCaretDown, FaTimes, FaThumbsUp, FaThumbsDown, FaArrowUp } from "react-icons/fa";
 import { Link, useNavigate, useLocation } from "react-router-dom";
+import InfiniteScroll from "react-infinite-scroll-component";
 
 // 알림 데이터 타입 정의
 interface Notification {
@@ -99,6 +100,15 @@ const CommunityPage: React.FC = () => {
 
   // 알림 데이터 (실제로는 API에서 가져와야 함)
   const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  // 무한 스크롤 관련 상태 추가
+  const [visiblePosts, setVisiblePosts] = useState<Post[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
+  const postsPerPage = 5; // 한 번에 보여줄 게시글 수
+  
+  // 최상단으로 이동 버튼의 표시 여부 상태
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   // URL 쿼리 파라미터 확인하여 특정 게시글 표시
   useEffect(() => {
@@ -600,45 +610,96 @@ const CommunityPage: React.FC = () => {
     setSearchResults(updatedPosts);
   };
 
+  // 스크롤 이벤트 핸들러
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY;
+      const showScrollButton = scrollY > 300; // 스크롤이 300px 이상 내려갔을 때 버튼 표시
+      setShowScrollTop(showScrollButton);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // 최상단으로 스크롤하는 함수
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  };
+
+  // 다음 페이지 게시글을 불러오는 함수
+  const fetchMorePosts = () => {
+    const nextPage = page + 1;
+    const startIndex = page * postsPerPage;
+    const endIndex = startIndex + postsPerPage;
+    const nextPosts = searchResults.slice(startIndex, endIndex);
+    
+    if (nextPosts.length === 0) {
+      setHasMore(false);
+      return;
+    }
+    
+    // 약간의 지연 효과 추가 (실제 API 호출 시뮬레이션)
+    setTimeout(() => {
+      setVisiblePosts([...visiblePosts, ...nextPosts]);
+      setPage(nextPage);
+    }, 800);
+  };
+
+  // 검색 결과가 변경되면 visible posts 초기화
+  useEffect(() => {
+    setVisiblePosts(searchResults.slice(0, postsPerPage));
+    setPage(1);
+    setHasMore(searchResults.length > postsPerPage);
+  }, [searchResults]);
+
   return (
     <div className="container mx-auto px-4 py-2">
-      {/* 상단 검색 및 버튼 영역 */}
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">커뮤니티</h1>
-        <div className="flex items-center space-x-2">
-          <button
-            className="rounded-full p-2 hover:bg-gray-100"
-            onClick={() => {
-              setShowSearchModal(true);
-              setShowWriteForm(false);
-            }}
-            aria-label="검색"
-            title="검색하기"
-          >
-            <FaSearch className="text-gray-600" />
-          </button>
-          <button 
-            onClick={() => {
-              setShowWriteForm(true);
-              setShowSearch(false);
-              setShowSearchModal(false);
-            }}
-            className="rounded-full p-2 hover:bg-gray-100"
-            title="글 작성하기"
-          >
-            <FaPen />
-          </button>
-          {isLoggedIn && (
-            <button 
+      {/* 상단 검색 및 버튼 영역 - 고정 헤더로 변경 */}
+      <div className="fixed top-16 right-0 left-0 z-40 bg-white bg-opacity-95 shadow-sm py-3">
+        <div className="container mx-auto px-4 flex items-center justify-between">
+          <h1 className="text-2xl font-bold">커뮤니티</h1>
+          <div className="flex items-center space-x-2">
+            <button
               className="rounded-full p-2 hover:bg-gray-100"
-              title="테스트 알림 생성"
-              onClick={handleCreateTestNotification}
+              onClick={() => {
+                setShowSearchModal(true);
+                setShowWriteForm(false);
+              }}
+              aria-label="검색"
+              title="검색하기"
             >
-              테스트 알림
+              <FaSearch className="text-gray-600" />
             </button>
-          )}
+            <button 
+              onClick={() => {
+                setShowWriteForm(true);
+                setShowSearch(false);
+                setShowSearchModal(false);
+              }}
+              className="rounded-full p-2 hover:bg-gray-100"
+              title="글 작성하기"
+            >
+              <FaPen />
+            </button>
+            {isLoggedIn && (
+              <button 
+                className="rounded-full p-2 hover:bg-gray-100"
+                title="테스트 알림 생성"
+                onClick={handleCreateTestNotification}
+              >
+                테스트 알림
+              </button>
+            )}
+          </div>
         </div>
       </div>
+      
+      {/* 헤더 아래 여백 */}
+      <div className="h-16"></div>
 
       {/* 검색 모달 */}
       {showSearchModal && (
@@ -850,198 +911,225 @@ const CommunityPage: React.FC = () => {
         </div>
       )}
       
-      {/* 게시글 목록 */}
-      <div className="space-y-6">
-        {loading ? (
-          <div className="flex justify-center py-10">
-            <p>로딩 중...</p>
-          </div>
-        ) : searchResults.length === 0 ? (
-          <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
-            <p className="text-gray-500">게시글이 없습니다. 첫 게시글을 작성해보세요!</p>
-          </div>
-        ) : (
-          searchResults.map((post) => (
-            <div
-              id={`post-${post.id}`}
-              key={post.id}
-              className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm overflow-hidden"
-            >
-              {/* 게시글 본문 */}
-              <div className="flex">
-                {/* 사용자 프로필 영역 */}
-                <div className="mr-4 flex flex-col items-center">
-                  <Link to={`/profile/${post.user.id}`} className="flex flex-col items-center">
-                    <div className="h-12 w-12 overflow-hidden rounded-full bg-gray-300 cursor-pointer">
-                      {post.user.profileImageUrl ? (
-                        <img
-                          src={post.user.profileImageUrl}
-                          alt={`${post.user.username}의 프로필`}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-gray-300">
-                          <FaUser className="text-gray-600" />
-                        </div>
-                      )}
-                    </div>
-                    <p className="mt-1 text-center text-xs text-gray-700 hover:text-blue-500">
-                      {post.user.username}
-                    </p>
-                  </Link>
-                  <p className="flex items-center text-xs text-gray-500">
-                    <FaComment className="mr-1" size={10} />
-                    {post.user.reviewCount}
-                  </p>
-                </div>
-                
-                {/* 게시글 내용 영역 */}
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold">{post.title}</h3>
-                  <p 
-                    className="mt-2 text-gray-700"
-                    dangerouslySetInnerHTML={{ __html: formatContentWithMentions(post.content) }}
-                  ></p>
-                  
-                  {/* 멘션된 사용자 표시 */}
-                  {post.mentions && post.mentions.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {post.mentions.map(user => (
-                        <span 
-                          key={user.id}
-                          className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700"
-                        >
-                          @{user.username}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  
-                  <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
-                    <span>{formatDate(post.createdAt)}</span>
-                    <div className="flex items-center space-x-3">
-                      <div className="flex items-center space-x-1">
-                        <button 
-                          className={`p-1 rounded-md ${post.likes.some(like => like.userId === user?.id) ? 'text-blue-600' : 'text-gray-400 hover:text-blue-600'}`}
-                          onClick={() => handlePostLike(post.id)}
-                          disabled={!isLoggedIn}
-                          title={isLoggedIn ? "좋아요" : "로그인 필요"}
-                        >
-                          <FaThumbsUp size={14} />
-                        </button>
-                        <span>{post.likes.length}</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <button 
-                          className={`p-1 rounded-md ${post.dislikes.some(dislike => dislike.userId === user?.id) ? 'text-red-600' : 'text-gray-400 hover:text-red-600'}`}
-                          onClick={() => handlePostDislike(post.id)}
-                          disabled={!isLoggedIn}
-                          title={isLoggedIn ? "싫어요" : "로그인 필요"}
-                        >
-                          <FaThumbsDown size={14} />
-                        </button>
-                        <span>{post.dislikes.length}</span>
-                      </div>
-                      <button 
-                        className="flex items-center cursor-pointer hover:text-blue-600"
-                        onClick={() => toggleComments(post.id)}
-                      >
-                        댓글 : {post.comments.length}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 댓글 영역 */}
-              {expandedPostId === post.id && (
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <h4 className="text-sm font-semibold mb-3">댓글 {post.comments.length}개</h4>
-                  
-                  {/* 댓글 목록 */}
-                  <div className="space-y-3 mb-4">
-                    {post.comments.map((comment) => (
-                      <div key={comment.id} className="flex">
-                        <Link to={`/profile/${comment.user.id}`} className="mr-2">
-                          <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-200 cursor-pointer">
-                            {comment.user.profileImageUrl ? (
-                              <img
-                                src={comment.user.profileImageUrl}
-                                alt={`${comment.user.username}의 프로필`}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center bg-gray-200">
-                                <FaUser className="text-gray-500" size={12} />
-                              </div>
-                            )}
-                          </div>
-                        </Link>
-                        <div className="flex-1">
-                          <div className="flex items-center">
-                            <Link to={`/profile/${comment.user.id}`}>
-                              <span className="text-xs font-medium hover:text-blue-500 cursor-pointer">{comment.user.username}</span>
-                            </Link>
-                            <span className="ml-2 text-xs text-gray-500">{formatDate(comment.createdAt)}</span>
-                          </div>
-                          <p className="text-sm mt-1">{comment.content}</p>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {post.comments.length === 0 && (
-                      <p className="text-sm text-gray-500 text-center py-2">
-                        아직 댓글이 없습니다. 첫 댓글을 작성해보세요!
-                      </p>
-                    )}
-                  </div>
-                  
-                  {/* 댓글 작성 폼 */}
-                  {isLoggedIn ? (
-                    <div className="flex">
-                      <div className="mr-2 h-8 w-8 overflow-hidden rounded-full bg-gray-200">
-                        {user?.profileImageUrl ? (
+      {/* 게시글 목록 - 무한 스크롤 적용 */}
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
+        </div>
+      ) : searchResults.length > 0 ? (
+        <InfiniteScroll
+          dataLength={visiblePosts.length}
+          next={fetchMorePosts}
+          hasMore={hasMore}
+          loader={
+            <div className="flex justify-center py-4">
+              <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
+            </div>
+          }
+          endMessage={
+            <p className="text-center text-gray-500 py-4">
+              모든 게시글을 불러왔습니다.
+            </p>
+          }
+          scrollThreshold={0.9}
+        >
+          <div className="space-y-6">
+            {visiblePosts.map((post) => (
+              <div
+                key={post.id}
+                className="border border-gray-200 rounded-lg bg-white p-4 shadow-sm"
+              >
+                {/* 게시글 본문 */}
+                <div className="flex">
+                  {/* 사용자 프로필 영역 */}
+                  <div className="mr-4 flex flex-col items-center">
+                    <Link to={`/profile/${post.user.id}`} className="flex flex-col items-center">
+                      <div className="h-12 w-12 overflow-hidden rounded-full bg-gray-300 cursor-pointer">
+                        {post.user.profileImageUrl ? (
                           <img
-                            src={user.profileImageUrl}
-                            alt="내 프로필"
+                            src={post.user.profileImageUrl}
+                            alt={`${post.user.username}의 프로필`}
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-gray-200">
-                            <FaUser className="text-gray-500" size={12} />
+                          <div className="flex h-full w-full items-center justify-center bg-gray-300">
+                            <FaUser className="text-gray-600" />
                           </div>
                         )}
                       </div>
-                      <div className="flex-1 flex">
-                        <input
-                          type="text"
-                          placeholder="댓글을 입력하세요..."
-                          className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
-                          value={commentContent}
-                          onChange={(e) => setCommentContent(e.target.value)}
-                        />
-                        <button
-                          className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
-                          onClick={() => handleCommentSubmit(post.id)}
+                      <p className="mt-1 text-center text-xs text-gray-700 hover:text-blue-500">
+                        {post.user.username}
+                      </p>
+                    </Link>
+                    <p className="flex items-center text-xs text-gray-500">
+                      <FaComment className="mr-1" size={10} />
+                      {post.user.reviewCount}
+                    </p>
+                  </div>
+                  
+                  {/* 게시글 내용 영역 */}
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold">{post.title}</h3>
+                    <p 
+                      className="mt-2 text-gray-700"
+                      dangerouslySetInnerHTML={{ __html: formatContentWithMentions(post.content) }}
+                    ></p>
+                    
+                    {/* 멘션된 사용자 표시 */}
+                    {post.mentions && post.mentions.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {post.mentions.map(user => (
+                          <span 
+                            key={user.id}
+                            className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700"
+                          >
+                            @{user.username}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    
+                    <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
+                      <span>{formatDate(post.createdAt)}</span>
+                      <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-1">
+                          <button 
+                            className={`p-1 rounded-md ${post.likes.some(like => like.userId === user?.id) ? 'text-blue-600' : 'text-gray-400 hover:text-blue-600'}`}
+                            onClick={() => handlePostLike(post.id)}
+                            disabled={!isLoggedIn}
+                            title={isLoggedIn ? "좋아요" : "로그인 필요"}
+                          >
+                            <FaThumbsUp size={14} />
+                          </button>
+                          <span>{post.likes.length}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <button 
+                            className={`p-1 rounded-md ${post.dislikes.some(dislike => dislike.userId === user?.id) ? 'text-red-600' : 'text-gray-400 hover:text-red-600'}`}
+                            onClick={() => handlePostDislike(post.id)}
+                            disabled={!isLoggedIn}
+                            title={isLoggedIn ? "싫어요" : "로그인 필요"}
+                          >
+                            <FaThumbsDown size={14} />
+                          </button>
+                          <span>{post.dislikes.length}</span>
+                        </div>
+                        <button 
+                          className="flex items-center cursor-pointer hover:text-blue-600"
+                          onClick={() => toggleComments(post.id)}
                         >
-                          <FaReply />
+                          댓글 : {post.comments.length}
                         </button>
                       </div>
                     </div>
-                  ) : (
-                    <div className="text-center py-2">
-                      <p className="text-sm text-gray-500 mb-1">댓글을 작성하려면 로그인이 필요합니다.</p>
-                      <Link to="/login" className="text-sm text-blue-600 hover:underline">
-                        로그인하기
-                      </Link>
-                    </div>
-                  )}
+                  </div>
                 </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
+
+                {/* 댓글 영역 */}
+                {expandedPostId === post.id && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <h4 className="text-sm font-semibold mb-3">댓글 {post.comments.length}개</h4>
+                    
+                    {/* 댓글 목록 */}
+                    <div className="space-y-3 mb-4">
+                      {post.comments.map((comment) => (
+                        <div key={comment.id} className="flex">
+                          <Link to={`/profile/${comment.user.id}`} className="mr-2">
+                            <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-200 cursor-pointer">
+                              {comment.user.profileImageUrl ? (
+                                <img
+                                  src={comment.user.profileImageUrl}
+                                  alt={`${comment.user.username}의 프로필`}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-gray-200">
+                                  <FaUser className="text-gray-500" size={12} />
+                                </div>
+                              )}
+                            </div>
+                          </Link>
+                          <div className="flex-1">
+                            <div className="flex items-center">
+                              <Link to={`/profile/${comment.user.id}`}>
+                                <span className="text-xs font-medium hover:text-blue-500 cursor-pointer">{comment.user.username}</span>
+                              </Link>
+                              <span className="ml-2 text-xs text-gray-500">{formatDate(comment.createdAt)}</span>
+                            </div>
+                            <p className="text-sm mt-1">{comment.content}</p>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {post.comments.length === 0 && (
+                        <p className="text-sm text-gray-500 text-center py-2">
+                          아직 댓글이 없습니다. 첫 댓글을 작성해보세요!
+                        </p>
+                      )}
+                    </div>
+                    
+                    {/* 댓글 작성 폼 */}
+                    {isLoggedIn ? (
+                      <div className="flex">
+                        <div className="mr-2 h-8 w-8 overflow-hidden rounded-full bg-gray-200">
+                          {user?.profileImageUrl ? (
+                            <img
+                              src={user.profileImageUrl}
+                              alt="내 프로필"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-gray-200">
+                              <FaUser className="text-gray-500" size={12} />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 flex">
+                          <input
+                            type="text"
+                            placeholder="댓글을 입력하세요..."
+                            className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
+                            value={commentContent}
+                            onChange={(e) => setCommentContent(e.target.value)}
+                          />
+                          <button
+                            className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
+                            onClick={() => handleCommentSubmit(post.id)}
+                          >
+                            <FaReply />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-2">
+                        <p className="text-sm text-gray-500 mb-1">댓글을 작성하려면 로그인이 필요합니다.</p>
+                        <Link to="/login" className="text-sm text-blue-600 hover:underline">
+                          로그인하기
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </InfiniteScroll>
+      ) : (
+        <div className="text-center py-8">
+          <p className="text-gray-500">검색 결과가 없습니다.</p>
+        </div>
+      )}
+      
+      {/* 최상단으로 이동하는 버튼 */}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-8 right-8 bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-all z-50"
+          aria-label="맨 위로 이동"
+        >
+          <FaArrowUp />
+        </button>
+      )}
     </div>
   );
 };
