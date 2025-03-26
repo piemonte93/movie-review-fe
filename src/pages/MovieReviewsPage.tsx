@@ -70,7 +70,7 @@ const MovieReviewsPage: React.FC = () => {
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
   // TMDB API 키 (실제 환경에서는 환경 변수로 관리)
-  const TMDB_API_KEY = "3e9a89831a2e61d47f06983917323985";
+  const TMDB_API_KEY = "a95a7823323dd52f66d0dc776498a8a1";
   
   // 영화 검색 함수
   const searchMovies = async (query: string) => {
@@ -650,7 +650,7 @@ const MovieReviewsPage: React.FC = () => {
                       onClick={() => setIsSearchingMovie(true)}
                     />
                     {isSearchingMovie && movieSearchResults.length > 0 && (
-                      <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-300 rounded-md shadow-lg z-10">
+                      <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-300 rounded-md shadow-lg z-50">
                         {movieSearchResults.map((movie) => (
                           <div 
                             key={movie.id}
@@ -694,7 +694,7 @@ const MovieReviewsPage: React.FC = () => {
               <div className="mb-4">
                 <div className="flex items-center mb-2">
                   <span className="mr-2">별점:</span>
-                  <div className="flex relative">
+                  <div className={`flex relative ${isSearchingMovie && movieSearchResults.length > 0 ? 'hidden' : ''}`}>
                     {[0, 1, 2, 3, 4].map((index) => (
                       <div key={index} className="relative">
                         {/* 별 왼쪽 절반 (0.5) */}
