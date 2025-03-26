@@ -18,6 +18,21 @@ const apiClient = axios.create({
   timeout: 10000, // 10초 타임아웃
 });
 
+// 요청 인터셉터 추가
+apiClient.interceptors.request.use(
+  (config) => {
+    // 로컬 스토리지에서 토큰을 가져와 헤더에 추가
+    const token = localStorage.getItem("accessToken");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 // 에러 발생 시 로그 기록을 위한 인터셉터 추가
 apiClient.interceptors.response.use(
   (response) => {
@@ -41,6 +56,57 @@ const emptyContentResponse = (): ContentResponse => ({
   total_pages: 0,
   total_results: 0,
 });
+
+// Post 타입 정의
+export interface Post {
+  id: number;
+  title: string;
+  content: string;
+  createdAt: Date;
+  comments: Comment[];
+  mentions: UserItem[];
+  likes: { userId: number }[];
+  dislikes: { userId: number }[];
+  user: {
+    id: number;
+    username: string;
+    profileImageUrl: string | null;
+    reviewCount: number;
+  };
+}
+
+// Comment 타입 정의
+export interface Comment {
+  id: number;
+  content: string;
+  createdAt: Date;
+  likes: { userId: number }[];
+  dislikes: { userId: number }[];
+  user: {
+    id: number;
+    username: string;
+    profileImageUrl: string | null;
+  };
+}
+
+// User 타입 정의
+export interface UserItem {
+  id: number;
+  username: string;
+  profileImageUrl: string | null;
+}
+
+// 페이지 응답 타입 정의
+export interface PageResponse<T> {
+  content: T[];
+  totalPages: number;
+  totalElements: number;
+  size: number;
+  number: number;
+  first: boolean;
+  last: boolean;
+  empty: boolean;
+}
 
 export const backendApi = {
   // Movie endpoints
@@ -70,13 +136,31 @@ export const backendApi = {
   },
 
   getMovieDetails: async (id: number): Promise<ContentDetail> => {
-    const response = await apiClient.get(`/contents/movie/${id}`);
-    return response.data;
+    try {
+      const response = await apiClient.get(`/contents/movie/${id}`, {
+        params: {
+          language: "ko-KR" // 한국어 설정
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error("영화 상세 정보 요청 실패:", error);
+      throw new Error("영화 정보를 불러오는데 실패했습니다.");
+    }
   },
 
   getMovieReviews: async (id: number): Promise<ReviewResponse> => {
-    const response = await apiClient.get(`/contents/movie/${id}/reviews`);
-    return response.data;
+    try {
+      const response = await apiClient.get(`/contents/movie/${id}/reviews`, {
+        params: {
+          language: "ko-KR" // 한국어 설정
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error("영화 리뷰 요청 실패:", error);
+      throw new Error("영화 리뷰를 불러오는데 실패했습니다.");
+    }
   },
 
   getMovieVideos: async (id: number): Promise<VideoResponse> => {
@@ -174,5 +258,286 @@ export const backendApi = {
     }
   },
 
-  // User related endpoints will be added later
+  // 커뮤니티 관련 API
+  
+  // 게시글 목록 조회
+  getPosts: async (page = 0, size = 10): Promise<PageResponse<Post>> => {
+    try {
+      const response = await apiClient.get("/community/posts", {
+        params: { page, size }
+      });
+      return response.data;
+    } catch (error) {
+      console.error("게시글 목록 불러오기 실패:", error);
+      
+      // 401 Unauthorized 에러가 발생하면 빈 목록을 반환
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        console.log("로그인하지 않은 상태로 게시글 목록을 요청했습니다. 빈 목록을 반환합니다.");
+        return {
+          content: [],
+          totalPages: 0,
+          totalElements: 0,
+          size: size,
+          number: page,
+          first: true,
+          last: true,
+          empty: true
+        };
+      }
+      
+      throw new Error("게시글 목록을 불러오는데 실패했습니다.");
+    }
+  },
+
+  // 게시글 상세 조회
+  getPostById: async (id: number): Promise<Post> => {
+    try {
+      const response = await apiClient.get(`/community/posts/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error("게시글 상세 불러오기 실패:", error);
+      throw new Error("게시글을 불러오는데 실패했습니다.");
+    }
+  },
+
+  // 게시글 작성
+  createPost: async (title: string, content: string): Promise<Post> => {
+    try {
+      const response = await apiClient.post("/community/posts", {
+        title,
+        content
+      });
+      return response.data;
+    } catch (error) {
+      console.error("게시글 작성 실패:", error);
+      throw new Error("게시글 작성에 실패했습니다.");
+    }
+  },
+
+  // 게시글 수정
+  updatePost: async (id: number, title: string, content: string): Promise<Post> => {
+    try {
+      const response = await apiClient.put(`/community/posts/${id}`, {
+        title,
+        content
+      });
+      return response.data;
+    } catch (error) {
+      console.error("게시글 수정 실패:", error);
+      throw new Error("게시글 수정에 실패했습니다.");
+    }
+  },
+
+  // 게시글 삭제
+  deletePost: async (id: number): Promise<void> => {
+    try {
+      await apiClient.delete(`/community/posts/${id}`);
+    } catch (error) {
+      console.error("게시글 삭제 실패:", error);
+      throw new Error("게시글 삭제에 실패했습니다.");
+    }
+  },
+
+  // 게시글 검색
+  searchPosts: async (
+    query: string,
+    category = "title",
+    page = 0,
+    size = 10
+  ): Promise<PageResponse<Post>> => {
+    try {
+      const response = await apiClient.get("/community/posts/search", {
+        params: { query, category, page, size }
+      });
+      return response.data;
+    } catch (error) {
+      console.error("게시글 검색 실패:", error);
+      throw new Error("게시글 검색에 실패했습니다.");
+    }
+  },
+
+  // 게시글 좋아요
+  likePost: async (id: number): Promise<Post> => {
+    try {
+      const response = await apiClient.post(`/community/posts/${id}/like`);
+      return response.data;
+    } catch (error) {
+      console.error("게시글 좋아요 실패:", error);
+      throw new Error("게시글 좋아요에 실패했습니다.");
+    }
+  },
+
+  // 게시글 싫어요
+  dislikePost: async (id: number): Promise<Post> => {
+    try {
+      const response = await apiClient.post(`/community/posts/${id}/dislike`);
+      return response.data;
+    } catch (error) {
+      console.error("게시글 싫어요 실패:", error);
+      throw new Error("게시글 싫어요에 실패했습니다.");
+    }
+  },
+
+  // 댓글 목록 조회
+  getCommentsByPostId: async (postId: number): Promise<Comment[]> => {
+    try {
+      const response = await apiClient.get(`/community/posts/${postId}/comments`);
+      return response.data;
+    } catch (error) {
+      console.error("댓글 목록 불러오기 실패:", error);
+      throw new Error("댓글 목록을 불러오는데 실패했습니다.");
+    }
+  },
+
+  // 댓글 작성
+  createComment: async (postId: number, content: string): Promise<Comment> => {
+    try {
+      const response = await apiClient.post(`/community/posts/${postId}/comments`, {
+        content
+      });
+      return response.data;
+    } catch (error) {
+      console.error("댓글 작성 실패:", error);
+      throw new Error("댓글 작성에 실패했습니다.");
+    }
+  },
+
+  // 댓글 수정
+  updateComment: async (id: number, content: string): Promise<Comment> => {
+    try {
+      const response = await apiClient.put(`/community/comments/${id}`, {
+        content
+      });
+      return response.data;
+    } catch (error) {
+      console.error("댓글 수정 실패:", error);
+      throw new Error("댓글 수정에 실패했습니다.");
+    }
+  },
+
+  // 댓글 삭제
+  deleteComment: async (id: number): Promise<void> => {
+    try {
+      await apiClient.delete(`/community/comments/${id}`);
+    } catch (error) {
+      console.error("댓글 삭제 실패:", error);
+      throw new Error("댓글 삭제에 실패했습니다.");
+    }
+  },
+
+  // 댓글 좋아요
+  likeComment: async (id: number): Promise<Comment> => {
+    try {
+      const response = await apiClient.post(`/community/comments/${id}/like`);
+      return response.data;
+    } catch (error) {
+      console.error("댓글 좋아요 실패:", error);
+      throw new Error("댓글 좋아요에 실패했습니다.");
+    }
+  },
+
+  // 댓글 싫어요
+  dislikeComment: async (id: number): Promise<Comment> => {
+    try {
+      const response = await apiClient.post(`/community/comments/${id}/dislike`);
+      return response.data;
+    } catch (error) {
+      console.error("댓글 싫어요 실패:", error);
+      throw new Error("댓글 싫어요에 실패했습니다.");
+    }
+  },
+
+  // 영화 검색 API (영화 리뷰 작성 시 필요)
+  searchMoviesByTitle: async (query: string): Promise<ContentResponse> => {
+    try {
+      const response = await apiClient.get("/contents/search", {
+        params: {
+          query,
+          page: 1,
+          language: "ko-KR"
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("영화 검색 API 요청 실패:", error);
+      if (axios.isAxiosError(error) && !error.response) {
+        throw new Error("네트워크 연결을 확인해 주세요.");
+      } else {
+        throw new Error("영화 검색 결과를 불러오는데 실패했습니다.");
+      }
+    }
+  },
+
+  // 영화 포스터 경로 생성 (상대 경로를 절대 URL로 변환)
+  getPosterUrl: (posterPath: string | null, size = "w154"): string => {
+    if (!posterPath) return "";
+    return `https://image.tmdb.org/t/p/${size}${posterPath}`;
+  },
+
+  // 모든 영화 리뷰 목록 가져오기
+  getAllMovieReviews: async (page = 0, size = 10): Promise<PageResponse<any>> => {
+    try {
+      const response = await apiClient.get("/movie-reviews", {
+        params: { page, size }
+      });
+      return response.data;
+    } catch (error) {
+      console.error("영화 리뷰 목록 불러오기 실패:", error);
+      throw new Error("영화 리뷰 목록을 불러오는데 실패했습니다.");
+    }
+  },
+
+  // 영화 리뷰 작성
+  createMovieReview: async (reviewData: {
+    title: string;
+    content: string;
+    rating: number;
+    movieId: number;
+    movieTitle: string;
+    moviePoster?: string | null;
+    isSpoiler: boolean;
+  }): Promise<any> => {
+    try {
+      const response = await apiClient.post("/movie-reviews", reviewData);
+      return response.data;
+    } catch (error) {
+      console.error("영화 리뷰 작성 실패:", error);
+      throw new Error("영화 리뷰 작성에 실패했습니다.");
+    }
+  },
+
+  // 영화 리뷰에 댓글 작성
+  addReviewComment: async (reviewId: number, content: string): Promise<any> => {
+    try {
+      const response = await apiClient.post(`/movie-reviews/${reviewId}/comments`, {
+        content
+      });
+      return response.data;
+    } catch (error) {
+      console.error("댓글 작성 실패:", error);
+      throw new Error("댓글 작성에 실패했습니다.");
+    }
+  },
+
+  // 영화 리뷰 좋아요
+  likeReview: async (reviewId: number): Promise<any> => {
+    try {
+      const response = await apiClient.post(`/movie-reviews/${reviewId}/like`);
+      return response.data;
+    } catch (error) {
+      console.error("리뷰 좋아요 실패:", error);
+      throw new Error("좋아요 처리에 실패했습니다.");
+    }
+  },
+
+  // 영화 리뷰 싫어요
+  dislikeReview: async (reviewId: number): Promise<any> => {
+    try {
+      const response = await apiClient.post(`/movie-reviews/${reviewId}/dislike`);
+      return response.data;
+    } catch (error) {
+      console.error("리뷰 싫어요 실패:", error);
+      throw new Error("싫어요 처리에 실패했습니다.");
+    }
+  },
 };

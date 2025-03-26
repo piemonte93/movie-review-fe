@@ -2,8 +2,21 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { FaUser, FaComment, FaStar, FaSearch, FaPen, FaReply, FaTimes, FaCaretDown, FaThumbsUp, FaThumbsDown, FaArrowUp } from "react-icons/fa";
 import { FaStarHalfStroke, FaFilm } from "react-icons/fa6";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
+import { backendApi } from "../api/backendApi";
+import { toast } from "react-toastify";
+import { Content } from "../types/content";
+
+// Content 타입을 Movie 타입으로 매핑하는 함수
+const mapContentToMovie = (content: Content): Movie => {
+  return {
+    id: content.id,
+    title: content.title || content.name || "제목 없음",
+    poster_path: content.poster_path || null,
+    release_date: content.release_date || content.first_air_date || "",
+  };
+};
 
 // TMDB API 영화 정보 타입
 interface Movie {
@@ -51,6 +64,8 @@ interface MovieReview {
 
 const MovieReviewsPage: React.FC = () => {
   const { isLoggedIn, user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [movieTitle, setMovieTitle] = useState("");
@@ -92,13 +107,13 @@ const MovieReviewsPage: React.FC = () => {
     }
     
     try {
-      const response = await fetch(
-        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&language=ko-KR`
-      );
-      const data = await response.json();
-      setMovieSearchResults(data.results);
+      const response = await backendApi.searchMoviesByTitle(query);
+      // Content 타입을 Movie 타입으로 변환
+      const movies = response.results.map(mapContentToMovie);
+      setMovieSearchResults(movies);
     } catch (error) {
       console.error("영화 검색 중 오류 발생:", error);
+      toast.error("영화 검색에 실패했습니다.");
       setMovieSearchResults([]);
     }
   };
@@ -132,188 +147,258 @@ const MovieReviewsPage: React.FC = () => {
     setMovieTitle("");
   };
 
-  // 영화 리뷰 데이터 가져오기 (임시 데이터)
+  // 영화 리뷰 데이터 가져오기
   useEffect(() => {
-    // API 호출을 대신하는 임시 데이터
-    const mockReviews: MovieReview[] = [
-      {
-        id: 1,
-        title: "인셉션 - 빛나는 걸작!",
-        content: "크리스토퍼 놀란 감독의 걸작으로, 꿈과 현실의 경계를 탐험하는 놀라운 영화입니다. 레오나르도 디카프리오의 연기는 정말 탁월했고, 영화의 시각적 효과와 스토리텔링은 최고였습니다.",
-        rating: 4.5,
-        movieTitle: "인셉션",
-        movieId: 27205,
-        moviePoster: "/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg",
-        createdAt: new Date(Date.now() - 1000 * 60 * 45), // 45분 전
-        comments: [
+    const fetchReviews = async () => {
+      setLoading(true);
+      try {
+        // 실제 API를 사용할 때는 아래 주석을 해제하고 구현하세요
+        /* 
+        const response = await backendApi.getAllMovieReviews(page, reviewsPerPage);
+        setReviews(response.content);
+        setSearchResults(response.content);
+        setTotalPages(response.totalPages);
+        setHasMore(response.totalPages > 1);
+        */
+        
+        // 임시 데이터 (실제 API 연결 전까지 사용)
+        const mockReviews: MovieReview[] = [
           {
             id: 1,
-            content: "정말 공감합니다. 저도 인셉션을 정말 좋아해요!",
-            createdAt: new Date(Date.now() - 1000 * 60 * 20),
-            likes: [{ userId: 3 }, { userId: 4 }],
+            title: "인셉션 - 빛나는 걸작!",
+            content: "크리스토퍼 놀란 감독의 걸작으로, 꿈과 현실의 경계를 탐험하는 놀라운 영화입니다. 레오나르도 디카프리오의 연기는 정말 탁월했고, 영화의 시각적 효과와 스토리텔링은 최고였습니다.",
+            rating: 4.5,
+            movieTitle: "인셉션",
+            movieId: 27205,
+            moviePoster: "/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg",
+            createdAt: new Date(Date.now() - 1000 * 60 * 45), // 45분 전
+            comments: [
+              {
+                id: 1,
+                content: "정말 공감합니다. 저도 인셉션을 정말 좋아해요!",
+                createdAt: new Date(Date.now() - 1000 * 60 * 20),
+                likes: [{ userId: 3 }, { userId: 4 }],
+                dislikes: [{ userId: 5 }],
+                user: {
+                  id: 2,
+                  username: "영화덕후",
+                  profileImageUrl: null
+                }
+              },
+              {
+                id: 2,
+                content: "음악도 정말 좋았죠. 한스 짐머의 음악은 항상 훌륭합니다.",
+                createdAt: new Date(Date.now() - 1000 * 60 * 10),
+                likes: [{ userId: 2 }],
+                dislikes: [],
+                user: {
+                  id: 3,
+                  username: "무비팬",
+                  profileImageUrl: null
+                }
+              }
+            ],
+            likes: [{ userId: 2 }, { userId: 4 }],
             dislikes: [{ userId: 5 }],
+            isSpoiler: false,
             user: {
-              id: 2,
-              username: "영화덕후",
-              profileImageUrl: null
+              id: 1,
+              username: "작성자 이름",
+              profileImageUrl: null,
+              reviewCount: 15
             }
           },
           {
             id: 2,
-            content: "음악도 정말 좋았죠. 한스 짐머의 음악은 항상 훌륭합니다.",
-            createdAt: new Date(Date.now() - 1000 * 60 * 10),
-            likes: [{ userId: 2 }],
+            title: "어벤져스: 엔드게임 - 좋은 마무리",
+            content: "마블 시네마틱 유니버스의 3단계를 마무리하는 영화로, 10년 동안의 이야기가 훌륭하게 마무리되었습니다. 감동적인 장면들이 많았고, 캐릭터들의 아크도 잘 완성되었습니다.",
+            rating: 4.0,
+            movieTitle: "어벤져스: 엔드게임",
+            movieId: 299534,
+            moviePoster: "/yFSIUVTCvgYrpalUktulvk3Gi5Y.jpg", // 한국어 포스터 경로
+            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3), // 3시간 전
+            comments: [
+              {
+                id: 3,
+                content: "아이언맨의 최후가 너무 슬펐어요...",
+                createdAt: new Date(Date.now() - 1000 * 60 * 60 * 1),
+                likes: [{ userId: 1 }, { userId: 2 }, { userId: 5 }],
+                dislikes: [],
+                user: {
+                  id: 4,
+                  username: "영화관탐험가",
+                  profileImageUrl: null
+                }
+              }
+            ],
+            likes: [{ userId: 1 }, { userId: 3 }],
             dislikes: [],
+            isSpoiler: true,
             user: {
-              id: 3,
-              username: "무비팬",
-              profileImageUrl: null
+              id: 2,
+              username: "작성자 이름",
+              profileImageUrl: null,
+              reviewCount: 32
             }
-          }
-        ],
-        likes: [{ userId: 2 }, { userId: 4 }],
-        dislikes: [{ userId: 5 }],
-        isSpoiler: false,
-        user: {
-          id: 1,
-          username: "작성자 이름",
-          profileImageUrl: null,
-          reviewCount: 15
-        }
-      },
-      {
-        id: 2,
-        title: "어벤져스: 엔드게임 - 좋은 마무리",
-        content: "마블 시네마틱 유니버스의 3단계를 마무리하는 영화로, 10년 동안의 이야기가 훌륭하게 마무리되었습니다. 감동적인 장면들이 많았고, 캐릭터들의 아크도 잘 완성되었습니다.",
-        rating: 4.0,
-        movieTitle: "어벤져스: 엔드게임",
-        movieId: 299534,
-        moviePoster: "/n78LK2t1uQ6LZKHyMrzKtuXrNjQ.jpg",
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3), // 3시간 전
-        comments: [
+          },
           {
             id: 3,
-            content: "아이언맨의 최후가 너무 슬펐어요...",
-            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 1),
-            likes: [{ userId: 1 }, { userId: 2 }, { userId: 5 }],
+            title: "기생충 - 뛰어난 한국 영화",
+            content: "봉준호 감독의 뛰어난 작품으로, 계급 갈등을 섬세하게 묘사한 영화입니다. 배우들의 연기도 정말 훌륭했고, 스토리 전개와 반전이 뛰어났습니다. 아카데미상을 받은 데는 충분한 이유가 있습니다.",
+            rating: 5,
+            movieTitle: "기생충",
+            movieId: 496243,
+            moviePoster: "/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg", // 한국어 포스터 경로
+            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 7), // 7시간 전
+            comments: [],
+            likes: [],
             dislikes: [],
+            isSpoiler: false,
             user: {
-              id: 4,
-              username: "영화관탐험가",
-              profileImageUrl: null
+              id: 3,
+              username: "작성자 이름",
+              profileImageUrl: null,
+              reviewCount: 24
             }
           }
-        ],
-        likes: [{ userId: 1 }, { userId: 3 }],
-        dislikes: [],
-        isSpoiler: true,
-        user: {
-          id: 2,
-          username: "작성자 이름",
-          profileImageUrl: null,
-          reviewCount: 32
-        }
-      },
-      {
-        id: 3,
-        title: "기생충 - 뛰어난 한국 영화",
-        content: "봉준호 감독의 뛰어난 작품으로, 계급 갈등을 섬세하게 묘사한 영화입니다. 배우들의 연기도 정말 훌륭했고, 스토리 전개와 반전이 뛰어났습니다. 아카데미상을 받은 데는 충분한 이유가 있습니다.",
-        rating: 5,
-        movieTitle: "기생충",
-        movieId: 496243,
-        moviePoster: "/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg",
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 7), // 7시간 전
-        comments: [],
-        likes: [],
-        dislikes: [],
-        isSpoiler: false,
-        user: {
-          id: 3,
-          username: "작성자 이름",
-          profileImageUrl: null,
-          reviewCount: 24
-        }
-      }
-    ];
+        ];
 
-    setReviews(mockReviews);
-    setSearchResults(mockReviews);
-    setLoading(false);
+        setReviews(mockReviews);
+        setSearchResults(mockReviews);
+        setLoading(false);
+      } catch (error) {
+        console.error("영화 리뷰 목록을 불러오는데 실패했습니다:", error);
+        toast.error("영화 리뷰 목록을 불러오는데 실패했습니다.");
+        setLoading(false);
+      }
+    };
+
+    fetchReviews();
   }, []);
 
   // 리뷰 작성 처리
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!title.trim() || !content.trim() || !selectedMovie || rating === 0) {
-      alert("모든 항목을 입력해주세요!");
+      toast.error("모든 항목을 입력해주세요!");
       return;
     }
 
-    // 실제 구현에서는 API 호출로 대체
-    const newReview: MovieReview = {
-      id: reviews.length + 1,
-      title,
-      content,
-      rating,
-      movieTitle: selectedMovie.title,
-      movieId: selectedMovie.id,
-      moviePoster: selectedMovie.poster_path ?? undefined,
-      createdAt: new Date(),
-      comments: [],
-      likes: [],
-      dislikes: [],
-      isSpoiler,
-      user: {
-        id: user?.id || 0,
-        username: user?.username || "익명",
-        profileImageUrl: user?.profileImageUrl || null,
-        reviewCount: 0
-      }
-    };
+    try {
+      // 실제 API를 사용할 때는 아래 주석을 해제하고 구현하세요
+      /*
+      const response = await backendApi.createMovieReview({
+        title,
+        content,
+        rating,
+        movieId: selectedMovie.id,
+        movieTitle: selectedMovie.title,
+        moviePoster: selectedMovie.poster_path,
+        isSpoiler
+      });
+      */
+      
+      // 임시 구현 (실제 API 연결 전까지 사용)
+      const newReview: MovieReview = {
+        id: reviews.length + 1,
+        title,
+        content,
+        rating,
+        movieTitle: selectedMovie.title,
+        movieId: selectedMovie.id,
+        moviePoster: selectedMovie.poster_path ?? undefined,
+        createdAt: new Date(),
+        comments: [],
+        likes: [],
+        dislikes: [],
+        isSpoiler,
+        user: {
+          id: user?.id || 0,
+          username: user?.username || "익명",
+          profileImageUrl: user?.profileImageUrl || null,
+          reviewCount: 0
+        }
+      };
 
-    setReviews([newReview, ...reviews]);
-    setSearchResults([newReview, ...searchResults]);
-    setTitle("");
-    setContent("");
-    setSelectedMovie(null);
-    setMovieTitle("");
-    setRating(0);
-    setIsSpoiler(false);
-    setShowWriteForm(false);
+      setReviews([newReview, ...reviews]);
+      setSearchResults([newReview, ...searchResults]);
+      
+      // 폼 초기화
+      setTitle("");
+      setContent("");
+      setSelectedMovie(null);
+      setMovieTitle("");
+      setRating(0);
+      setIsSpoiler(false);
+      setShowWriteForm(false);
+      
+      toast.success("리뷰가 등록되었습니다.");
+    } catch (error) {
+      console.error("리뷰 등록 실패:", error);
+      toast.error("리뷰 등록에 실패했습니다.");
+    }
   };
 
   // 댓글 작성 처리
-  const handleCommentSubmit = (reviewId: number) => {
+  const handleCommentSubmit = async (reviewId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+    
     if (!commentContent.trim()) {
-      alert("댓글 내용을 입력해주세요!");
+      toast.error("댓글 내용을 입력해주세요.");
       return;
     }
 
-    // 실제 구현에서는 API 호출로 대체
-    const newComment: Comment = {
-      id: Math.floor(Math.random() * 1000) + 10, // 임의의 ID 생성
-      content: commentContent,
-      createdAt: new Date(),
-      likes: [],
-      dislikes: [],
-      user: {
-        id: user?.id || 0,
-        username: user?.username || "익명",
-        profileImageUrl: user?.profileImageUrl || null
-      }
-    };
+    try {
+      // 실제 API를 사용할 때는 아래 주석을 해제하고 구현하세요
+      /*
+      const newComment = await backendApi.addReviewComment(reviewId, commentContent);
+      
+      // 리뷰 목록 업데이트
+      const updatedReviews = reviews.map(review => {
+        if (review.id === reviewId) {
+          return {
+            ...review,
+            comments: [newComment, ...review.comments]
+          };
+        }
+        return review;
+      });
+      */
+      
+      // 임시 구현 (실제 API 연결 전까지 사용)
+      const newComment: Comment = {
+        id: Math.floor(Math.random() * 1000) + 10, // 임의의 ID 생성
+        content: commentContent,
+        createdAt: new Date(),
+        likes: [],
+        dislikes: [],
+        user: {
+          id: user?.id || 0,
+          username: user?.username || "익명",
+          profileImageUrl: user?.profileImageUrl || null
+        }
+      };
 
-    // 댓글이 추가된 새 리뷰 목록 생성
-    const updatedReviews = reviews.map(review => 
-      review.id === reviewId 
-        ? { ...review, comments: [newComment, ...review.comments] } 
-        : review
-    );
+      // 댓글이 추가된 새 리뷰 목록 생성
+      const updatedReviews = reviews.map(review => 
+        review.id === reviewId 
+          ? { ...review, comments: [newComment, ...review.comments] } 
+          : review
+      );
 
-    setReviews(updatedReviews);
-    setSearchResults(updatedReviews);
-    setCommentContent("");
+      setReviews(updatedReviews);
+      setSearchResults(updatedReviews);
+      setCommentContent("");
+      
+      toast.success("댓글이 등록되었습니다.");
+    } catch (error) {
+      console.error("댓글 작성 실패:", error);
+      toast.error("댓글 작성에 실패했습니다.");
+    }
   };
 
   // 날짜 포맷팅 함수
@@ -415,82 +500,126 @@ const MovieReviewsPage: React.FC = () => {
   };
 
   // 좋아요 처리
-  const handleReviewLike = (reviewId: number) => {
-    if (!isLoggedIn || !user) {
-      alert("좋아요를 누르려면 로그인이 필요합니다.");
+  const handleReviewLike = async (reviewId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
       return;
     }
 
-    const updatedReviews = reviews.map(review => {
-      if (review.id === reviewId) {
-        // 이미 좋아요를 눌렀는지 확인
-        const alreadyLiked = review.likes.some(like => like.userId === user.id);
-        
-        if (alreadyLiked) {
-          // 이미 좋아요 누른 경우, 좋아요 취소
-          return {
-            ...review,
-            likes: review.likes.filter(like => like.userId !== user.id)
-          };
-        } else {
-          // 싫어요 취소 (있을 경우)
-          const updatedDislikes = review.dislikes.filter(dislike => dislike.userId !== user.id);
+    try {
+      // 실제 API를 사용할 때는 아래 주석을 해제하고 구현하세요
+      /*
+      const updatedReview = await backendApi.likeReview(reviewId);
+      
+      // 리뷰 목록 업데이트
+      const updatedReviews = reviews.map(review => 
+        review.id === reviewId ? updatedReview : review
+      );
+      setReviews(updatedReviews);
+      setSearchResults(updatedReviews);
+      */
+      
+      // 임시 구현 (실제 API 연결 전까지 사용)
+      const updatedReviews = reviews.map(review => {
+        if (review.id === reviewId) {
+          // 이미 좋아요를 눌렀는지 확인
+          const alreadyLiked = review.likes.some(like => like.userId === user?.id);
           
-          // 좋아요 추가
-          return {
-            ...review,
-            likes: [...review.likes, { userId: user.id }],
-            dislikes: updatedDislikes
-          };
+          if (alreadyLiked) {
+            // 이미 좋아요 누른 경우, 좋아요 취소
+            return {
+              ...review,
+              likes: review.likes.filter(like => like.userId !== user?.id)
+            };
+          } else {
+            // 싫어요 취소 (있을 경우)
+            const updatedDislikes = review.dislikes.filter(dislike => dislike.userId !== user?.id);
+            
+            // 좋아요 추가
+            return {
+              ...review,
+              likes: [...review.likes, { userId: user?.id || 0 }],
+              dislikes: updatedDislikes
+            };
+          }
         }
-      }
-      return review;
-    });
-    
-    setReviews(updatedReviews);
-    setSearchResults(updatedReviews);
+        return review;
+      });
+      
+      setReviews(updatedReviews);
+      setSearchResults(updatedReviews);
+      
+      toast.success(updatedReviews.find(r => r.id === reviewId)?.likes.some(like => like.userId === user?.id) 
+        ? "좋아요가 추가되었습니다." 
+        : "좋아요가 취소되었습니다.");
+    } catch (error) {
+      console.error("좋아요 처리 실패:", error);
+      toast.error("좋아요 처리에 실패했습니다.");
+    }
   };
 
   // 싫어요 처리
-  const handleReviewDislike = (reviewId: number) => {
-    if (!isLoggedIn || !user) {
-      alert("싫어요를 누르려면 로그인이 필요합니다.");
+  const handleReviewDislike = async (reviewId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
       return;
     }
 
-    const updatedReviews = reviews.map(review => {
-      if (review.id === reviewId) {
-        // 이미 싫어요를 눌렀는지 확인
-        const alreadyDisliked = review.dislikes.some(dislike => dislike.userId === user.id);
-        
-        if (alreadyDisliked) {
-          // 이미 싫어요 누른 경우, 싫어요 취소
-          return {
-            ...review,
-            dislikes: review.dislikes.filter(dislike => dislike.userId !== user.id)
-          };
-        } else {
-          // 좋아요 취소 (있을 경우)
-          const updatedLikes = review.likes.filter(like => like.userId !== user.id);
+    try {
+      // 실제 API를 사용할 때는 아래 주석을 해제하고 구현하세요
+      /*
+      const updatedReview = await backendApi.dislikeReview(reviewId);
+      
+      // 리뷰 목록 업데이트
+      const updatedReviews = reviews.map(review => 
+        review.id === reviewId ? updatedReview : review
+      );
+      setReviews(updatedReviews);
+      setSearchResults(updatedReviews);
+      */
+      
+      // 임시 구현 (실제 API 연결 전까지 사용)
+      const updatedReviews = reviews.map(review => {
+        if (review.id === reviewId) {
+          // 이미 싫어요를 눌렀는지 확인
+          const alreadyDisliked = review.dislikes.some(dislike => dislike.userId === user?.id);
           
-          // 싫어요 추가
-          return {
-            ...review,
-            dislikes: [...review.dislikes, { userId: user.id }],
-            likes: updatedLikes
-          };
+          if (alreadyDisliked) {
+            // 이미 싫어요 누른 경우, 싫어요 취소
+            return {
+              ...review,
+              dislikes: review.dislikes.filter(dislike => dislike.userId !== user?.id)
+            };
+          } else {
+            // 좋아요 취소 (있을 경우)
+            const updatedLikes = review.likes.filter(like => like.userId !== user?.id);
+            
+            // 싫어요 추가
+            return {
+              ...review,
+              dislikes: [...review.dislikes, { userId: user?.id || 0 }],
+              likes: updatedLikes
+            };
+          }
         }
-      }
-      return review;
-    });
-    
-    setReviews(updatedReviews);
-    setSearchResults(updatedReviews);
+        return review;
+      });
+      
+      setReviews(updatedReviews);
+      setSearchResults(updatedReviews);
+      
+      toast.success(updatedReviews.find(r => r.id === reviewId)?.dislikes.some(dislike => dislike.userId === user?.id) 
+        ? "싫어요가 추가되었습니다." 
+        : "싫어요가 취소되었습니다.");
+    } catch (error) {
+      console.error("싫어요 처리 실패:", error);
+      toast.error("싫어요 처리에 실패했습니다.");
+    }
   };
 
-  // 영화 상세 페이지로 이동하는 함수 추가
+  // 영화 상세 페이지로 이동하는 함수
   const navigateToMovieDetail = (movieId: number) => {
-    window.location.href = `/movie/${movieId}`;
+    navigate(`/movie/${movieId}`);
   };
 
   // 스크롤 이벤트 핸들러
@@ -538,6 +667,11 @@ const MovieReviewsPage: React.FC = () => {
     setPage(1);
     setHasMore(searchResults.length > reviewsPerPage);
   }, [searchResults]);
+
+  // 포스터 URL 가져오기 함수
+  const getPosterUrl = (posterPath: string | null, size = "w154") => {
+    return backendApi.getPosterUrl(posterPath, size);
+  };
 
   return (
     <div className="container mx-auto px-4 py-2">
@@ -691,7 +825,7 @@ const MovieReviewsPage: React.FC = () => {
                   <div className="flex items-center border border-gray-300 rounded-md p-2">
                     {selectedMovie.poster_path && (
                       <img 
-                        src={`https://image.tmdb.org/t/p/w92${selectedMovie.poster_path}`} 
+                        src={getPosterUrl(selectedMovie.poster_path, "w92")} 
                         alt={selectedMovie.title}
                         className="w-16 h-24 object-cover rounded mr-3"
                       />
@@ -733,7 +867,7 @@ const MovieReviewsPage: React.FC = () => {
                             <div className="flex-shrink-0 w-10 h-14 bg-gray-200 flex items-center justify-center rounded overflow-hidden mr-2">
                               {movie.poster_path ? (
                                 <img 
-                                  src={`https://image.tmdb.org/t/p/w92${movie.poster_path}`} 
+                                  src={getPosterUrl(movie.poster_path, "w92")} 
                                   alt={movie.title}
                                   className="w-full h-full object-cover"
                                 />
@@ -924,7 +1058,7 @@ const MovieReviewsPage: React.FC = () => {
                     <div className="flex mb-4">
                       {review.moviePoster && (
                         <img 
-                          src={`https://image.tmdb.org/t/p/w154${review.moviePoster}`}
+                          src={getPosterUrl(review.moviePoster)}
                           alt={review.movieTitle}
                           className="w-24 h-36 object-cover rounded mr-3 cursor-pointer hover:opacity-80 transition-opacity"
                           onClick={() => navigateToMovieDetail(review.movieId)}

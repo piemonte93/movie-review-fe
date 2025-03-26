@@ -4,6 +4,9 @@ import { useNotifications } from "../context/NotificationContext";
 import { FaUser, FaComment, FaSearch, FaPen, FaReply, FaCaretDown, FaTimes, FaThumbsUp, FaThumbsDown, FaArrowUp } from "react-icons/fa";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
+import { backendApi } from "../api/backendApi";
+import { toast } from "react-toastify";
+import type { Post, Comment, UserItem } from "../api/backendApi";
 
 // 알림 데이터 타입 정의
 interface Notification {
@@ -85,27 +88,15 @@ const CommunityPage: React.FC = () => {
   const [mentionedUsers, setMentionedUsers] = useState<UserItem[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // 가짜 사용자 데이터 (실제로는 API에서 가져와야 함)
-  const mockUsers: UserItem[] = [
-    { id: 1, username: "user1", profileImageUrl: null },
-    { id: 2, username: "moviefan", profileImageUrl: null },
-    { id: 3, username: "cinephile", profileImageUrl: null },
-    { id: 4, username: "director", profileImageUrl: null },
-    { id: 5, username: "filmcritic", profileImageUrl: null },
-    { id: 6, username: "actor", profileImageUrl: null },
-    { id: 7, username: "영화덕후", profileImageUrl: null },
-    { id: 8, username: "무비팬", profileImageUrl: null },
-    { id: 9, username: "영화관탐험가", profileImageUrl: null },
-  ];
-
   // 알림 데이터 (실제로는 API에서 가져와야 함)
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   // 무한 스크롤 관련 상태 추가
   const [visiblePosts, setVisiblePosts] = useState<Post[]>([]);
   const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(0);
   const postsPerPage = 5; // 한 번에 보여줄 게시글 수
+  const [totalPages, setTotalPages] = useState(0);
   
   // 최상단으로 이동 버튼의 표시 여부 상태
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -123,129 +114,65 @@ const CommunityPage: React.FC = () => {
     }
   }, [location]);
 
-  // 게시글 데이터 가져오기 (임시 데이터)
+  // 게시글 데이터 가져오기
   useEffect(() => {
-    // API 호출을 대신하는 임시 데이터
-    const mockPosts: Post[] = [
-      {
-        id: 1,
-        title: "저번 주 일요일 CGV 반딧불이 누구나",
-        content: "영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다.",
-        createdAt: new Date(Date.now() - 1000 * 60 * 30), // 30분 전
-        comments: [
-          {
-            id: 1,
-            content: "정말 공감합니다. 저도 그 영화 보다가 눈부셔서 힘들었어요.",
-            createdAt: new Date(Date.now() - 1000 * 60 * 20),
-            likes: [{ userId: 3 }, { userId: 4 }],
-            dislikes: [{ userId: 5 }],
-            user: {
-              id: 2,
-              username: "영화덕후",
-              profileImageUrl: null
-            }
-          },
-          {
-            id: 2,
-            content: "저는 오히려 조명이 너무 어두워서 불편했어요.",
-            createdAt: new Date(Date.now() - 1000 * 60 * 10),
-            likes: [{ userId: 2 }],
-            dislikes: [],
-            user: {
-              id: 3,
-              username: "무비팬",
-              profileImageUrl: null
-            }
-          }
-        ],
-        mentions: [],
-        likes: [{ userId: 2 }, { userId: 4 }],
-        dislikes: [{ userId: 5 }],
-        user: {
-          id: 1,
-          username: "작성자 이름",
-          profileImageUrl: null,
-          reviewCount: 15
-        }
-      },
-      {
-        id: 2,
-        title: "저번 주 일요일 CGV 반딧불이 누구나",
-        content: "영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다.",
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2시간 전
-        comments: [
-          {
-            id: 3,
-            content: "CGV 반딧불이 지점은 항상 조명이 그렇더라고요.",
-            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 1),
-            likes: [{ userId: 1 }, { userId: 2 }, { userId: 5 }],
-            dislikes: [],
-            user: {
-              id: 4,
-              username: "영화관탐험가",
-              profileImageUrl: null
-            }
-          }
-        ],
-        mentions: [
-          { id: 7, username: "영화덕후", profileImageUrl: null }
-        ],
-        likes: [{ userId: 1 }, { userId: 3 }],
-        dislikes: [],
-        user: {
-          id: 2,
-          username: "작성자 이름",
-          profileImageUrl: null,
-          reviewCount: 32
-        }
-      },
-      {
-        id: 3,
-        title: "저번 주 일요일 CGV 반딧불이 누구나",
-        content: "영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다. 영화보다가 눈부셔서 뒤지는 줄 알았다.",
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5), // 5시간 전
-        comments: [],
-        mentions: [],
-        likes: [],
-        dislikes: [],
-        user: {
-          id: 3,
-          username: "작성자 이름",
-          profileImageUrl: null,
-          reviewCount: 24
-        }
+    const fetchPosts = async () => {
+      try {
+        setLoading(true);
+        const response = await backendApi.getPosts(0, postsPerPage);
+        setPosts(response.content);
+        setVisiblePosts(response.content);
+        setTotalPages(response.totalPages);
+        setHasMore(response.totalPages > 1);
+        setLoading(false);
+      } catch (error) {
+        console.error("게시글 로딩 실패:", error);
+        toast.error("게시글을 불러오는데 실패했습니다.");
+        setLoading(false);
       }
-    ];
+    };
 
-    setPosts(mockPosts);
-    setSearchResults(mockPosts);
-    setLoading(false);
-
-    // 알림 목록 초기화 (실제로는 API 호출)
-    const mockNotifications: Notification[] = [
-      {
-        id: 1,
-        type: "mention",
-        postId: 2,
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 1),
-        read: false,
-        fromUser: {
-          id: 2,
-          username: "작성자 이름",
-          profileImageUrl: null
-        }
-      }
-    ];
-    setNotifications(mockNotifications);
+    fetchPosts();
   }, []);
 
-  // 멘션 리스트 필터링
-  const filterMentionList = (query: string) => {
-    if (!query) return [];
+  // 사용자 검색 API 호출 함수
+  const searchUsers = async (query: string): Promise<UserItem[]> => {
+    if (query.length < 2) return [];
     
-    return mockUsers.filter(user => 
-      user.username.toLowerCase().includes(query.toLowerCase())
-    );
+    try {
+      // 실제 API를 연결할 때는 아래 주석을 해제하고 목업 데이터를 제거해주세요
+      // const response = await backendApi.searchUsers(query);
+      // return response.data;
+      
+      // 임시 목업 데이터 (API 연결 전까지만 사용)
+      const mockUsers: UserItem[] = [
+        { id: 1, username: "user1", profileImageUrl: null },
+        { id: 2, username: "moviefan", profileImageUrl: null },
+        { id: 3, username: "cinephile", profileImageUrl: null },
+        { id: 4, username: "director", profileImageUrl: null },
+        { id: 5, username: "filmcritic", profileImageUrl: null },
+        { id: 6, username: "actor", profileImageUrl: null },
+        { id: 7, username: "영화덕후", profileImageUrl: null },
+        { id: 8, username: "무비팬", profileImageUrl: null },
+        { id: 9, username: "영화관탐험가", profileImageUrl: null },
+      ];
+      
+      return mockUsers.filter(user => 
+        user.username.toLowerCase().includes(query.toLowerCase())
+      );
+    } catch (error) {
+      console.error("사용자 검색 실패:", error);
+      return [];
+    }
+  };
+
+  const filterMentionList = (query: string) => {
+    // 여기서 실제 API를 호출할 수 있습니다
+    if (query) {
+      searchUsers(query).then(users => {
+        setMentionUsers(users);
+      });
+    }
   };
 
   // 텍스트 에어리어 변경 핸들러
@@ -360,92 +287,94 @@ const CommunityPage: React.FC = () => {
   };
 
   // 게시글 작성 처리
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!title.trim() || !content.trim()) {
-      alert("제목과 내용을 입력해주세요!");
+    if (!isLoggedIn) {
+      // 로그인이 필요한 경우 로그인 페이지로 리다이렉트
+      navigate("/login", { state: { from: location } });
       return;
     }
-
-    // 실제 구현에서는 API 호출로 대체
-    const newPost: Post = {
-      id: posts.length + 1,
-      title,
-      content,
-      createdAt: new Date(),
-      comments: [],
-      mentions: mentionedUsers,
-      likes: [],
-      dislikes: [],
-      user: {
-        id: user?.id || 0,
-        username: user?.username || "익명",
-        profileImageUrl: user?.profileImageUrl || null,
-        reviewCount: 0
-      }
-    };
-
-    setPosts([newPost, ...posts]);
-    setSearchResults([newPost, ...searchResults]);
     
-    // 멘션된 사용자에게 알림 생성
-    if (mentionedUsers.length > 0) {
-      createNotification(mentionedUsers, newPost.id);
+    if (!title.trim() || !content.trim()) {
+      toast.error("제목과 내용을 모두 입력해주세요.");
+      return;
     }
     
-    setTitle("");
-    setContent("");
-    setMentionedUsers([]);
-    setShowWriteForm(false);
+    try {
+      const newPost = await backendApi.createPost(title, content);
+      
+      // 멘션된 사용자에게 알림 생성
+      if (mentionedUsers.length > 0) {
+        createNotification(mentionedUsers, newPost.id);
+      }
+      
+      // 폼 초기화 및 닫기
+      setTitle("");
+      setContent("");
+      setMentionedUsers([]);
+      setShowWriteForm(false);
+      
+      // 새 게시글을 목록 최상단에 추가
+      setPosts(prevPosts => [newPost, ...prevPosts]);
+      setVisiblePosts(prevPosts => [newPost, ...prevPosts]);
+      
+      toast.success("게시글이 등록되었습니다.");
+    } catch (error) {
+      console.error("게시글 등록 실패:", error);
+      toast.error("게시글 등록에 실패했습니다.");
+    }
   };
 
   // 댓글 작성 처리
-  const handleCommentSubmit = (postId: number) => {
-    if (!commentContent.trim()) {
-      alert("댓글 내용을 입력해주세요!");
+  const handleCommentSubmit = async (postId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
       return;
     }
-
-    // 실제 구현에서는 API 호출로 대체
-    const newComment: Comment = {
-      id: Math.floor(Math.random() * 1000) + 10, // 임의의 ID 생성
-      content: commentContent,
-      createdAt: new Date(),
-      likes: [],
-      dislikes: [],
-      user: {
-        id: user?.id || 0,
-        username: user?.username || "익명",
-        profileImageUrl: user?.profileImageUrl || null
-      }
-    };
-
-    // 댓글이 추가된 새 게시글 목록 생성
-    const updatedPosts = posts.map(post => {
-      if (post.id === postId) {
-        // 게시글 작성자에게 댓글 알림 생성
-        if (post.user.id !== user?.id) {
-          addNotification({
-            type: "comment",
-            postId,
-            createdAt: new Date(),
-            read: false,
-            fromUser: {
-              id: user?.id || 0,
-              username: user?.username || "익명",
-              profileImageUrl: user?.profileImageUrl || null
-            }
-          });
+    
+    if (!commentContent.trim()) {
+      toast.error("댓글 내용을 입력해주세요.");
+      return;
+    }
+    
+    try {
+      const newComment = await backendApi.createComment(postId, commentContent);
+      
+      // 댓글이 추가된 게시글 찾기
+      const updatedPosts = posts.map(post => {
+        if (post.id === postId) {
+          return {
+            ...post,
+            comments: [...post.comments, newComment]
+          };
         }
-        return { ...post, comments: [newComment, ...post.comments] };
-      }
-      return post;
-    });
-
-    setPosts(updatedPosts);
-    setSearchResults(updatedPosts);
-    setCommentContent("");
+        return post;
+      });
+      
+      setPosts(updatedPosts);
+      setVisiblePosts(
+        visiblePosts.map(post => {
+          if (post.id === postId) {
+            return {
+              ...post,
+              comments: [...post.comments, newComment]
+            };
+          }
+          return post;
+        })
+      );
+      
+      // 댓글 입력창 초기화
+      setCommentContent("");
+      
+      // 게시글 작성자에게 알림 생성 (실제 API 연결 시 구현)
+      
+      toast.success("댓글이 등록되었습니다.");
+    } catch (error) {
+      console.error("댓글 등록 실패:", error);
+      toast.error("댓글 등록에 실패했습니다.");
+    }
   };
 
   // 멘션된 사용자 표시 형식으로 텍스트 변환
@@ -471,30 +400,37 @@ const CommunityPage: React.FC = () => {
   };
 
   // 검색 처리
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (!searchQuery.trim()) {
-      setSearchResults(posts);
+      toast.error("검색어를 입력해주세요.");
       return;
     }
-
-    const filtered = posts.filter(post => {
-      const query = searchQuery.toLowerCase();
-      
-      switch (searchCategory) {
-        case 'title':
-          return post.title.toLowerCase().includes(query);
-        case 'content':
-          return post.content.toLowerCase().includes(query);
-        case 'author':
-          return post.user.username.toLowerCase().includes(query);
-        default:
-          return post.title.toLowerCase().includes(query) || 
-                 post.content.toLowerCase().includes(query);
-      }
-    });
     
-    setSearchResults(filtered);
+    try {
+      setLoading(true);
+      
+      // 백엔드 API 호출
+      const results = await backendApi.searchPosts(
+        searchQuery, 
+        searchCategory,
+        0, 
+        postsPerPage
+      );
+      
+      // 검색 결과 설정
+      setSearchResults(results.content);
+      setLoading(false);
+      
+      // 검색 모달 닫기
+      setShowSearchModal(false);
+      setShowSearch(true);
+    } catch (error) {
+      console.error("게시글 검색 실패:", error);
+      toast.error("검색에 실패했습니다.");
+      setLoading(false);
+    }
   };
 
   // 검색 카테고리를 표시하는 텍스트 반환
@@ -510,7 +446,8 @@ const CommunityPage: React.FC = () => {
   // 검색 초기화
   const resetSearch = () => {
     setSearchQuery("");
-    setSearchResults(posts);
+    setSearchResults([]);
+    setSearchCategory("title");
     setShowSearch(false);
     setShowSearchModal(false);
   };
@@ -537,77 +474,59 @@ const CommunityPage: React.FC = () => {
   };
 
   // 좋아요 처리
-  const handlePostLike = (postId: number) => {
-    if (!isLoggedIn || !user) {
-      alert("좋아요를 누르려면 로그인이 필요합니다.");
+  const handlePostLike = async (postId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
       return;
     }
-
-    const updatedPosts = posts.map(post => {
-      if (post.id === postId) {
-        // 이미 좋아요를 눌렀는지 확인
-        const alreadyLiked = post.likes.some(like => like.userId === user.id);
-        
-        if (alreadyLiked) {
-          // 이미 좋아요 누른 경우, 좋아요 취소
-          return {
-            ...post,
-            likes: post.likes.filter(like => like.userId !== user.id)
-          };
-        } else {
-          // 싫어요 취소 (있을 경우)
-          const updatedDislikes = post.dislikes.filter(dislike => dislike.userId !== user.id);
-          
-          // 좋아요 추가
-          return {
-            ...post,
-            likes: [...post.likes, { userId: user.id }],
-            dislikes: updatedDislikes
-          };
-        }
-      }
-      return post;
-    });
     
-    setPosts(updatedPosts);
-    setSearchResults(updatedPosts);
+    try {
+      const updatedPost = await backendApi.likePost(postId);
+      
+      // 업데이트된 게시글 상태 반영
+      setPosts(prevPosts => 
+        prevPosts.map(post => 
+          post.id === postId ? updatedPost : post
+        )
+      );
+      
+      setVisiblePosts(prevPosts => 
+        prevPosts.map(post => 
+          post.id === postId ? updatedPost : post
+        )
+      );
+    } catch (error) {
+      console.error("게시글 좋아요 실패:", error);
+      toast.error("좋아요 처리에 실패했습니다.");
+    }
   };
 
   // 싫어요 처리
-  const handlePostDislike = (postId: number) => {
-    if (!isLoggedIn || !user) {
-      alert("싫어요를 누르려면 로그인이 필요합니다.");
+  const handlePostDislike = async (postId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
       return;
     }
-
-    const updatedPosts = posts.map(post => {
-      if (post.id === postId) {
-        // 이미 싫어요를 눌렀는지 확인
-        const alreadyDisliked = post.dislikes.some(dislike => dislike.userId === user.id);
-        
-        if (alreadyDisliked) {
-          // 이미 싫어요 누른 경우, 싫어요 취소
-          return {
-            ...post,
-            dislikes: post.dislikes.filter(dislike => dislike.userId !== user.id)
-          };
-        } else {
-          // 좋아요 취소 (있을 경우)
-          const updatedLikes = post.likes.filter(like => like.userId !== user.id);
-          
-          // 싫어요 추가
-          return {
-            ...post,
-            dislikes: [...post.dislikes, { userId: user.id }],
-            likes: updatedLikes
-          };
-        }
-      }
-      return post;
-    });
     
-    setPosts(updatedPosts);
-    setSearchResults(updatedPosts);
+    try {
+      const updatedPost = await backendApi.dislikePost(postId);
+      
+      // 업데이트된 게시글 상태 반영
+      setPosts(prevPosts => 
+        prevPosts.map(post => 
+          post.id === postId ? updatedPost : post
+        )
+      );
+      
+      setVisiblePosts(prevPosts => 
+        prevPosts.map(post => 
+          post.id === postId ? updatedPost : post
+        )
+      );
+    } catch (error) {
+      console.error("게시글 싫어요 실패:", error);
+      toast.error("싫어요 처리에 실패했습니다.");
+    }
   };
 
   // 스크롤 이벤트 핸들러
@@ -631,30 +550,42 @@ const CommunityPage: React.FC = () => {
   };
 
   // 다음 페이지 게시글을 불러오는 함수
-  const fetchMorePosts = () => {
-    const nextPage = page + 1;
-    const startIndex = page * postsPerPage;
-    const endIndex = startIndex + postsPerPage;
-    const nextPosts = searchResults.slice(startIndex, endIndex);
-    
-    if (nextPosts.length === 0) {
+  const fetchMorePosts = async () => {
+    if (page + 1 >= totalPages) {
       setHasMore(false);
       return;
     }
     
-    // 약간의 지연 효과 추가 (실제 API 호출 시뮬레이션)
-    setTimeout(() => {
-      setVisiblePosts([...visiblePosts, ...nextPosts]);
+    try {
+      const nextPage = page + 1;
+      let response;
+      
+      if (showSearch && searchQuery) {
+        // 검색 결과 더 불러오기
+        response = await backendApi.searchPosts(
+          searchQuery, 
+          searchCategory,
+          nextPage, 
+          postsPerPage
+        );
+      } else {
+        // 일반 게시글 더 불러오기
+        response = await backendApi.getPosts(nextPage, postsPerPage);
+      }
+      
+      // 기존 게시글에 새로 불러온 게시글 추가
+      setVisiblePosts(prevPosts => [...prevPosts, ...response.content]);
       setPage(nextPage);
-    }, 800);
+      
+      // 더 불러올 게시글이 없는 경우 hasMore를 false로 설정
+      if (nextPage + 1 >= response.totalPages) {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error("게시글 더 불러오기 실패:", error);
+      toast.error("게시글을 더 불러오는데 실패했습니다.");
+    }
   };
-
-  // 검색 결과가 변경되면 visible posts 초기화
-  useEffect(() => {
-    setVisiblePosts(searchResults.slice(0, postsPerPage));
-    setPage(1);
-    setHasMore(searchResults.length > postsPerPage);
-  }, [searchResults]);
 
   return (
     <div className="container mx-auto px-4 py-2">

@@ -18,6 +18,7 @@ import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
 import CommunityPage from "./pages/CommunityPage";
 import MovieReviewsPage from "./pages/MovieReviewsPage";
+import { ToastContainer } from "react-toastify";
 
 function App() {
   return (
@@ -52,6 +53,17 @@ function App() {
               </Routes>
             </main>
           </div>
+          <ToastContainer
+            position="top-right"
+            autoClose={3000}
+            hideProgressBar={false}
+            newestOnTop
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+          />
         </NotificationProvider>
       </AuthProvider>
     </Router>
