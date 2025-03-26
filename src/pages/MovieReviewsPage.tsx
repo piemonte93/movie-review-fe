@@ -33,12 +33,13 @@ interface MovieReview {
   content: string;
   rating: number;
   movieTitle: string;
-  movieId?: number;
+  movieId: number;
   moviePoster?: string;
   createdAt: Date;
   comments: Comment[];
   likes: { userId: number }[];
   dislikes: { userId: number }[];
+  isSpoiler: boolean;
   user: {
     id: number;
     username: string;
@@ -57,6 +58,7 @@ const MovieReviewsPage: React.FC = () => {
   const [movieSearchResults, setMovieSearchResults] = useState<Movie[]>([]);
   const [isSearchingMovie, setIsSearchingMovie] = useState(false);
   const [rating, setRating] = useState<number>(0);
+  const [isSpoiler, setIsSpoiler] = useState(false);
   const [reviews, setReviews] = useState<MovieReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [showWriteForm, setShowWriteForm] = useState(false);
@@ -161,6 +163,7 @@ const MovieReviewsPage: React.FC = () => {
         ],
         likes: [{ userId: 2 }, { userId: 4 }],
         dislikes: [{ userId: 5 }],
+        isSpoiler: false,
         user: {
           id: 1,
           username: "작성자 이름",
@@ -193,6 +196,7 @@ const MovieReviewsPage: React.FC = () => {
         ],
         likes: [{ userId: 1 }, { userId: 3 }],
         dislikes: [],
+        isSpoiler: true,
         user: {
           id: 2,
           username: "작성자 이름",
@@ -212,6 +216,7 @@ const MovieReviewsPage: React.FC = () => {
         comments: [],
         likes: [],
         dislikes: [],
+        isSpoiler: false,
         user: {
           id: 3,
           username: "작성자 이름",
@@ -248,6 +253,7 @@ const MovieReviewsPage: React.FC = () => {
       comments: [],
       likes: [],
       dislikes: [],
+      isSpoiler,
       user: {
         id: user?.id || 0,
         username: user?.username || "익명",
@@ -263,6 +269,7 @@ const MovieReviewsPage: React.FC = () => {
     setSelectedMovie(null);
     setMovieTitle("");
     setRating(0);
+    setIsSpoiler(false);
     setShowWriteForm(false);
   };
 
@@ -469,6 +476,11 @@ const MovieReviewsPage: React.FC = () => {
     
     setReviews(updatedReviews);
     setSearchResults(updatedReviews);
+  };
+
+  // 영화 상세 페이지로 이동하는 함수 추가
+  const navigateToMovieDetail = (movieId: number) => {
+    window.location.href = `/movie/${movieId}`;
   };
 
   return (
@@ -745,6 +757,21 @@ const MovieReviewsPage: React.FC = () => {
                   required
                 ></textarea>
               </div>
+              <div className="mb-4 flex justify-between items-center">
+                <div></div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="spoilerCheck"
+                    checked={isSpoiler}
+                    onChange={(e) => setIsSpoiler(e.target.checked)}
+                    className="mr-2 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="spoilerCheck" className="text-sm text-gray-700">
+                    스포일러 포함
+                  </label>
+                </div>
+              </div>
               <div className="flex justify-end">
                 <button
                   type="submit"
@@ -771,8 +798,8 @@ const MovieReviewsPage: React.FC = () => {
       {/* 리뷰 목록 */}
       <div className="space-y-6">
         {loading ? (
-          <div className="flex justify-center py-10">
-            <p>로딩 중...</p>
+          <div className="flex justify-center py-8">
+            <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
           </div>
         ) : searchResults.length === 0 ? (
           <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
@@ -826,12 +853,22 @@ const MovieReviewsPage: React.FC = () => {
                       <img 
                         src={`https://image.tmdb.org/t/p/w154${review.moviePoster}`}
                         alt={review.movieTitle}
-                        className="w-24 h-36 object-cover rounded mr-3"
+                        className="w-24 h-36 object-cover rounded mr-3 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => navigateToMovieDetail(review.movieId)}
                       />
                     )}
                     <div className="flex-1">
-                      <p className="text-sm text-blue-600 font-medium mb-1">영화: {review.movieTitle}</p>
-                      <p className="text-gray-700 text-sm">{review.content}</p>
+                      <p 
+                        className="text-sm text-blue-600 font-medium mb-1 cursor-pointer hover:underline"
+                        onClick={() => navigateToMovieDetail(review.movieId)}
+                      >
+                        영화: {review.movieTitle}
+                      </p>
+                      <div 
+                        className={`text-gray-700 text-sm ${review.isSpoiler ? 'spoiler-content' : ''}`}
+                      >
+                        {review.content}
+                      </div>
                     </div>
                   </div>
                   
@@ -960,6 +997,19 @@ const MovieReviewsPage: React.FC = () => {
           ))
         )}
       </div>
+      
+      {/* 스포일러 컨텐츠에 대한 CSS 스타일 */}
+      <style>
+        {`
+          .spoiler-content {
+            filter: blur(4px);
+            transition: filter 0.3s ease;
+          }
+          .spoiler-content:hover {
+            filter: blur(0);
+          }
+        `}
+      </style>
     </div>
   );
 };
