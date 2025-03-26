@@ -1,8 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Navigation } from "swiper/modules";
 import "swiper/css";
-import "swiper/css/navigation";
+import defaultProfile from "../assets/default-profile.svg";
 
 interface CastMember {
   id: number;
@@ -16,14 +15,20 @@ interface CastCarouselProps {
 }
 
 const CastCarousel: React.FC<CastCarouselProps> = ({ cast }) => {
+  const [imageErrors, setImageErrors] = useState<{ [key: number]: boolean }>(
+    {}
+  );
+
+  const handleImageError = (memberId: number) => {
+    setImageErrors((prev) => ({ ...prev, [memberId]: true }));
+  };
+
   return (
-    <div className="cast-carousel my-8">
-      <h2 className="text-2xl font-bold mb-4">출연진</h2>
+    <div className="cast-carousel my-4">
+      <h2 className="text-lg font-bold mb-2">주요 출연진</h2>
       <Swiper
-        modules={[Navigation]}
-        spaceBetween={16}
+        spaceBetween={8}
         slidesPerView={2}
-        navigation
         breakpoints={{
           640: {
             slidesPerView: 3,
@@ -39,19 +44,38 @@ const CastCarousel: React.FC<CastCarouselProps> = ({ cast }) => {
       >
         {cast.map((member) => (
           <SwiperSlide key={member.id}>
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <img
-                src={
-                  member.profile_path
-                    ? `https://image.tmdb.org/t/p/w185${member.profile_path}`
-                    : "/default-avatar.png"
-                }
-                alt={member.name}
-                className="w-full h-48 object-cover"
-              />
-              <div className="p-4">
-                <h3 className="font-semibold text-lg">{member.name}</h3>
-                <p className="text-gray-600">{member.character}</p>
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <div className="relative w-full pb-[100%] bg-gray-50">
+                {!imageErrors[member.id] && member.profile_path ? (
+                  <img
+                    src={`https://image.tmdb.org/t/p/w185${member.profile_path}`}
+                    alt={member.name}
+                    className="absolute top-0 left-0 w-full h-full object-cover"
+                    onError={() => handleImageError(member.id)}
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <img
+                      src={defaultProfile}
+                      alt={member.name}
+                      className="w-1/2 h-1/2 object-contain opacity-70"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="p-2">
+                <h3
+                  className="font-semibold text-base truncate"
+                  title={member.name}
+                >
+                  {member.name}
+                </h3>
+                <p
+                  className="text-gray-600 text-sm truncate"
+                  title={member.character}
+                >
+                  {member.character}
+                </p>
               </div>
             </div>
           </SwiperSlide>

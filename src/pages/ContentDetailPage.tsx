@@ -5,6 +5,7 @@ import { FaStar } from "react-icons/fa";
 import { ContentDetail, Review, Video } from "../types/content";
 import VideoPlayerModal from "../components/VideoPlayerModal";
 import CastCarousel from "../components/CastCarousel";
+import defaultProfile from "../assets/default-profile.svg";
 
 /* // 임시 데이터는 주석 처리
 const mockMovieDetails = {
@@ -82,6 +83,9 @@ const ContentDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isTV, setIsTV] = useState(false);
+  const [reviewImageErrors, setReviewImageErrors] = useState<{
+    [key: number]: boolean;
+  }>({});
 
   // URL 경로에서 미디어 타입 결정 (tv 또는 movie)
   const mediaType = location.pathname.includes("/tv/") ? "tv" : "movie";
@@ -98,6 +102,10 @@ const ContentDetailPage = () => {
   const closeVideoModal = () => {
     setIsVideoModalOpen(false);
     setSelectedVideo(null);
+  };
+
+  const handleReviewImageError = (reviewId: number) => {
+    setReviewImageErrors((prev) => ({ ...prev, [reviewId]: true }));
   };
 
   useEffect(() => {
@@ -345,17 +353,26 @@ const ContentDetailPage = () => {
               reviews.slice(0, 4).map((review) => (
                 <div key={review.id} className="border rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <img
-                      src={
-                        review.avatar_path
-                          ? review.avatar_path.startsWith("/http")
+                    {!reviewImageErrors[review.id] && review.avatar_path ? (
+                      <img
+                        src={
+                          review.avatar_path.startsWith("/http")
                             ? review.avatar_path.substring(1)
                             : `https://image.tmdb.org/t/p/w200${review.avatar_path}`
-                          : `https://via.placeholder.com/50`
-                      }
-                      alt={review.author}
-                      className="w-8 h-8 rounded-full"
-                    />
+                        }
+                        alt={review.author}
+                        className="w-8 h-8 rounded-full object-cover"
+                        onError={() => handleReviewImageError(review.id)}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center">
+                        <img
+                          src={defaultProfile}
+                          alt={review.author}
+                          className="w-4 h-4 object-contain opacity-70"
+                        />
+                      </div>
+                    )}
                     <span className="font-medium">{review.author}</span>
                   </div>
                   <p className="text-gray-600 text-sm mb-1 line-clamp-3">
