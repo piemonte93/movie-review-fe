@@ -12,40 +12,47 @@ import ContentDetailPage from "./pages/ContentDetailPage";
 import ContentVideosPage from "./pages/ContentVideosPage";
 import OAuth2RedirectHandler from "./pages/OAuth2RedirectHandler";
 import { AuthProvider } from "./context/AuthContext";
+import { NotificationProvider } from "./context/NotificationContext";
 import ScrollToTop from "./components/ScrollToTop";
 import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
+import CommunityPage from "./pages/CommunityPage";
+import MovieReviewsPage from "./pages/MovieReviewsPage";
 
 function App() {
   return (
     <Router>
       <ScrollToTop />
       <AuthProvider>
-        <div className="min-h-screen bg-gray-100">
-          <Navbar />
-          <main className="pt-16">
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/verify-code" element={<VerifyCodePage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/movie/:id" element={<ContentDetailPage />} />
-              <Route path="/movie/:id/videos" element={<ContentVideosPage />} />
-              <Route path="/tv/:id" element={<ContentDetailPage />} />
-              <Route path="/tv/:id/videos" element={<ContentVideosPage />} />
-              <Route
-                path="/oauth2/redirect"
-                element={<OAuth2RedirectHandler />}
-              />
-              <Route path="/search" element={<SearchPage />} />
-              <Route path="/movies" element={<MoviesPage />} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/user/:userId" element={<UserProfilePage />} />
-            </Routes>
-          </main>
-        </div>
+        <NotificationProvider>
+          <div className="min-h-screen bg-gray-100">
+            <Navbar />
+            <main className="pt-16">
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/verify-code" element={<VerifyCodePage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/movie/:id" element={<ContentDetailPage />} />
+                <Route path="/movie/:id/videos" element={<ContentVideosPage />} />
+                <Route path="/tv/:id" element={<ContentDetailPage />} />
+                <Route path="/tv/:id/videos" element={<ContentVideosPage />} />
+                <Route
+                  path="/oauth2/redirect"
+                  element={<OAuth2RedirectHandler />}
+                />
+                <Route path="/search" element={<SearchPage />} />
+                <Route path="/movies" element={<MoviesPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/profile/:userId" element={<UserProfilePage />} />
+                <Route path="/community" element={<CommunityPage />} />
+                <Route path="/movie-reviews" element={<MovieReviewsPage />} />
+              </Routes>
+            </main>
+          </div>
+        </NotificationProvider>
       </AuthProvider>
     </Router>
   );
