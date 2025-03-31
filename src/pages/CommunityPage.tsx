@@ -288,7 +288,10 @@ const CommunityPage: React.FC = () => {
     }
 
     try {
-      const newPost = await backendApi.createPost(title, content);
+      const newPost = await backendApi.createPost({
+        title: title,
+        content: content,
+      });
 
       // 멘션된 사용자에게 알림 생성
       if (mentionedUsers.length > 0) {
@@ -328,6 +331,11 @@ const CommunityPage: React.FC = () => {
   };
 
   const handleCommentSubmit = async (postId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
     if (!newComment.trim()) {
       toast.error("댓글 내용을 입력해주세요.");
       return;
@@ -346,6 +354,7 @@ const CommunityPage: React.FC = () => {
         )
       );
       setNewComment("");
+      toast.success("댓글이 등록되었습니다.");
     } catch (error) {
       console.error("댓글 작성 실패:", error);
       toast.error("댓글 작성에 실패했습니다.");
@@ -1090,10 +1099,8 @@ const CommunityPage: React.FC = () => {
                               type="text"
                               placeholder="댓글을 입력하세요..."
                               className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
-                              value={commentContent}
-                              onChange={(e) =>
-                                setCommentContent(e.target.value)
-                              }
+                              value={newComment}
+                              onChange={(e) => setNewComment(e.target.value)}
                             />
                             <button
                               className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
@@ -1340,8 +1347,8 @@ const CommunityPage: React.FC = () => {
                             type="text"
                             placeholder="댓글을 입력하세요..."
                             className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
-                            value={commentContent}
-                            onChange={(e) => setCommentContent(e.target.value)}
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
                           />
                           <button
                             className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"

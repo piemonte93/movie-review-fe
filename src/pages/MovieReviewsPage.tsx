@@ -60,11 +60,10 @@ interface CommentResponse {
   id: number;
   content: string;
   username: string;
-  profileImageUrl: string | null;
-  createdAt: string;
-  likeCount: number;
-  dislikeCount: number;
-  userId: number;
+  user_profile_image_url: string | null;
+  created_at: string;
+  updated_at: string | null;
+  user_id: number;
 }
 
 // 영화 리뷰 데이터 타입 정의
@@ -118,18 +117,21 @@ interface MovieReviewResponse {
 }
 
 interface ReviewResponse {
-  content: Array<{
+  content: {
     id: number;
     username: string;
     user_profile_image_url: string | null;
     movie_id: number;
     movie_title: string;
     movie_poster_path: string | null;
+    title: string;
     content: string;
     rating: number;
     created_at: string;
     updated_at: string | null;
-  }>;
+    comment_count: number;
+    is_spoiler: boolean;
+  }[];
   totalElements: number;
   totalPages: number;
   currentPage: number;
@@ -263,49 +265,59 @@ const MovieReviewsPage: React.FC = () => {
   const fetchReviews = async () => {
     try {
       setLoading(true);
-      const response = await backendApi.getAllMovieReviews(
-        page,
-        reviewsPerPage
-      );
+      const response = await backendApi.getReviews(page, reviewsPerPage);
       console.log("리뷰 API 응답 원본:", JSON.stringify(response, null, 2));
 
       if (response && response.content) {
         const validReviews = response.content.filter(
-          (review) => review && review.id && review.username && review.movie_id
+          (review: ReviewResponse["content"][0]) =>
+            review && review.id && review.username && review.movie_id
         );
         console.log("유효한 리뷰:", validReviews);
-
-        const mappedReviews = validReviews.map((review) => {
-          const mappedComments: Comment[] = [];
-          console.log(`리뷰 ID ${review.id}의 댓글 데이터:`, []);
-          console.log(`리뷰 ID ${review.id}의 변환된 댓글:`, mappedComments);
-
-          return {
+        console.log(
+          "리뷰의 comment_count 값들:",
+          validReviews.map((review) => ({
             id: review.id,
-            title: review.movie_title,
-            content: review.content,
-            rating: review.rating,
-            movieTitle: review.movie_title,
-            movieId: review.movie_id,
-            moviePoster: review.movie_poster_path || "",
-            createdAt: new Date(review.created_at),
-            comments: mappedComments,
-            likes: [],
-            dislikes: [],
-            isSpoiler: false,
-            isLiked: false,
-            isDisliked: false,
-            likeCount: 0,
-            dislikeCount: 0,
-            commentCount: 0,
-            user: {
-              id: 0,
-              username: review.username,
-              profileImageUrl: review.user_profile_image_url,
-              reviewCount: 0,
-            },
-          };
-        });
+            comment_count: review.comment_count,
+          }))
+        );
+
+        const mappedComments: Comment[] = [];
+        console.log(`리뷰 ID ${validReviews[0].id}의 댓글 데이터:`, []);
+        console.log(
+          `리뷰 ID ${validReviews[0].id}의 변환된 댓글:`,
+          mappedComments
+        );
+
+        const mappedReviews = validReviews.map(
+          (review: ReviewResponse["content"][0]) => {
+            return {
+              id: review.id,
+              title: review.title,
+              content: review.content,
+              rating: review.rating,
+              movieTitle: review.movie_title,
+              movieId: review.movie_id,
+              moviePoster: review.movie_poster_path || "",
+              createdAt: new Date(review.created_at),
+              comments: mappedComments,
+              likes: [],
+              dislikes: [],
+              isSpoiler: review.is_spoiler,
+              isLiked: false,
+              isDisliked: false,
+              likeCount: 0,
+              dislikeCount: 0,
+              commentCount: review.comment_count ?? 0,
+              user: {
+                id: 0,
+                username: review.username,
+                profileImageUrl: review.user_profile_image_url,
+                reviewCount: 0,
+              },
+            };
+          }
+        );
 
         console.log("변환된 리뷰:", mappedReviews);
 
@@ -377,9 +389,14 @@ const MovieReviewsPage: React.FC = () => {
         movie_id: selectedMovie.id,
         movie_title: selectedMovie.title,
         movie_poster_path: selectedMovie.poster_path,
+        title: title.trim(),
         content: content.trim(),
         rating: rating,
+        is_spoiler: isSpoiler,
       };
+
+      console.log("리뷰 작성 시도 - 데이터:", reviewData);
+      console.log("스포일러 여부:", isSpoiler);
 
       await backendApi.createMovieReview(reviewData);
       toast.success("리뷰가 성공적으로 등록되었습니다.");
@@ -432,40 +449,27 @@ const MovieReviewsPage: React.FC = () => {
       const newComment: Comment = {
         id: response.id,
         content: response.content,
-        createdAt: response.createdAt,
+        createdAt: response.created_at,
         username: response.username,
-        profileImageUrl: response.profileImageUrl,
-        likeCount: response.likeCount,
-        dislikeCount: response.dislikeCount,
-        userId: response.userId,
+        profileImageUrl: response.user_profile_image_url,
+        likeCount: 0,
+        dislikeCount: 0,
+        userId: response.user_id,
       };
 
       // 리뷰 목록 업데이트
-      setReviews((prevReviews) =>
-        prevReviews.map((review) =>
-          review.id === reviewId
-            ? {
-                ...review,
-                comments: [newComment, ...(review.comments || [])],
-                commentCount: (review.commentCount || 0) + 1,
-              }
-            : review
-        )
+      const updatedReviews = reviews.map((review) =>
+        review.id === reviewId
+          ? {
+              ...review,
+              comments: [newComment, ...(review.comments || [])],
+              commentCount: (review.commentCount || 0) + 1,
+            }
+          : review
       );
 
-      // 검색 결과도 업데이트
-      setSearchResults((prevResults) =>
-        prevResults.map((review) =>
-          review.id === reviewId
-            ? {
-                ...review,
-                comments: [newComment, ...(review.comments || [])],
-                commentCount: (review.commentCount || 0) + 1,
-              }
-            : review
-        )
-      );
-
+      setReviews(updatedReviews);
+      setVisibleReviews(updatedReviews);
       setCommentContent("");
       toast.success("댓글이 등록되었습니다.");
     } catch (error) {
@@ -593,53 +597,42 @@ const MovieReviewsPage: React.FC = () => {
       setLoading(true);
 
       // 댓글 데이터 가져오기 시도
-      const comments = await backendApi.getReviewComments(reviewId);
+      const response = await backendApi.getReviewComments(reviewId);
+      console.log(`리뷰 ID ${reviewId}의 댓글 데이터:`, response);
 
-      // 댓글 데이터 매핑 (없는 경우 빈 배열)
-      console.log(
-        `리뷰 ID ${reviewId}의 댓글 데이터 매핑 시작:`,
-        comments || []
+      // 댓글 데이터 매핑
+      const mappedComments: Comment[] = response.content.map(
+        (comment: CommentResponse) => ({
+          id: comment.id,
+          content: comment.content,
+          createdAt: comment.created_at,
+          username: comment.username,
+          profileImageUrl: comment.user_profile_image_url,
+          likeCount: 0,
+          dislikeCount: 0,
+          userId: comment.user_id,
+        })
       );
 
+      console.log(`리뷰 ID ${reviewId}의 변환된 댓글:`, mappedComments);
+
       // 리뷰 상태 업데이트
-      const updatedReviews = reviews.map((review) => {
-        if (review.id === reviewId) {
-          return {
-            ...review,
-            comments: comments || [],
-          };
-        }
-        return review;
-      });
+      const updatedReviews = reviews.map((review) =>
+        review.id === reviewId
+          ? {
+              ...review,
+              comments: mappedComments,
+            }
+          : review
+      );
 
       setReviews(updatedReviews);
       setVisibleReviews(updatedReviews);
       setExpandedCommentId(reviewId);
     } catch (error) {
       console.error(`리뷰 ID ${reviewId}의 댓글 목록 가져오기 실패:`, error);
-      // 오류 발생시 사용자에게 알림
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "댓글을 불러오는 중 오류가 발생했습니다."
-      );
-
-      // 빈 댓글 목록으로 설정 - 사용자가 댓글 입력은 할 수 있도록
-      const updatedReviews = reviews.map((review) => {
-        if (review.id === reviewId) {
-          return {
-            ...review,
-            comments: [],
-          };
-        }
-        return review;
-      });
-
-      setReviews(updatedReviews);
-      setVisibleReviews(updatedReviews);
-      setExpandedCommentId(reviewId);
+      toast.error("댓글 목록을 불러오는데 실패했습니다.");
     } finally {
-      // 로딩 상태 해제
       setLoading(false);
     }
   };
@@ -797,6 +790,40 @@ const MovieReviewsPage: React.FC = () => {
     setMovieQuery("");
   };
 
+  const fetchReviewComments = async (reviewId: number) => {
+    try {
+      console.log(`리뷰 ID ${reviewId}의 댓글 목록 요청 시작`);
+      const response = await backendApi.getReviewComments(reviewId);
+      console.log(`리뷰 ID ${reviewId}의 댓글 데이터 매핑 시작:`, response);
+
+      const mappedComments: Comment[] = response.content.map(
+        (comment: CommentResponse) => ({
+          id: comment.id,
+          content: comment.content,
+          createdAt: comment.created_at,
+          username: comment.username,
+          profileImageUrl: comment.user_profile_image_url,
+          likeCount: 0,
+          dislikeCount: 0,
+          userId: comment.user_id,
+        })
+      );
+
+      console.log(`리뷰 ID ${reviewId}의 변환된 댓글:`, mappedComments);
+
+      setReviews((prevReviews) =>
+        prevReviews.map((review) =>
+          review.id === reviewId
+            ? { ...review, comments: mappedComments }
+            : review
+        )
+      );
+    } catch (error) {
+      console.error(`리뷰 ID ${reviewId}의 댓글 목록 불러오기 실패:`, error);
+      toast.error("댓글 목록을 불러오는데 실패했습니다.");
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* 리뷰 작성 버튼 */}
@@ -915,14 +942,20 @@ const MovieReviewsPage: React.FC = () => {
 
               {/* 리뷰 제목 */}
               <div className="mb-4">
-                <h3 className="text-xl font-bold">
-                  {review.title}
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`inline-block transition-all duration-300 ${
+                      review.isSpoiler ? "blur-sm hover:blur-none" : ""
+                    }`}
+                  >
+                    <h3 className="text-xl font-bold">{review.title}</h3>
+                  </div>
                   {review.isSpoiler && (
-                    <span className="ml-2 text-xs bg-red-500 text-white px-2 py-1 rounded">
+                    <span className="text-xs bg-red-500 text-white px-2 py-1 rounded">
                       스포일러
                     </span>
                   )}
-                </h3>
+                </div>
               </div>
 
               {/* 영화 정보와 리뷰 내용 */}
@@ -941,11 +974,13 @@ const MovieReviewsPage: React.FC = () => {
                       {review.movieTitle}
                     </span>
                   </p>
-                  <p
-                    className={`text-gray-700 ${review.isSpoiler ? "spoiler-content" : ""}`}
+                  <div
+                    className={`inline-block transition-all duration-300 ${
+                      review.isSpoiler ? "blur-sm hover:blur-none" : ""
+                    }`}
                   >
-                    {review.content}
-                  </p>
+                    <p className="text-gray-700">{review.content}</p>
+                  </div>
                 </div>
               </div>
 
@@ -997,12 +1032,11 @@ const MovieReviewsPage: React.FC = () => {
               {expandedCommentId === review.id && (
                 <div className="mt-4 pt-4 border-t">
                   <div className="text-sm font-bold mb-3">
-                    댓글 {review.commentCount || 0}개
+                    댓글 {review.comments?.length || 0}개
                   </div>
 
                   <div className="space-y-3 mb-4">
                     {review.comments && review.comments.length > 0 ? (
-                      // 댓글 목록 렌더링 - 모든 필드와 값을 출력해 디버깅
                       review.comments.map((comment) => (
                         <div
                           key={comment.id}
@@ -1021,39 +1055,12 @@ const MovieReviewsPage: React.FC = () => {
                               </span>
                             </div>
                             <p className="text-sm">{comment.content}</p>
-                            {/* 디버깅용 정보 표시 */}
-                            <details className="mt-1 text-xs text-gray-400">
-                              <summary>디버깅 정보</summary>
-                              <pre className="whitespace-pre-wrap bg-gray-100 p-1 rounded">
-                                {JSON.stringify(comment, null, 2)}
-                              </pre>
-                            </details>
                           </div>
                         </div>
                       ))
                     ) : (
                       <div className="text-center text-gray-500 py-4">
                         <div>아직 댓글이 없습니다. 첫 댓글을 작성해보세요!</div>
-                        {/* 디버깅용 정보 표시 */}
-                        <details className="mt-2 text-xs text-gray-400">
-                          <summary>리뷰 디버깅 정보</summary>
-                          <div className="text-left bg-gray-100 p-2 rounded">
-                            <p>리뷰 ID: {review.id}</p>
-                            <p>댓글 수: {review.commentCount}</p>
-                            <p>
-                              댓글 배열:{" "}
-                              {review.comments
-                                ? `${review.comments.length}개`
-                                : "없음"}
-                            </p>
-                            <p>
-                              댓글 배열 타입:{" "}
-                              {review.comments
-                                ? typeof review.comments
-                                : "없음"}
-                            </p>
-                          </div>
-                        </details>
                       </div>
                     )}
                   </div>
