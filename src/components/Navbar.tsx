@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaSearch, FaBell, FaUser, FaSignOutAlt, FaCog } from "react-icons/fa";
+import { FaSearch, FaBell, FaUser, FaSignOutAlt, FaCog, FaChevronDown } from "react-icons/fa";
 import NotificationModal from "./NotificationModal";
 import { useAuth } from "../context/AuthContext";
+import { useNotifications } from "../context/NotificationContext";
 
 const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const { isLoggedIn, user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
 
   // 알람 모달 열림/닫힘 상태
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
@@ -14,14 +16,14 @@ const Navbar: React.FC = () => {
   // 사용자 메뉴 열림/닫힘 상태
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
+  // 커뮤니티 메뉴 열림/닫힘 상태
+  const [isCommunityMenuOpen, setIsCommunityMenuOpen] = useState(false);
+
   // 검색창 확장 상태
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
   // 검색어 상태
   const [searchQuery, setSearchQuery] = useState("");
-
-  // 읽지 않은 알람 있음을 표시하는 상태 (예시로 true로 설정)
-  const hasUnreadNotifications = true;
 
   // 사용자 아이콘 클릭 핸들러
   const handleUserIconClick = () => {
@@ -75,6 +77,12 @@ const Navbar: React.FC = () => {
       if (!target.closest(".search-container")) {
         setIsSearchExpanded(false);
       }
+      if (!target.closest(".community-menu") && !target.closest(".community-button")) {
+        setIsCommunityMenuOpen(false);
+      }
+      if (!target.closest(".notification-dropdown") && !target.closest(".notification-bell")) {
+        setIsNotificationModalOpen(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -108,10 +116,37 @@ const Navbar: React.FC = () => {
                   TV Show
                 </Link>
               </li>
-              <li>
-                <Link to="/community" className="hover:text-blue-600">
+              <li className="relative community-menu">
+                <button 
+                  className="community-button flex items-center hover:text-blue-600"
+                  onMouseEnter={() => setIsCommunityMenuOpen(true)}
+                  onClick={() => setIsCommunityMenuOpen(!isCommunityMenuOpen)}
+                >
                   Community
-                </Link>
+                  <FaChevronDown className="ml-1 h-3 w-3" />
+                </button>
+                
+                {isCommunityMenuOpen && (
+                  <div 
+                    className="absolute left-0 mt-2 w-48 rounded-md bg-white py-2 shadow-lg ring-1 ring-black ring-opacity-5 z-50"
+                    onMouseLeave={() => setIsCommunityMenuOpen(false)}
+                  >
+                    <Link
+                      to="/movie-reviews"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setIsCommunityMenuOpen(false)}
+                    >
+                      영화 리뷰
+                    </Link>
+                    <Link
+                      to="/community"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setIsCommunityMenuOpen(false)}
+                    >
+                      커뮤니티
+                    </Link>
+                  </div>
+                )}
               </li>
             </ul>
           </nav>
@@ -148,17 +183,15 @@ const Navbar: React.FC = () => {
           </div>
 
           {isLoggedIn && (
-            <div className="relative">
+            <div className="relative notification-bell">
               <button
                 className="relative rounded-full p-2 hover:bg-gray-100"
-                onClick={() =>
-                  setIsNotificationModalOpen(!isNotificationModalOpen)
-                }
+                onClick={() => setIsNotificationModalOpen(!isNotificationModalOpen)}
                 aria-label="알림"
               >
-                <FaBell />
+                <FaBell className="text-gray-600" />
                 {/* 읽지 않은 알람이 있을 경우 표시할 빨간 점 */}
-                {hasUnreadNotifications && (
+                {unreadCount > 0 && (
                   <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500"></span>
                 )}
               </button>

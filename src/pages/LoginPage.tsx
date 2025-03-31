@@ -4,9 +4,12 @@ import { FaGoogle } from "react-icons/fa";
 import { authApi } from "../api/authApi";
 import { useAuth } from "../context/AuthContext";
 import axios from "axios";
+import { toast } from "react-toastify";
 
 interface LocationState {
   message?: string;
+  from?: string;
+  authError?: string;
 }
 
 // User 인터페이스 추가
@@ -37,6 +40,26 @@ const LoginPage: React.FC = () => {
         setSuccessMessage(null);
       }, 10000);
       return () => clearTimeout(timer);
+    }
+  }, [location.state]);
+
+  // location.state를 통해 전달된 인증 오류 확인 및 표시
+  useEffect(() => {
+    const state = location.state as { from?: string; authError?: string };
+    if (state?.authError) {
+      console.log("로그인 페이지 - 인증 오류 메시지 표시:", state.authError);
+      setError(state.authError);
+      toast.error(state.authError, {
+        position: "top-center",
+        autoClose: 5000,
+      });
+
+      // 오류 메시지를 표시한 후 URL에서 상태 제거 (페이지 새로고침 시 메시지 중복 표시 방지)
+      window.history.replaceState(
+        { ...state, authError: undefined },
+        document.title,
+        location.pathname
+      );
     }
   }, [location.state]);
 
