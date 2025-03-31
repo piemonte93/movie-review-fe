@@ -1,20 +1,35 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
-import { FaUser, FaComment, FaStar, FaSearch, FaPen, FaReply, FaTimes, FaCaretDown, FaThumbsUp, FaThumbsDown, FaArrowUp } from "react-icons/fa";
+import {
+  FaUser,
+  FaComment,
+  FaStar,
+  FaSearch,
+  FaPen,
+  FaReply,
+  FaTimes,
+  FaCaretDown,
+  FaThumbsUp,
+  FaThumbsDown,
+  FaArrowUp,
+} from "react-icons/fa";
 import { FaStarHalfStroke, FaFilm } from "react-icons/fa6";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { backendApi } from "../api/backendApi";
 import { toast } from "react-toastify";
 import { Content } from "../types/content";
+import axios from "axios";
 
 // Content 타입을 Movie 타입으로 매핑하는 함수
 const mapContentToMovie = (content: Content): Movie => {
   return {
     id: content.id,
     title: content.title || content.name || "제목 없음",
-    poster_path: content.poster_path || null,
+    poster_path: content.poster_path || "",
     release_date: content.release_date || content.first_air_date || "",
+    overview: content.overview || "",
+    vote_average: content.vote_average || 0,
   };
 };
 
@@ -22,22 +37,34 @@ const mapContentToMovie = (content: Content): Movie => {
 interface Movie {
   id: number;
   title: string;
-  poster_path: string | null;
+  poster_path: string;
   release_date: string;
+  overview?: string;
+  vote_average?: number;
 }
 
 // 댓글 데이터 타입 정의
 interface Comment {
   id: number;
   content: string;
-  createdAt: Date;
-  likes: { userId: number }[];
-  dislikes: { userId: number }[];
-  user: {
-    id: number;
-    username: string;
-    profileImageUrl: string | null;
-  };
+  createdAt: string;
+  username: string;
+  profileImageUrl: string | null;
+  likeCount: number;
+  dislikeCount: number;
+  userId: number;
+}
+
+// 백엔드에서 반환하는 댓글 형식
+interface CommentResponse {
+  id: number;
+  content: string;
+  username: string;
+  profileImageUrl: string | null;
+  createdAt: string;
+  likeCount: number;
+  dislikeCount: number;
+  userId: number;
 }
 
 // 영화 리뷰 데이터 타입 정의
@@ -54,12 +81,40 @@ interface MovieReview {
   likes: { userId: number }[];
   dislikes: { userId: number }[];
   isSpoiler: boolean;
+  isLiked?: boolean;
+  isDisliked?: boolean;
+  likeCount?: number;
+  dislikeCount?: number;
+  commentCount?: number;
   user: {
     id: number;
     username: string;
     profileImageUrl: string | null;
     reviewCount: number;
   };
+}
+
+// 백엔드에서 반환하는 리뷰 형식
+interface MovieReviewResponse {
+  id: number;
+  userId: number;
+  username: string;
+  userProfileUrl: string | null;
+  title: string;
+  content: string;
+  rating: number;
+  movieId: number;
+  movieTitle: string;
+  moviePoster?: string;
+  createdAt: string;
+  updatedAt?: string;
+  likeCount: number;
+  dislikeCount: number;
+  commentCount: number;
+  isSpoiler: boolean;
+  isLiked: boolean;
+  isDisliked: boolean;
+  comments?: Comment[];
 }
 
 const MovieReviewsPage: React.FC = () => {
@@ -76,36 +131,44 @@ const MovieReviewsPage: React.FC = () => {
   const [rating, setRating] = useState<number>(0);
   const [isSpoiler, setIsSpoiler] = useState(false);
   const [reviews, setReviews] = useState<MovieReview[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [showWriteForm, setShowWriteForm] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [movieQuery, setMovieQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MovieReview[]>([]);
-  const [expandedReviewId, setExpandedReviewId] = useState<number | null>(null);
+  const [expandedCommentId, setExpandedCommentId] = useState<number | null>(
+    null
+  );
   const [commentContent, setCommentContent] = useState("");
-  const [searchCategory, setSearchCategory] = useState<'title' | 'content' | 'author'>('title');
+  const [searchCategory, setSearchCategory] = useState<
+    "title" | "content" | "author"
+  >("title");
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
   // 무한 스크롤 관련 상태 추가
   const [visibleReviews, setVisibleReviews] = useState<MovieReview[]>([]);
   const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const reviewsPerPage = 5; // 한 번에 보여줄 리뷰 수
-  
+
   // 최상단으로 이동 버튼의 표시 여부 상태
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   // TMDB API 키 (실제 환경에서는 환경 변수로 관리)
   const TMDB_API_KEY = "a95a7823323dd52f66d0dc776498a8a1";
-  
+
   // 영화 검색 함수
   const searchMovies = async (query: string) => {
     if (!query.trim()) {
       setMovieSearchResults([]);
       return;
     }
-    
+
     try {
       const response = await backendApi.searchMoviesByTitle(query);
       // Content 타입을 Movie 타입으로 변환
@@ -123,7 +186,7 @@ const MovieReviewsPage: React.FC = () => {
     const query = e.target.value;
     setMovieSearchQuery(query);
     setIsSearchingMovie(true);
-    
+
     // 디바운싱을 위한 타이머
     const timer = setTimeout(() => {
       searchMovies(query);
@@ -134,11 +197,41 @@ const MovieReviewsPage: React.FC = () => {
 
   // 영화 선택 핸들러
   const handleSelectMovie = (movie: Movie) => {
-    setSelectedMovie(movie);
+    console.log("영화 선택:", movie);
+
+    // 필수 필드 검증
+    if (!movie.id) {
+      console.error("선택된 영화에 id가 없습니다:", movie);
+      toast.error("유효하지 않은 영화입니다. 다른 영화를 선택해주세요.");
+      return;
+    }
+
+    if (!movie.title) {
+      console.error("선택된 영화에 title이 없습니다:", movie);
+      toast.error("영화 제목이 없습니다. 다른 영화를 선택해주세요.");
+      return;
+    }
+
+    // 영화 정보 설정
+    setSelectedMovie({
+      id: movie.id,
+      title: movie.title,
+      poster_path: movie.poster_path || "",
+      release_date: movie.release_date || "",
+      overview: movie.overview || "",
+      vote_average: movie.vote_average || 0,
+    });
+
     setMovieTitle(movie.title);
     setMovieSearchQuery("");
     setMovieSearchResults([]);
     setIsSearchingMovie(false);
+
+    console.log("영화 선택 완료:", {
+      id: movie.id,
+      title: movie.title,
+      poster_path: movie.poster_path || "",
+    });
   };
 
   // 선택한 영화 취소 핸들러
@@ -147,196 +240,322 @@ const MovieReviewsPage: React.FC = () => {
     setMovieTitle("");
   };
 
-  // 영화 리뷰 데이터 가져오기
+  // 리뷰 목록 가져오기
   useEffect(() => {
     const fetchReviews = async () => {
-      setLoading(true);
       try {
-        // 실제 API를 사용할 때는 아래 주석을 해제하고 구현하세요
-        /* 
-        const response = await backendApi.getAllMovieReviews(page, reviewsPerPage);
-        setReviews(response.content);
-        setSearchResults(response.content);
-        setTotalPages(response.totalPages);
-        setHasMore(response.totalPages > 1);
-        */
-        
-        // 임시 데이터 (실제 API 연결 전까지 사용)
-        const mockReviews: MovieReview[] = [
-          {
-            id: 1,
-            title: "인셉션 - 빛나는 걸작!",
-            content: "크리스토퍼 놀란 감독의 걸작으로, 꿈과 현실의 경계를 탐험하는 놀라운 영화입니다. 레오나르도 디카프리오의 연기는 정말 탁월했고, 영화의 시각적 효과와 스토리텔링은 최고였습니다.",
-            rating: 4.5,
-            movieTitle: "인셉션",
-            movieId: 27205,
-            moviePoster: "/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg",
-            createdAt: new Date(Date.now() - 1000 * 60 * 45), // 45분 전
-            comments: [
-              {
-                id: 1,
-                content: "정말 공감합니다. 저도 인셉션을 정말 좋아해요!",
-                createdAt: new Date(Date.now() - 1000 * 60 * 20),
-                likes: [{ userId: 3 }, { userId: 4 }],
-                dislikes: [{ userId: 5 }],
-                user: {
-                  id: 2,
-                  username: "영화덕후",
-                  profileImageUrl: null
-                }
-              },
-              {
-                id: 2,
-                content: "음악도 정말 좋았죠. 한스 짐머의 음악은 항상 훌륭합니다.",
-                createdAt: new Date(Date.now() - 1000 * 60 * 10),
-                likes: [{ userId: 2 }],
-                dislikes: [],
-                user: {
-                  id: 3,
-                  username: "무비팬",
-                  profileImageUrl: null
-                }
-              }
-            ],
-            likes: [{ userId: 2 }, { userId: 4 }],
-            dislikes: [{ userId: 5 }],
-            isSpoiler: false,
-            user: {
-              id: 1,
-              username: "작성자 이름",
-              profileImageUrl: null,
-              reviewCount: 15
-            }
-          },
-          {
-            id: 2,
-            title: "어벤져스: 엔드게임 - 좋은 마무리",
-            content: "마블 시네마틱 유니버스의 3단계를 마무리하는 영화로, 10년 동안의 이야기가 훌륭하게 마무리되었습니다. 감동적인 장면들이 많았고, 캐릭터들의 아크도 잘 완성되었습니다.",
-            rating: 4.0,
-            movieTitle: "어벤져스: 엔드게임",
-            movieId: 299534,
-            moviePoster: "/yFSIUVTCvgYrpalUktulvk3Gi5Y.jpg", // 한국어 포스터 경로
-            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3), // 3시간 전
-            comments: [
-              {
-                id: 3,
-                content: "아이언맨의 최후가 너무 슬펐어요...",
-                createdAt: new Date(Date.now() - 1000 * 60 * 60 * 1),
-                likes: [{ userId: 1 }, { userId: 2 }, { userId: 5 }],
-                dislikes: [],
-                user: {
-                  id: 4,
-                  username: "영화관탐험가",
-                  profileImageUrl: null
-                }
-              }
-            ],
-            likes: [{ userId: 1 }, { userId: 3 }],
-            dislikes: [],
-            isSpoiler: true,
-            user: {
-              id: 2,
-              username: "작성자 이름",
-              profileImageUrl: null,
-              reviewCount: 32
-            }
-          },
-          {
-            id: 3,
-            title: "기생충 - 뛰어난 한국 영화",
-            content: "봉준호 감독의 뛰어난 작품으로, 계급 갈등을 섬세하게 묘사한 영화입니다. 배우들의 연기도 정말 훌륭했고, 스토리 전개와 반전이 뛰어났습니다. 아카데미상을 받은 데는 충분한 이유가 있습니다.",
-            rating: 5,
-            movieTitle: "기생충",
-            movieId: 496243,
-            moviePoster: "/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg", // 한국어 포스터 경로
-            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 7), // 7시간 전
-            comments: [],
-            likes: [],
-            dislikes: [],
-            isSpoiler: false,
-            user: {
-              id: 3,
-              username: "작성자 이름",
-              profileImageUrl: null,
-              reviewCount: 24
-            }
-          }
-        ];
+        setLoading(true);
+        const response = await backendApi.getAllMovieReviews(
+          page,
+          reviewsPerPage
+        );
+        console.log("리뷰 API 응답 원본:", JSON.stringify(response, null, 2)); // 전체 응답 로깅
 
-        setReviews(mockReviews);
-        setSearchResults(mockReviews);
-        setLoading(false);
+        // 디버깅용: 첫 번째 리뷰의 댓글 구조 확인
+        if (response?.content?.[0]) {
+          console.log("첫 번째 리뷰:", response.content[0]);
+          console.log("첫 번째 리뷰 댓글 필드:", response.content[0].comments);
+          if (response.content[0].commentList) {
+            console.log(
+              "첫 번째 리뷰 commentList 필드:",
+              response.content[0].commentList
+            );
+          }
+        }
+
+        if (response && response.content) {
+          // 백엔드 응답 구조에 맞게 필터링 로직 수정
+          const validReviews = response.content.filter(
+            (review) => review && review.id && review.userId && review.username
+          );
+          console.log("유효한 리뷰:", validReviews); // 디버깅용 로그 추가
+
+          // 리뷰 객체를 MovieReview 인터페이스에 맞게 변환
+          const mappedReviews = validReviews.map((review) => {
+            // 댓글 데이터는 초기에 빈 배열로 설정 (나중에 toggleComments에서 로드됨)
+            const mappedComments: Comment[] = [];
+            console.log(`리뷰 ID ${review.id}의 댓글 데이터:`, []);
+            console.log(`리뷰 ID ${review.id}의 변환된 댓글:`, mappedComments);
+
+            return {
+              id: review.id,
+              title: review.title,
+              content: review.content,
+              rating: review.rating,
+              movieTitle: review.movieTitle,
+              movieId: review.movieId,
+              moviePoster: review.moviePoster || "",
+              createdAt: new Date(review.createdAt),
+              comments: mappedComments, // 빈 배열로 시작
+              likes: review.likes || [],
+              dislikes: review.dislikes || [],
+              isSpoiler: review.isSpoiler,
+              isLiked: review.isLiked,
+              isDisliked: review.isDisliked,
+              likeCount: review.likeCount || 0,
+              dislikeCount: review.dislikeCount || 0,
+              commentCount: review.commentCount || 0,
+              user: {
+                id: review.userId,
+                username: review.username,
+                profileImageUrl: review.userProfileUrl,
+                reviewCount: review.reviewCount || 0,
+              },
+            };
+          });
+
+          console.log("변환된 리뷰:", mappedReviews); // 디버깅용 로그 추가
+
+          if (page === 0) {
+            setReviews(mappedReviews);
+            setVisibleReviews(mappedReviews);
+          } else {
+            setReviews((prev) => [...prev, ...mappedReviews]);
+            setVisibleReviews((prev) => [...prev, ...mappedReviews]);
+          }
+
+          setTotalPages(response.totalPages || 0);
+          setHasMore(response.number < (response.totalPages || 0) - 1);
+        } else {
+          console.error("Invalid response format:", response);
+          setReviews([]);
+          setVisibleReviews([]);
+          setTotalPages(0);
+          setHasMore(false);
+        }
       } catch (error) {
-        console.error("영화 리뷰 목록을 불러오는데 실패했습니다:", error);
-        toast.error("영화 리뷰 목록을 불러오는데 실패했습니다.");
+        console.error("리뷰 목록 불러오기 실패:", error);
+        if (
+          error instanceof Error &&
+          error.message === "로그인이 필요합니다."
+        ) {
+          toast.error("로그인이 필요합니다.");
+          navigate("/login", { state: { from: location } });
+        } else {
+          toast.error("리뷰 목록을 불러오는데 실패했습니다.");
+        }
+        setReviews([]);
+        setVisibleReviews([]);
+        setTotalPages(0);
+        setHasMore(false);
+      } finally {
         setLoading(false);
       }
     };
 
     fetchReviews();
-  }, []);
+  }, [page, navigate, location]);
+
+  // 검색 결과가 변경될 때 visibleReviews 업데이트
+  useEffect(() => {
+    if (searchResults && searchResults.length > 0) {
+      setVisibleReviews(searchResults);
+    } else if (reviews && reviews.length > 0) {
+      setVisibleReviews(reviews);
+    } else {
+      setVisibleReviews([]);
+    }
+  }, [searchResults, reviews]);
 
   // 리뷰 작성 처리
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!title.trim() || !content.trim() || !selectedMovie || rating === 0) {
-      toast.error("모든 항목을 입력해주세요!");
-      return;
-    }
+    setSubmitting(true);
+    setError("");
 
     try {
-      // 실제 API를 사용할 때는 아래 주석을 해제하고 구현하세요
-      /*
-      const response = await backendApi.createMovieReview({
-        title,
-        content,
-        rating,
-        movieId: selectedMovie.id,
-        movieTitle: selectedMovie.title,
-        moviePoster: selectedMovie.poster_path,
-        isSpoiler
-      });
-      */
-      
-      // 임시 구현 (실제 API 연결 전까지 사용)
-      const newReview: MovieReview = {
-        id: reviews.length + 1,
-        title,
-        content,
-        rating,
-        movieTitle: selectedMovie.title,
-        movieId: selectedMovie.id,
-        moviePoster: selectedMovie.poster_path ?? undefined,
-        createdAt: new Date(),
-        comments: [],
-        likes: [],
-        dislikes: [],
-        isSpoiler,
-        user: {
-          id: user?.id || 0,
-          username: user?.username || "익명",
-          profileImageUrl: user?.profileImageUrl || null,
-          reviewCount: 0
-        }
+      // 영화 선택 여부 확인
+      if (!selectedMovie) {
+        setError("영화를 선택해주세요.");
+        toast.error("영화를 선택해주세요.");
+        setSubmitting(false);
+        return;
+      }
+
+      // 영화 ID와 제목이 유효한지 확인
+      if (!selectedMovie.id || !selectedMovie.title) {
+        setError("영화 정보가 유효하지 않습니다. 다시 선택해주세요.");
+        toast.error("영화 정보가 유효하지 않습니다. 다시 선택해주세요.");
+        setSubmitting(false);
+        return;
+      }
+
+      // 리뷰 데이터 구성
+      const reviewData = {
+        title: title.trim(),
+        content: content.trim(),
+        rating: Number(rating),
+        movieId: Number(selectedMovie.id),
+        movieTitle: selectedMovie.title.trim(),
+        moviePoster: selectedMovie.poster_path || "",
+        isSpoiler: isSpoiler,
       };
 
-      setReviews([newReview, ...reviews]);
-      setSearchResults([newReview, ...searchResults]);
-      
-      // 폼 초기화
-      setTitle("");
-      setContent("");
-      setSelectedMovie(null);
-      setMovieTitle("");
-      setRating(0);
-      setIsSpoiler(false);
-      setShowWriteForm(false);
-      
+      // 데이터 검증
+      console.log("전송할 리뷰 데이터:", reviewData);
+      console.log("movieId 디버깅:", {
+        원래값: selectedMovie.id,
+        타입: typeof selectedMovie.id,
+        변환후: Number(selectedMovie.id),
+        변환후타입: "number",
+      });
+
+      // 사용자 정보 및 토큰 상태 디버깅
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setError("로그인이 필요합니다.");
+        toast.error("로그인이 필요합니다.");
+        setSubmitting(false);
+        return;
+      }
+
+      // 토큰 페이로드 디버깅
+      try {
+        const tokenParts = token.split(".");
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]));
+          console.log("토큰 페이로드:", payload);
+        }
+      } catch (e) {
+        console.error("토큰 파싱 오류:", e);
+      }
+
+      // API 요청 헤더 디버깅
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      };
+      console.log("API 요청 헤더:", headers);
+
+      // 데이터 유효성 검증
+      if (!reviewData.movieId || isNaN(reviewData.movieId)) {
+        throw new Error("유효하지 않은 영화 ID입니다.");
+      }
+
+      if (!reviewData.movieTitle || reviewData.movieTitle.trim().length === 0) {
+        throw new Error("유효하지 않은 영화 제목입니다.");
+      }
+
+      // 최종 요청 데이터 로깅
+      console.log("최종 요청 데이터:", reviewData);
+      console.log("필드 값 및 타입 확인:", {
+        title: { 값: reviewData.title, 타입: typeof reviewData.title },
+        content: { 값: reviewData.content, 타입: typeof reviewData.content },
+        rating: { 값: reviewData.rating, 타입: typeof reviewData.rating },
+        movieId: { 값: reviewData.movieId, 타입: typeof reviewData.movieId },
+        movieTitle: {
+          값: reviewData.movieTitle,
+          타입: typeof reviewData.movieTitle,
+        },
+        isSpoiler: {
+          값: reviewData.isSpoiler,
+          타입: typeof reviewData.isSpoiler,
+        },
+      });
+
+      // 데이터 타입 변환 및 검증
+      const validatedData = {
+        title: String(reviewData.title).trim(),
+        content: String(reviewData.content).trim(),
+        rating: Number(reviewData.rating),
+        movieId: Number(reviewData.movieId), // Long 타입으로 명시적 변환
+        movieTitle: String(reviewData.movieTitle).trim(),
+        moviePoster: reviewData.moviePoster || "",
+        isSpoiler: Boolean(reviewData.isSpoiler),
+      };
+
+      // API 호출
+      const response = await backendApi.createMovieReview(validatedData);
+      console.log("API 응답:", response);
+
+      // 성공 처리
       toast.success("리뷰가 등록되었습니다.");
+
+      // 폼 초기화
+      resetForm();
+      setShowWriteForm(false); // 작성 폼 닫기
+
+      // 리뷰 목록 새로고침
+      try {
+        setLoading(true);
+        const updatedResponse = await backendApi.getAllMovieReviews(
+          0,
+          reviewsPerPage
+        );
+
+        if (updatedResponse && updatedResponse.content) {
+          // 백엔드 응답 구조에 맞게 필터링 및 매핑
+          const validReviews = updatedResponse.content.filter(
+            (review) => review && review.id && review.userId && review.username
+          );
+
+          // 리뷰 객체를 MovieReview 인터페이스에 맞게 변환
+          const mappedReviews = validReviews.map((review) => {
+            // 댓글 객체 변환
+            const mappedComments = (review.comments || []).map(
+              (comment: CommentResponse) => ({
+                id: comment.id,
+                content: comment.content,
+                createdAt: comment.createdAt,
+                username: comment.username,
+                profileImageUrl: comment.profileImageUrl,
+                likeCount: comment.likeCount,
+                dislikeCount: comment.dislikeCount,
+                userId: comment.userId,
+              })
+            );
+
+            return {
+              id: review.id,
+              title: review.title,
+              content: review.content,
+              rating: review.rating,
+              movieTitle: review.movieTitle,
+              movieId: review.movieId,
+              moviePoster: review.moviePoster || "",
+              createdAt: new Date(review.createdAt),
+              comments: mappedComments,
+              likes: review.likes || [],
+              dislikes: review.dislikes || [],
+              isSpoiler: review.isSpoiler,
+              isLiked: review.isLiked,
+              isDisliked: review.isDisliked,
+              likeCount: review.likeCount || 0,
+              dislikeCount: review.dislikeCount || 0,
+              commentCount: review.commentCount || mappedComments.length || 0,
+              user: {
+                id: review.userId,
+                username: review.username,
+                profileImageUrl: review.userProfileUrl,
+                reviewCount: review.reviewCount || 0,
+              },
+            };
+          });
+
+          setReviews(mappedReviews);
+          setVisibleReviews(mappedReviews);
+          setTotalPages(updatedResponse.totalPages || 0);
+          setHasMore(
+            updatedResponse.number < (updatedResponse.totalPages || 0) - 1
+          );
+          setPage(0); // 페이지 초기화
+        }
+      } catch (error) {
+        console.error("리뷰 목록 새로고침 실패:", error);
+      } finally {
+        setLoading(false);
+      }
     } catch (error) {
-      console.error("리뷰 등록 실패:", error);
-      toast.error("리뷰 등록에 실패했습니다.");
+      console.error("리뷰 등록 오류:", error);
+      if (error instanceof Error) {
+        setError(error.message);
+        toast.error(error.message);
+      } else {
+        setError("리뷰 등록 중 오류가 발생했습니다.");
+        toast.error("리뷰 등록 중 오류가 발생했습니다.");
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -346,54 +565,59 @@ const MovieReviewsPage: React.FC = () => {
       navigate("/login", { state: { from: location } });
       return;
     }
-    
+
     if (!commentContent.trim()) {
       toast.error("댓글 내용을 입력해주세요.");
       return;
     }
 
     try {
-      // 실제 API를 사용할 때는 아래 주석을 해제하고 구현하세요
-      /*
-      const newComment = await backendApi.addReviewComment(reviewId, commentContent);
-      
-      // 리뷰 목록 업데이트
-      const updatedReviews = reviews.map(review => {
-        if (review.id === reviewId) {
-          return {
-            ...review,
-            comments: [newComment, ...review.comments]
-          };
-        }
-        return review;
-      });
-      */
-      
-      // 임시 구현 (실제 API 연결 전까지 사용)
+      // 실제 API 호출
+      const response = await backendApi.addReviewComment(
+        reviewId,
+        commentContent
+      );
+      console.log("댓글 작성 서버 응답:", response);
+
+      // 서버에서 반환한 댓글 데이터를 Comment 인터페이스에 맞게 변환
       const newComment: Comment = {
-        id: Math.floor(Math.random() * 1000) + 10, // 임의의 ID 생성
-        content: commentContent,
-        createdAt: new Date(),
-        likes: [],
-        dislikes: [],
-        user: {
-          id: user?.id || 0,
-          username: user?.username || "익명",
-          profileImageUrl: user?.profileImageUrl || null
-        }
+        id: response.id,
+        content: response.content,
+        createdAt: response.createdAt,
+        username: response.username,
+        profileImageUrl: response.profileImageUrl,
+        likeCount: response.likeCount,
+        dislikeCount: response.dislikeCount,
+        userId: response.userId,
       };
 
-      // 댓글이 추가된 새 리뷰 목록 생성
-      const updatedReviews = reviews.map(review => 
-        review.id === reviewId 
-          ? { ...review, comments: [newComment, ...review.comments] } 
-          : review
+      // 리뷰 목록 업데이트
+      setReviews((prevReviews) =>
+        prevReviews.map((review) =>
+          review.id === reviewId
+            ? {
+                ...review,
+                comments: [newComment, ...(review.comments || [])],
+                commentCount: (review.commentCount || 0) + 1,
+              }
+            : review
+        )
       );
 
-      setReviews(updatedReviews);
-      setSearchResults(updatedReviews);
+      // 검색 결과도 업데이트
+      setSearchResults((prevResults) =>
+        prevResults.map((review) =>
+          review.id === reviewId
+            ? {
+                ...review,
+                comments: [newComment, ...(review.comments || [])],
+                commentCount: (review.commentCount || 0) + 1,
+              }
+            : review
+        )
+      );
+
       setCommentContent("");
-      
       toast.success("댓글이 등록되었습니다.");
     } catch (error) {
       console.error("댓글 작성 실패:", error);
@@ -405,12 +629,12 @@ const MovieReviewsPage: React.FC = () => {
   const formatDate = (date: Date) => {
     const now = new Date();
     const diff = now.getTime() - date.getTime();
-    
+
     const seconds = Math.floor(diff / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-    
+
     if (days > 0) return `${days}일 전`;
     if (hours > 0) return `${hours}시간 전`;
     if (minutes > 0) return `${minutes}분 전`;
@@ -422,7 +646,7 @@ const MovieReviewsPage: React.FC = () => {
     const stars = [];
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating % 1 >= 0.5;
-    
+
     for (let i = 0; i < 5; i++) {
       if (i < fullStars) {
         stars.push(<FaStar key={i} className="text-yellow-400" />);
@@ -432,11 +656,13 @@ const MovieReviewsPage: React.FC = () => {
         stars.push(<FaStar key={i} className="text-gray-300" />);
       }
     }
-    
+
     return (
-      <div className="flex">
-        {stars}
-        <span className="ml-1 text-sm">({rating.toFixed(1)})</span>
+      <div className="flex items-center">
+        <div className="flex">{stars}</div>
+        <span className="ml-1 text-yellow-500 font-medium">
+          ({rating.toFixed(1)})
+        </span>
       </div>
     );
   };
@@ -455,34 +681,42 @@ const MovieReviewsPage: React.FC = () => {
       return;
     }
 
-    const filtered = reviews.filter(review => {
+    const filtered = reviews.filter((review) => {
       const query = searchQuery.toLowerCase();
-      
+
       switch (searchCategory) {
-        case 'title':
-          return review.title.toLowerCase().includes(query) || 
-                 review.movieTitle.toLowerCase().includes(query);
-        case 'content':
+        case "title":
+          return (
+            review.title.toLowerCase().includes(query) ||
+            review.movieTitle.toLowerCase().includes(query)
+          );
+        case "content":
           return review.content.toLowerCase().includes(query);
-        case 'author':
+        case "author":
           return review.user.username.toLowerCase().includes(query);
         default:
-          return review.title.toLowerCase().includes(query) || 
-                 review.content.toLowerCase().includes(query) || 
-                 review.movieTitle.toLowerCase().includes(query);
+          return (
+            review.title.toLowerCase().includes(query) ||
+            review.content.toLowerCase().includes(query) ||
+            review.movieTitle.toLowerCase().includes(query)
+          );
       }
     });
-    
+
     setSearchResults(filtered);
   };
 
   // 검색 카테고리를 표시하는 텍스트 반환
   const getCategoryText = () => {
     switch (searchCategory) {
-      case 'title': return '제목';
-      case 'content': return '내용';
-      case 'author': return '작성자';
-      default: return '제목';
+      case "title":
+        return "제목";
+      case "content":
+        return "내용";
+      case "author":
+        return "작성자";
+      default:
+        return "제목";
     }
   };
 
@@ -495,8 +729,70 @@ const MovieReviewsPage: React.FC = () => {
   };
 
   // 댓글 토글
-  const toggleComments = (reviewId: number) => {
-    setExpandedReviewId(expandedReviewId === reviewId ? null : reviewId);
+  const toggleComments = async (reviewId: number) => {
+    console.log("댓글 토글:", reviewId, "현재:", expandedCommentId);
+
+    // 이미 확장된 경우 닫기
+    if (expandedCommentId === reviewId) {
+      setExpandedCommentId(null);
+      return;
+    }
+
+    try {
+      console.log(`리뷰 ID ${reviewId}의 댓글 목록 요청 시작`);
+      // 댓글 로딩 상태 설정
+      setLoading(true);
+
+      // 댓글 데이터 가져오기 시도
+      const comments = await backendApi.getReviewComments(reviewId);
+
+      // 댓글 데이터 매핑 (없는 경우 빈 배열)
+      console.log(
+        `리뷰 ID ${reviewId}의 댓글 데이터 매핑 시작:`,
+        comments || []
+      );
+
+      // 리뷰 상태 업데이트
+      const updatedReviews = reviews.map((review) => {
+        if (review.id === reviewId) {
+          return {
+            ...review,
+            comments: comments || [],
+          };
+        }
+        return review;
+      });
+
+      setReviews(updatedReviews);
+      setVisibleReviews(updatedReviews);
+      setExpandedCommentId(reviewId);
+    } catch (error) {
+      console.error(`리뷰 ID ${reviewId}의 댓글 목록 가져오기 실패:`, error);
+      // 오류 발생시 사용자에게 알림
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "댓글을 불러오는 중 오류가 발생했습니다."
+      );
+
+      // 빈 댓글 목록으로 설정 - 사용자가 댓글 입력은 할 수 있도록
+      const updatedReviews = reviews.map((review) => {
+        if (review.id === reviewId) {
+          return {
+            ...review,
+            comments: [],
+          };
+        }
+        return review;
+      });
+
+      setReviews(updatedReviews);
+      setVisibleReviews(updatedReviews);
+      setExpandedCommentId(reviewId);
+    } finally {
+      // 로딩 상태 해제
+      setLoading(false);
+    }
   };
 
   // 좋아요 처리
@@ -507,51 +803,45 @@ const MovieReviewsPage: React.FC = () => {
     }
 
     try {
-      // 실제 API를 사용할 때는 아래 주석을 해제하고 구현하세요
-      /*
+      // 실제 API 호출
       const updatedReview = await backendApi.likeReview(reviewId);
-      
+      console.log("서버 응답 (좋아요):", updatedReview);
+
       // 리뷰 목록 업데이트
-      const updatedReviews = reviews.map(review => 
-        review.id === reviewId ? updatedReview : review
+      setReviews((prevReviews) =>
+        prevReviews.map((review) =>
+          review.id === reviewId
+            ? {
+                ...review,
+                isLiked: updatedReview.isLiked,
+                likeCount: updatedReview.likeCount,
+                isDisliked: false,
+                dislikeCount: updatedReview.dislikeCount,
+              }
+            : review
+        )
       );
-      setReviews(updatedReviews);
-      setSearchResults(updatedReviews);
-      */
-      
-      // 임시 구현 (실제 API 연결 전까지 사용)
-      const updatedReviews = reviews.map(review => {
-        if (review.id === reviewId) {
-          // 이미 좋아요를 눌렀는지 확인
-          const alreadyLiked = review.likes.some(like => like.userId === user?.id);
-          
-          if (alreadyLiked) {
-            // 이미 좋아요 누른 경우, 좋아요 취소
-            return {
-              ...review,
-              likes: review.likes.filter(like => like.userId !== user?.id)
-            };
-          } else {
-            // 싫어요 취소 (있을 경우)
-            const updatedDislikes = review.dislikes.filter(dislike => dislike.userId !== user?.id);
-            
-            // 좋아요 추가
-            return {
-              ...review,
-              likes: [...review.likes, { userId: user?.id || 0 }],
-              dislikes: updatedDislikes
-            };
-          }
-        }
-        return review;
-      });
-      
-      setReviews(updatedReviews);
-      setSearchResults(updatedReviews);
-      
-      toast.success(updatedReviews.find(r => r.id === reviewId)?.likes.some(like => like.userId === user?.id) 
-        ? "좋아요가 추가되었습니다." 
-        : "좋아요가 취소되었습니다.");
+
+      // 검색 결과도 업데이트
+      setSearchResults((prevResults) =>
+        prevResults.map((review) =>
+          review.id === reviewId
+            ? {
+                ...review,
+                isLiked: updatedReview.isLiked,
+                likeCount: updatedReview.likeCount,
+                isDisliked: false,
+                dislikeCount: updatedReview.dislikeCount,
+              }
+            : review
+        )
+      );
+
+      toast.success(
+        updatedReview.isLiked
+          ? "좋아요가 추가되었습니다."
+          : "좋아요가 취소되었습니다."
+      );
     } catch (error) {
       console.error("좋아요 처리 실패:", error);
       toast.error("좋아요 처리에 실패했습니다.");
@@ -566,51 +856,45 @@ const MovieReviewsPage: React.FC = () => {
     }
 
     try {
-      // 실제 API를 사용할 때는 아래 주석을 해제하고 구현하세요
-      /*
+      // 실제 API 호출
       const updatedReview = await backendApi.dislikeReview(reviewId);
-      
+      console.log("서버 응답 (싫어요):", updatedReview);
+
       // 리뷰 목록 업데이트
-      const updatedReviews = reviews.map(review => 
-        review.id === reviewId ? updatedReview : review
+      setReviews((prevReviews) =>
+        prevReviews.map((review) =>
+          review.id === reviewId
+            ? {
+                ...review,
+                isDisliked: updatedReview.isDisliked,
+                dislikeCount: updatedReview.dislikeCount,
+                isLiked: false,
+                likeCount: updatedReview.likeCount,
+              }
+            : review
+        )
       );
-      setReviews(updatedReviews);
-      setSearchResults(updatedReviews);
-      */
-      
-      // 임시 구현 (실제 API 연결 전까지 사용)
-      const updatedReviews = reviews.map(review => {
-        if (review.id === reviewId) {
-          // 이미 싫어요를 눌렀는지 확인
-          const alreadyDisliked = review.dislikes.some(dislike => dislike.userId === user?.id);
-          
-          if (alreadyDisliked) {
-            // 이미 싫어요 누른 경우, 싫어요 취소
-            return {
-              ...review,
-              dislikes: review.dislikes.filter(dislike => dislike.userId !== user?.id)
-            };
-          } else {
-            // 좋아요 취소 (있을 경우)
-            const updatedLikes = review.likes.filter(like => like.userId !== user?.id);
-            
-            // 싫어요 추가
-            return {
-              ...review,
-              dislikes: [...review.dislikes, { userId: user?.id || 0 }],
-              likes: updatedLikes
-            };
-          }
-        }
-        return review;
-      });
-      
-      setReviews(updatedReviews);
-      setSearchResults(updatedReviews);
-      
-      toast.success(updatedReviews.find(r => r.id === reviewId)?.dislikes.some(dislike => dislike.userId === user?.id) 
-        ? "싫어요가 추가되었습니다." 
-        : "싫어요가 취소되었습니다.");
+
+      // 검색 결과도 업데이트
+      setSearchResults((prevResults) =>
+        prevResults.map((review) =>
+          review.id === reviewId
+            ? {
+                ...review,
+                isDisliked: updatedReview.isDisliked,
+                dislikeCount: updatedReview.dislikeCount,
+                isLiked: false,
+                likeCount: updatedReview.likeCount,
+              }
+            : review
+        )
+      );
+
+      toast.success(
+        updatedReview.isDisliked
+          ? "싫어요가 추가되었습니다."
+          : "싫어요가 취소되었습니다."
+      );
     } catch (error) {
       console.error("싫어요 처리 실패:", error);
       toast.error("싫어요 처리에 실패했습니다.");
@@ -630,597 +914,543 @@ const MovieReviewsPage: React.FC = () => {
       setShowScrollTop(showScrollButton);
     };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   // 최상단으로 스크롤하는 함수
   const scrollToTop = () => {
     window.scrollTo({
       top: 0,
-      behavior: 'smooth'
+      behavior: "smooth",
     });
   };
 
   // 다음 페이지 리뷰를 불러오는 함수
   const fetchMoreReviews = () => {
-    const nextPage = page + 1;
-    const startIndex = page * reviewsPerPage;
-    const endIndex = startIndex + reviewsPerPage;
-    const nextReviews = searchResults.slice(startIndex, endIndex);
-    
-    if (nextReviews.length === 0) {
-      setHasMore(false);
-      return;
-    }
-    
-    // 약간의 지연 효과 추가 (실제 API 호출 시뮬레이션)
-    setTimeout(() => {
-      setVisibleReviews([...visibleReviews, ...nextReviews]);
-      setPage(nextPage);
-    }, 800);
+    if (!hasMore || loading) return;
+    setPage(page + 1);
   };
-
-  // 검색 결과가 변경되면 visible reviews 초기화
-  useEffect(() => {
-    setVisibleReviews(searchResults.slice(0, reviewsPerPage));
-    setPage(1);
-    setHasMore(searchResults.length > reviewsPerPage);
-  }, [searchResults]);
 
   // 포스터 URL 가져오기 함수
   const getPosterUrl = (posterPath: string | null, size = "w154") => {
     return backendApi.getPosterUrl(posterPath, size);
   };
 
+  // 폼 리셋 함수 추가
+  const resetForm = () => {
+    setTitle("");
+    setContent("");
+    setRating(0);
+    setSelectedMovie(null);
+    setIsSpoiler(false);
+    setSearchResults([]);
+    setMovieQuery("");
+  };
+
   return (
-    <div className="container mx-auto px-4 py-2">
-      {/* 상단 검색 및 버튼 영역 - 고정 헤더로 변경 */}
-      <div className="fixed top-16 right-0 left-0 z-40 bg-white bg-opacity-95 shadow-sm py-3">
-        <div className="container mx-auto px-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">영화 리뷰</h1>
-          <div className="flex items-center space-x-2">
+    <div className="container mx-auto px-4 py-8">
+      {/* 리뷰 작성 버튼 */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">영화 리뷰</h1>
+        {isLoggedIn && (
+          <button
+            onClick={() => setShowWriteForm(true)}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+          >
+            리뷰 작성
+          </button>
+        )}
+      </div>
+
+      {/* 검색 바 */}
+      <div className="mb-6">
+        <div className="relative">
+          <form onSubmit={handleSearch} className="flex">
+            <div className="relative flex-1">
+              <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                  className="text-gray-500 hover:text-gray-700 focus:outline-none"
+                >
+                  {getCategoryText()} <FaCaretDown className="inline" />
+                </button>
+              </div>
+
+              {showCategoryDropdown && (
+                <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                  <div
+                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                    onClick={() => {
+                      setSearchCategory("title");
+                      setShowCategoryDropdown(false);
+                    }}
+                  >
+                    제목
+                  </div>
+                  <div
+                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                    onClick={() => {
+                      setSearchCategory("content");
+                      setShowCategoryDropdown(false);
+                    }}
+                  >
+                    내용
+                  </div>
+                  <div
+                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                    onClick={() => {
+                      setSearchCategory("author");
+                      setShowCategoryDropdown(false);
+                    }}
+                  >
+                    작성자
+                  </div>
+                </div>
+              )}
+
+              <input
+                type="text"
+                placeholder="검색어를 입력하세요..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-24 pr-10 py-2 border border-gray-300 rounded-l focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
             <button
-              className="rounded-full p-2 hover:bg-gray-100"
-              onClick={() => {
-                setShowSearchModal(true);
-                setShowWriteForm(false);
-              }}
-              aria-label="검색"
-              title="검색하기"
+              type="submit"
+              className="px-6 py-2 bg-blue-500 text-white rounded-r hover:bg-blue-600 transition-colors"
             >
-              <FaSearch className="text-gray-600" />
+              검색
             </button>
-            <button 
-              onClick={() => {
-                setShowWriteForm(true);
-                setShowSearch(false);
-                setShowSearchModal(false);
-              }}
-              className="rounded-full p-2 hover:bg-gray-100"
-              title="리뷰 작성하기"
-            >
-              <FaPen />
-            </button>
-          </div>
+          </form>
         </div>
       </div>
-      
-      {/* 헤더 아래 여백 */}
-      <div className="h-16"></div>
 
-      {/* 검색 모달 */}
-      {showSearchModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="relative w-full max-w-md bg-white rounded-lg shadow-lg p-6">
+      {/* 리뷰 목록 */}
+      <InfiniteScroll
+        dataLength={visibleReviews.length}
+        next={fetchMoreReviews}
+        hasMore={hasMore}
+        loader={
+          <div className="flex justify-center my-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+          </div>
+        }
+        endMessage={
+          <div className="text-center text-gray-500 my-4">
+            {visibleReviews.length > 0
+              ? "모든 리뷰를 불러왔습니다."
+              : "작성된 리뷰가 없습니다."}
+          </div>
+        }
+      >
+        <div className="space-y-6">
+          {visibleReviews.map((review) => (
+            <div key={review.id} className="bg-white rounded-lg shadow p-6">
+              {/* 리뷰 헤더 - 작성자 정보 */}
+              <div className="flex items-center mb-4">
+                <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center">
+                  <FaUser className="text-gray-400 text-2xl" />
+                </div>
+                <div className="ml-3">
+                  <div className="text-xs text-gray-500">작성자 이름</div>
+                  <div className="font-bold">{review.user.username}</div>
+                </div>
+                <div className="ml-auto flex items-center">
+                  {renderStars(review.rating)}
+                </div>
+              </div>
+
+              {/* 리뷰 제목 */}
+              <div className="mb-4">
+                <h3 className="text-xl font-bold">
+                  {review.title}
+                  {review.isSpoiler && (
+                    <span className="ml-2 text-xs bg-red-500 text-white px-2 py-1 rounded">
+                      스포일러
+                    </span>
+                  )}
+                </h3>
+              </div>
+
+              {/* 영화 정보와 리뷰 내용 */}
+              <div className="flex mb-4">
+                {review.moviePoster && (
+                  <img
+                    src={getPosterUrl(review.moviePoster)}
+                    alt={review.movieTitle}
+                    className="w-24 h-36 object-cover rounded mr-4"
+                  />
+                )}
+                <div className="flex-1">
+                  <p className="text-sm text-gray-600 mb-2">
+                    영화:{" "}
+                    <span className="text-blue-600 font-medium">
+                      {review.movieTitle}
+                    </span>
+                  </p>
+                  <p
+                    className={`text-gray-700 ${review.isSpoiler ? "spoiler-content" : ""}`}
+                  >
+                    {review.content}
+                  </p>
+                </div>
+              </div>
+
+              {/* 리뷰 액션 버튼 */}
+              <div className="flex items-center justify-between border-t pt-3">
+                <div className="text-xs text-gray-500">
+                  {formatDate(review.createdAt)}
+                </div>
+                <div className="flex items-center space-x-4">
+                  <button
+                    onClick={() => handleReviewLike(review.id)}
+                    className="flex items-center space-x-1"
+                  >
+                    <FaThumbsUp
+                      className={
+                        review.isLiked ? "text-blue-500" : "text-gray-500"
+                      }
+                    />
+                    <span className="text-gray-500">
+                      {review.likeCount || 0}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => handleReviewDislike(review.id)}
+                    className="flex items-center space-x-1"
+                  >
+                    <FaThumbsDown
+                      className={
+                        review.isDisliked ? "text-red-500" : "text-gray-500"
+                      }
+                    />
+                    <span className="text-gray-500">
+                      {review.dislikeCount || 0}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => toggleComments(review.id)}
+                    className="flex items-center space-x-1"
+                  >
+                    <FaComment className="text-gray-500" />
+                    <span className="text-gray-500">
+                      댓글 {review.commentCount || 0}개
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 댓글 섹션 */}
+              {expandedCommentId === review.id && (
+                <div className="mt-4 pt-4 border-t">
+                  <div className="text-sm font-bold mb-3">
+                    댓글 {review.commentCount || 0}개
+                  </div>
+
+                  <div className="space-y-3 mb-4">
+                    {review.comments && review.comments.length > 0 ? (
+                      // 댓글 목록 렌더링 - 모든 필드와 값을 출력해 디버깅
+                      review.comments.map((comment) => (
+                        <div
+                          key={comment.id}
+                          className="flex items-start space-x-2"
+                        >
+                          <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center">
+                            <FaUser className="text-gray-400" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex justify-between mb-1">
+                              <span className="font-medium">
+                                {comment.username || "알 수 없는 사용자"}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {formatDate(new Date(comment.createdAt))}
+                              </span>
+                            </div>
+                            <p className="text-sm">{comment.content}</p>
+                            {/* 디버깅용 정보 표시 */}
+                            <details className="mt-1 text-xs text-gray-400">
+                              <summary>디버깅 정보</summary>
+                              <pre className="whitespace-pre-wrap bg-gray-100 p-1 rounded">
+                                {JSON.stringify(comment, null, 2)}
+                              </pre>
+                            </details>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center text-gray-500 py-4">
+                        <div>아직 댓글이 없습니다. 첫 댓글을 작성해보세요!</div>
+                        {/* 디버깅용 정보 표시 */}
+                        <details className="mt-2 text-xs text-gray-400">
+                          <summary>리뷰 디버깅 정보</summary>
+                          <div className="text-left bg-gray-100 p-2 rounded">
+                            <p>리뷰 ID: {review.id}</p>
+                            <p>댓글 수: {review.commentCount}</p>
+                            <p>
+                              댓글 배열:{" "}
+                              {review.comments
+                                ? `${review.comments.length}개`
+                                : "없음"}
+                            </p>
+                            <p>
+                              댓글 배열 타입:{" "}
+                              {review.comments
+                                ? typeof review.comments
+                                : "없음"}
+                            </p>
+                          </div>
+                        </details>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex border rounded overflow-hidden">
+                      <input
+                        type="text"
+                        value={commentContent}
+                        onChange={(e) => setCommentContent(e.target.value)}
+                        placeholder="댓글을 입력하세요..."
+                        className="w-full p-2 text-sm focus:outline-none flex-1"
+                      />
+                      <button
+                        onClick={() => handleCommentSubmit(review.id)}
+                        className="px-4 bg-blue-500 text-white text-sm hover:bg-blue-600 transition-colors"
+                        disabled={!isLoggedIn || !commentContent.trim()}
+                      >
+                        등록
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </InfiniteScroll>
+
+      {/* 리뷰 작성 모달 */}
+      {showWriteForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">검색</h2>
-              <button 
-                onClick={() => setShowSearchModal(false)}
+              <h2 className="text-2xl font-bold">리뷰 작성</h2>
+              <button
+                onClick={() => setShowWriteForm(false)}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <FaTimes />
               </button>
             </div>
-            
-            <form onSubmit={handleSearch} className="mb-4">
-              <div className="relative">
-                <div 
-                  className="absolute left-3 top-1/2 -translate-y-1/2 transform bg-gray-100 rounded-md px-2 py-1 text-xs flex items-center cursor-pointer border-r border-gray-300"
-                  onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
-                >
-                  <span>{getCategoryText()}</span>
-                  <FaCaretDown className="ml-1 text-gray-500" size={10} />
-                  
-                  {showCategoryDropdown && (
-                    <div className="absolute left-0 top-6 bg-white border border-gray-200 rounded-md shadow-md z-20">
-                      <div 
-                        className="px-3 py-1 hover:bg-gray-100 text-xs cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSearchCategory('title');
-                          setShowCategoryDropdown(false);
-                        }}
-                      >
-                        제목
-                      </div>
-                      <div 
-                        className="px-3 py-1 hover:bg-gray-100 text-xs cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSearchCategory('content');
-                          setShowCategoryDropdown(false);
-                        }}
-                      >
-                        내용
-                      </div>
-                      <div 
-                        className="px-3 py-1 hover:bg-gray-100 text-xs cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSearchCategory('author');
-                          setShowCategoryDropdown(false);
-                        }}
-                      >
-                        작성자
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  placeholder="검색어 입력..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 py-2 pl-20 pr-10 text-sm focus:border-blue-500 focus:outline-none"
-                  autoFocus
-                />
-                <button 
-                  type="submit"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 transform text-gray-400 cursor-pointer"
-                >
-                  <FaSearch />
-                </button>
-              </div>
-            </form>
-            
-            <div className="flex space-x-2">
-              <button
-                onClick={() => {
-                  handleSearch(new Event('submit') as any);
-                  setShowSearchModal(false);
-                }}
-                className="flex-1 rounded-md bg-gray-900 px-4 py-2 text-white hover:bg-gray-700"
-              >
-                검색
-              </button>
-              <button
-                onClick={resetSearch}
-                className="flex-1 rounded-md bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300"
-              >
-                취소
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* 리뷰 작성 폼 */}
-      {showWriteForm && (
-        <div className="mb-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">새 리뷰 작성</h2>
-            <button 
-              onClick={() => setShowWriteForm(false)}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              닫기
-            </button>
-          </div>
-          
-          {isLoggedIn ? (
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4 relative">
-                {selectedMovie ? (
-                  <div className="flex items-center border border-gray-300 rounded-md p-2">
-                    {selectedMovie.poster_path && (
-                      <img 
-                        src={getPosterUrl(selectedMovie.poster_path, "w92")} 
-                        alt={selectedMovie.title}
-                        className="w-16 h-24 object-cover rounded mr-3"
-                      />
-                    )}
-                    <div className="flex-1">
-                      <div className="flex justify-between items-center">
-                        <h3 className="font-medium">{selectedMovie.title}</h3>
-                        <button 
-                          type="button"
-                          onClick={handleClearSelectedMovie}
-                          className="text-gray-500 hover:text-red-500"
-                        >
-                          <FaTimes />
-                        </button>
-                      </div>
-                      <p className="text-sm text-gray-600">
-                        {selectedMovie.release_date ? new Date(selectedMovie.release_date).getFullYear() : '출시년도 정보 없음'}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <input
-                      type="text"
-                      placeholder="영화 제목 검색"
-                      className="w-full rounded-md border border-gray-300 p-2 focus:border-blue-500 focus:outline-none"
-                      value={movieSearchQuery}
-                      onChange={handleMovieSearchChange}
-                      onClick={() => setIsSearchingMovie(true)}
-                    />
-                    {isSearchingMovie && movieSearchResults.length > 0 && (
-                      <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-300 rounded-md shadow-lg z-50">
-                        {movieSearchResults.map((movie) => (
-                          <div 
-                            key={movie.id}
-                            className="flex items-center p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100"
-                            onClick={() => handleSelectMovie(movie)}
-                          >
-                            <div className="flex-shrink-0 w-10 h-14 bg-gray-200 flex items-center justify-center rounded overflow-hidden mr-2">
-                              {movie.poster_path ? (
-                                <img 
-                                  src={getPosterUrl(movie.poster_path, "w92")} 
-                                  alt={movie.title}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <FaFilm className="text-gray-400" />
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <div className="font-medium text-sm">{movie.title}</div>
-                              <div className="text-xs text-gray-500">
-                                {movie.release_date ? new Date(movie.release_date).getFullYear() : '연도 정보 없음'}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* 영화 검색 */}
               <div className="mb-4">
-                <input
-                  type="text"
-                  placeholder="리뷰 제목"
-                  className="w-full rounded-md border border-gray-300 p-2 focus:border-blue-500 focus:outline-none"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <div className="flex items-center mb-2">
-                  <span className="mr-2">별점:</span>
-                  <div className={`flex relative ${isSearchingMovie && movieSearchResults.length > 0 ? 'hidden' : ''}`}>
-                    {[0, 1, 2, 3, 4].map((index) => (
-                      <div key={index} className="relative">
-                        {/* 별 왼쪽 절반 (0.5) */}
-                        <div 
-                          className="absolute left-0 top-0 w-[12px] h-[24px] overflow-hidden cursor-pointer z-10"
-                          onClick={() => handleRatingClick(index, true)}
-                        >
-                          <div className="w-[24px] h-[24px]">
-                            {index + 0.5 <= rating ? (
-                              <FaStar className="text-yellow-400" size={24} />
-                            ) : (
-                              <FaStar className="text-gray-300" size={24} />
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* 별 오른쪽 절반 (1.0) */}
-                        <div 
-                          className="absolute left-[12px] top-0 w-[12px] h-[24px] overflow-hidden cursor-pointer z-10"
-                          onClick={() => handleRatingClick(index, false)}
-                        >
-                          <div className="absolute right-0 top-0 w-[24px] h-[24px]">
-                            {index + 1 <= rating ? (
-                              <FaStar className="text-yellow-400" size={24} />
-                            ) : (
-                              <FaStar className="text-gray-300" size={24} />
-                            )}
-                          </div>
-                        </div>
-
-                        {/* 배경 별 */}
-                        <div className="w-[24px] h-[24px] relative opacity-0">
-                          <FaStar size={24} />
-                        </div>
-                      </div>
-                    ))}
-                    <span className="ml-2 text-sm">{rating.toFixed(1)}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="mb-4">
-                <textarea
-                  placeholder="내용은 450자까지 입력 가능합니다."
-                  className="h-32 w-full rounded-md border border-gray-300 p-2 focus:border-blue-500 focus:outline-none"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  maxLength={450}
-                  required
-                ></textarea>
-              </div>
-              <div className="mb-4 flex justify-between items-center">
-                <div></div>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="spoilerCheck"
-                    checked={isSpoiler}
-                    onChange={(e) => setIsSpoiler(e.target.checked)}
-                    className="mr-2 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <label htmlFor="spoilerCheck" className="text-sm text-gray-700">
-                    스포일러 포함
-                  </label>
-                </div>
-              </div>
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="rounded-md bg-gray-900 px-4 py-2 text-white hover:bg-gray-700"
-                >
-                  등록
-                </button>
-              </div>
-            </form>
-          ) : (
-            <div className="rounded-md bg-gray-100 p-4 text-center">
-              <p className="text-gray-600">리뷰를 작성하려면 로그인이 필요합니다.</p>
-              <Link
-                to="/login"
-                className="mt-2 inline-block rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-              >
-                로그인
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-      
-      {/* 리뷰 목록 - 무한 스크롤 적용 */}
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
-        </div>
-      ) : searchResults.length > 0 ? (
-        <InfiniteScroll
-          dataLength={visibleReviews.length}
-          next={fetchMoreReviews}
-          hasMore={hasMore}
-          loader={
-            <div className="flex justify-center py-4">
-              <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
-            </div>
-          }
-          endMessage={
-            <p className="text-center text-gray-500 py-4">
-              모든 리뷰를 불러왔습니다.
-            </p>
-          }
-          scrollThreshold={0.9}
-        >
-          <div className="space-y-6">
-            {visibleReviews.map((review) => (
-              <div
-                key={review.id}
-                className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm overflow-hidden"
-              >
-                {/* 리뷰 본문 */}
-                <div className="flex">
-                  {/* 사용자 프로필 영역 */}
-                  <div className="mr-4 flex flex-col items-center">
-                    <Link to={`/profile/${review.user.id}`} className="flex flex-col items-center">
-                      <div className="h-12 w-12 overflow-hidden rounded-full bg-gray-300 cursor-pointer">
-                        {review.user.profileImageUrl ? (
-                          <img
-                            src={review.user.profileImageUrl}
-                            alt={`${review.user.username}의 프로필`}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-gray-300">
-                            <FaUser className="text-gray-600" />
-                          </div>
-                        )}
-                      </div>
-                      <p className="mt-1 text-center text-xs text-gray-700 hover:text-blue-500">
-                        {review.user.username}
-                      </p>
-                    </Link>
-                    <p className="flex items-center text-xs text-gray-500">
-                      <FaComment className="mr-1" size={10} />
-                      {review.user.reviewCount}
-                    </p>
-                  </div>
-                  
-                  {/* 리뷰 내용 영역 */}
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-lg font-semibold">{review.title}</h3>
-                      <div className="text-xs">
-                        {renderStars(review.rating)}
-                      </div>
-                    </div>
-                    
-                    <div className="flex mb-4">
-                      {review.moviePoster && (
-                        <img 
-                          src={getPosterUrl(review.moviePoster)}
-                          alt={review.movieTitle}
-                          className="w-24 h-36 object-cover rounded mr-3 cursor-pointer hover:opacity-80 transition-opacity"
-                          onClick={() => navigateToMovieDetail(review.movieId)}
+                <label className="block text-gray-700 font-medium mb-2">
+                  영화 선택
+                </label>
+                <div className="relative">
+                  {selectedMovie ? (
+                    <div className="flex items-center space-x-4 p-2 border rounded">
+                      {selectedMovie.poster_path && (
+                        <img
+                          src={getPosterUrl(selectedMovie.poster_path, "w92")}
+                          alt={selectedMovie.title}
+                          className="w-16 h-24 object-cover rounded"
                         />
                       )}
                       <div className="flex-1">
-                        <p 
-                          className="text-sm text-blue-600 font-medium mb-1 cursor-pointer hover:underline"
-                          onClick={() => navigateToMovieDetail(review.movieId)}
-                        >
-                          영화: {review.movieTitle}
-                        </p>
-                        <div 
-                          className={`text-gray-700 text-sm ${review.isSpoiler ? 'spoiler-content' : ''}`}
-                        >
-                          {review.content}
+                        <div className="font-medium">{selectedMovie.title}</div>
+                        <div className="text-sm text-gray-500">
+                          {selectedMovie.release_date
+                            ? new Date(selectedMovie.release_date).getFullYear()
+                            : "연도 정보 없음"}
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={handleClearSelectedMovie}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        <FaTimes />
+                      </button>
                     </div>
-                    
-                    <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
-                      <span>{formatDate(review.createdAt)}</span>
-                      <div className="flex items-center space-x-3">
-                        <div className="flex items-center space-x-1">
-                          <button 
-                            className={`p-1 rounded-md ${review.likes.some(like => like.userId === user?.id) ? 'text-blue-600' : 'text-gray-400 hover:text-blue-600'}`}
-                            onClick={() => handleReviewLike(review.id)}
-                            disabled={!isLoggedIn}
-                            title={isLoggedIn ? "좋아요" : "로그인 필요"}
-                          >
-                            <FaThumbsUp size={14} />
-                          </button>
-                          <span>{review.likes.length}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <button 
-                            className={`p-1 rounded-md ${review.dislikes.some(dislike => dislike.userId === user?.id) ? 'text-red-600' : 'text-gray-400 hover:text-red-600'}`}
-                            onClick={() => handleReviewDislike(review.id)}
-                            disabled={!isLoggedIn}
-                            title={isLoggedIn ? "싫어요" : "로그인 필요"}
-                          >
-                            <FaThumbsDown size={14} />
-                          </button>
-                          <span>{review.dislikes.length}</span>
-                        </div>
-                        <button 
-                          className="flex items-center cursor-pointer hover:text-blue-600"
-                          onClick={() => toggleComments(review.id)}
-                        >
-                          댓글 : {review.comments.length}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="영화 제목 검색"
+                      value={movieSearchQuery}
+                      onChange={handleMovieSearchChange}
+                      onClick={() => setIsSearchingMovie(true)}
+                      className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+                    />
+                  )}
 
-                {/* 댓글 영역 */}
-                {expandedReviewId === review.id && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <h4 className="text-sm font-semibold mb-3">댓글 {review.comments.length}개</h4>
-                    
-                    {/* 댓글 목록 */}
-                    <div className="space-y-3 mb-4">
-                      {review.comments.map((comment) => (
-                        <div key={comment.id} className="flex">
-                          <Link to={`/profile/${comment.user.id}`} className="mr-2">
-                            <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-200 cursor-pointer">
-                              {comment.user.profileImageUrl ? (
-                                <img
-                                  src={comment.user.profileImageUrl}
-                                  alt={`${comment.user.username}의 프로필`}
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center bg-gray-200">
-                                  <FaUser className="text-gray-500" size={12} />
-                                </div>
-                              )}
+                  {isSearchingMovie && movieSearchResults.length > 0 && (
+                    <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border rounded shadow-lg">
+                      {movieSearchResults.map((movie) => (
+                        <div
+                          key={movie.id}
+                          className="flex items-center p-2 hover:bg-gray-100 cursor-pointer"
+                          onClick={() => handleSelectMovie(movie)}
+                        >
+                          {movie.poster_path ? (
+                            <img
+                              src={getPosterUrl(movie.poster_path, "w92")}
+                              alt={movie.title}
+                              className="w-12 h-18 object-cover rounded mr-2"
+                            />
+                          ) : (
+                            <div className="w-12 h-18 bg-gray-200 rounded mr-2 flex items-center justify-center">
+                              <FaFilm className="text-gray-400" />
                             </div>
-                          </Link>
-                          <div className="flex-1">
-                            <div className="flex items-center">
-                              <Link to={`/profile/${comment.user.id}`}>
-                                <span className="text-xs font-medium hover:text-blue-500 cursor-pointer">{comment.user.username}</span>
-                              </Link>
-                              <span className="ml-2 text-xs text-gray-500">{formatDate(comment.createdAt)}</span>
+                          )}
+                          <div>
+                            <div className="font-medium">{movie.title}</div>
+                            <div className="text-sm text-gray-500">
+                              {movie.release_date
+                                ? new Date(movie.release_date).getFullYear()
+                                : "연도 정보 없음"}
                             </div>
-                            <p className="text-sm mt-1">{comment.content}</p>
                           </div>
                         </div>
                       ))}
-                      
-                      {review.comments.length === 0 && (
-                        <p className="text-sm text-gray-500 text-center py-2">
-                          아직 댓글이 없습니다. 첫 댓글을 작성해보세요!
-                        </p>
-                      )}
                     </div>
-                    
-                    {/* 댓글 작성 폼 */}
-                    {isLoggedIn ? (
-                      <div className="flex">
-                        <div className="mr-2 h-8 w-8 overflow-hidden rounded-full bg-gray-200">
-                          {user?.profileImageUrl ? (
-                            <img
-                              src={user.profileImageUrl}
-                              alt="내 프로필"
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-gray-200">
-                              <FaUser className="text-gray-500" size={12} />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 flex">
-                          <input
-                            type="text"
-                            placeholder="댓글을 입력하세요..."
-                            className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
-                            value={commentContent}
-                            onChange={(e) => setCommentContent(e.target.value)}
-                          />
-                          <button
-                            className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
-                            onClick={() => handleCommentSubmit(review.id)}
-                          >
-                            <FaReply />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-2">
-                        <p className="text-sm text-gray-500 mb-1">댓글을 작성하려면 로그인이 필요합니다.</p>
-                        <Link to="/login" className="text-sm text-blue-600 hover:underline">
-                          로그인하기
-                        </Link>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            ))}
+
+              {/* 리뷰 제목 */}
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  제목
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              {/* 별점 */}
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  별점
+                </label>
+                <div className="flex items-center space-x-1">
+                  {[0, 1, 2, 3, 4].map((index) => (
+                    <div key={index} className="text-2xl flex">
+                      {/* 별 왼쪽 부분 (0.5 점) */}
+                      <div
+                        onClick={() => handleRatingClick(index, true)}
+                        className="w-[0.5em] h-[1em] overflow-hidden cursor-pointer"
+                        title={`${index + 0.5}점`}
+                      >
+                        {index + 0.5 <= rating ? (
+                          <div className="text-yellow-400 w-[1em]">
+                            <FaStar />
+                          </div>
+                        ) : (
+                          <div className="text-gray-300 w-[1em]">
+                            <FaStar />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 별 오른쪽 부분 (1.0 점) */}
+                      <div
+                        onClick={() => handleRatingClick(index, false)}
+                        className="w-[0.5em] h-[1em] overflow-hidden cursor-pointer"
+                        title={`${index + 1}점`}
+                      >
+                        {index + 1 <= rating ? (
+                          <div className="text-yellow-400 w-[1em] ml-[-0.5em]">
+                            <FaStar />
+                          </div>
+                        ) : (
+                          <div className="text-gray-300 w-[1em] ml-[-0.5em]">
+                            <FaStar />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <span className="ml-2 text-lg font-medium text-yellow-500">
+                    ({rating.toFixed(1)})
+                  </span>
+                </div>
+              </div>
+
+              {/* 리뷰 내용 */}
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  내용
+                </label>
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  rows={6}
+                  className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              {/* 스포일러 체크박스 */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="spoiler"
+                  checked={isSpoiler}
+                  onChange={(e) => setIsSpoiler(e.target.checked)}
+                  className="mr-2"
+                />
+                <label htmlFor="spoiler" className="text-gray-700">
+                  스포일러 포함
+                </label>
+              </div>
+
+              {/* 제출 버튼 */}
+              <div className="flex justify-end space-x-4">
+                <button
+                  type="button"
+                  onClick={() => setShowWriteForm(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting || !selectedMovie}
+                  className={`px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors ${
+                    (submitting || !selectedMovie) &&
+                    "opacity-50 cursor-not-allowed"
+                  }`}
+                >
+                  {submitting ? "저장 중..." : "저장"}
+                </button>
+              </div>
+            </form>
           </div>
-        </InfiniteScroll>
-      ) : (
-        <div className="text-center py-8">
-          <p className="text-gray-500">검색 결과가 없습니다.</p>
         </div>
       )}
-      
-      {/* 최상단으로 이동하는 버튼 */}
+
+      {/* 최상단으로 이동 버튼 */}
       {showScrollTop && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-8 right-8 bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-all z-50"
-          aria-label="맨 위로 이동"
+          className="fixed bottom-8 right-8 bg-blue-500 text-white p-3 rounded-full shadow-lg hover:bg-blue-600 transition-colors"
         >
           <FaArrowUp />
         </button>
       )}
-      
+
       {/* 스포일러 컨텐츠에 대한 CSS 스타일 */}
       <style>
         {`
@@ -1237,4 +1467,4 @@ const MovieReviewsPage: React.FC = () => {
   );
 };
 
-export default MovieReviewsPage; 
+export default MovieReviewsPage;
