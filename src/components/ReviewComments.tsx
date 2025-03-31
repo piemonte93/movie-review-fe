@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { FaThumbsUp, FaThumbsDown } from "react-icons/fa";
 import { backendApi, Comment } from "../api/backendApi";
 import CommentInput from "./CommentInput";
+import { toast } from "react-toastify";
 
 interface ReviewCommentsProps {
   reviewId: string | number;
@@ -17,7 +18,7 @@ const ReviewComments = ({ reviewId }: ReviewCommentsProps) => {
     
     setLoading(true);
     try {
-      const data = await backendApi.fetchReviewComments(String(reviewId));
+      const data = await backendApi.getReviewComments(Number(reviewId));
       console.log("불러온 댓글 데이터:", data);
       
       if (Array.isArray(data)) {
@@ -51,6 +52,30 @@ const ReviewComments = ({ reviewId }: ReviewCommentsProps) => {
     }
   };
 
+  // 댓글 좋아요 처리 함수
+  const handleCommentLike = async (commentId: number) => {
+    try {
+      await backendApi.likeReviewComment(Number(reviewId), commentId);
+      toast.success("댓글을 좋아요 했습니다.");
+      loadComments(); // 댓글 목록 새로고침
+    } catch (error) {
+      console.error("댓글 좋아요 실패:", error);
+      toast.error("댓글 좋아요에 실패했습니다.");
+    }
+  };
+
+  // 댓글 싫어요 처리 함수
+  const handleCommentDislike = async (commentId: number) => {
+    try {
+      await backendApi.dislikeReviewComment(Number(reviewId), commentId);
+      toast.success("댓글을 싫어요 했습니다.");
+      loadComments(); // 댓글 목록 새로고침
+    } catch (error) {
+      console.error("댓글 싫어요 실패:", error);
+      toast.error("댓글 싫어요에 실패했습니다.");
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* 댓글 입력 컴포넌트에 handleCommentAdded 전달 */}
@@ -78,13 +103,23 @@ const ReviewComments = ({ reviewId }: ReviewCommentsProps) => {
                 </div>
                 <p className="mt-1 text-gray-800">{comment.content}</p>
                 <div className="flex gap-4 mt-2">
-                  <button className="flex items-center gap-1 text-gray-500">
+                  <button 
+                    className={`flex items-center gap-1 ${
+                      comment.isLiked ? "text-blue-500" : "text-gray-500"
+                    }`}
+                    onClick={() => handleCommentLike(comment.id)}
+                  >
                     <FaThumbsUp className="w-4 h-4" />
-                    {comment.likes || 0}
+                    {comment.likeCount || 0}
                   </button>
-                  <button className="flex items-center gap-1 text-gray-500">
+                  <button 
+                    className={`flex items-center gap-1 ${
+                      comment.isDisliked ? "text-red-500" : "text-gray-500"
+                    }`}
+                    onClick={() => handleCommentDislike(comment.id)}
+                  >
                     <FaThumbsDown className="w-4 h-4" />
-                    {comment.dislikes || 0}
+                    {comment.dislikeCount || 0}
                   </button>
                 </div>
               </div>

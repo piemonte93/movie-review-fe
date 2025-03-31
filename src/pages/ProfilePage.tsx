@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -21,8 +21,30 @@ import {
   updateUserProfile,
   getUserScraps,
 } from "../api/userApi";
+import { backendApi } from "../api/backendApi";
 import { UserProfile, UserActivity } from "../types/user";
-import ContentCard from "../components/ContentCard";
+import ProfilePageCard from "../components/ProfilePageCard";
+import { toast } from "react-toastify";
+import styles from "./ProfilePage.module.css";
+
+interface LikedReviewsResponse {
+  content: Array<{
+    id: number;
+    userId: number;
+    username: string;
+    userProfileImageUrl: string;
+    movieId: number;
+    movieTitle: string;
+    content: string;
+    rating: number;
+    likeCount: number;
+    dislikeCount: number;
+    commentCount: number;
+    createdAt: string;
+  }>;
+  totalElements: number;
+  totalPages: number;
+}
 
 // 프로필 페이지 컴포넌트
 const ProfilePage: React.FC = () => {
@@ -37,6 +59,13 @@ const ProfilePage: React.FC = () => {
   const [uploadingImage, setUploadingImage] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>("posts");
   const [scrappedMovies, setScrappedMovies] = useState<any[]>([]);
+  const [likedReviews, setLikedReviews] = useState<LikedReviewsResponse>({
+    content: [],
+    totalElements: 0,
+    totalPages: 0
+  });
+  const [likedReviewsLoading, setLikedReviewsLoading] = useState<boolean>(false);
+  const [page, setPage] = useState<number>(0);
 
   useEffect(() => {
     // 사용자 데이터 로드
@@ -67,6 +96,78 @@ const ProfilePage: React.FC = () => {
       fetchUserData();
     }
   }, [isLoggedIn]);
+
+  // 좋아요한 리뷰 목록 가져오기
+  const fetchLikedReviews = useCallback(async () => {
+    if (activeTab !== 'likes') return;
+    
+    setLikedReviewsLoading(true);
+    try {
+      console.log('좋아요한 리뷰 가져오기 시작');
+      const response = await backendApi.getLikedReviews(page, 10);
+      console.log('좋아요한 리뷰 응답:', response);
+      
+      if (response && response.content) {
+        setLikedReviews(response);
+      } else {
+        console.error('유효하지 않은 응답 형식:', response);
+        setLikedReviews({
+          content: [],
+          totalElements: 0,
+          totalPages: 0
+        });
+      }
+    } catch (error) {
+      console.error('좋아요한 리뷰를 가져오는 중 오류 발생:', error);
+      toast.error('좋아요한 리뷰를 가져오는 데 실패했습니다.');
+      setLikedReviews({
+        content: [],
+        totalElements: 0,
+        totalPages: 0
+      });
+    } finally {
+      setLikedReviewsLoading(false);
+    }
+  }, [activeTab, page]);
+
+  // 좋아요 취소 처리
+  const handleUnlikeReview = async (reviewId: number) => {
+    try {
+      await backendApi.likeReview(reviewId);
+      toast.success('좋아요가 취소되었습니다.');
+      // 좋아요 목록에서 해당 리뷰 제거
+      setLikedReviews(prev => ({
+        ...prev,
+        content: prev.content.filter(review => review.id !== reviewId),
+        totalElements: prev.totalElements - 1
+      }));
+      
+      // 데이터 갱신을 위해 페이지를 다시 로드
+      fetchLikedReviews();
+    } catch (error) {
+      console.error('좋아요 취소 중 오류 발생:', error);
+      toast.error('좋아요 취소에 실패했습니다.');
+    }
+  };
+
+  // 날짜 포맷 함수
+  const formatDate = (dateString: string) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Invalid date';
+    return date.toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  // 탭 변경 시 데이터 로드
+  useEffect(() => {
+    if (activeTab === "likes") {
+      fetchLikedReviews();
+    }
+  }, [activeTab, fetchLikedReviews]);
 
   // 프로필 이미지 선택 처리
   const handleProfileImageClick = () => {
@@ -118,127 +219,149 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  // 더미 포스트 데이터
-  const dummyPosts = [
-    {
-      id: 1,
-      imageUrl: "https://via.placeholder.com/300",
-      likeCount: 24,
-      commentCount: 5,
-    },
-    {
-      id: 2,
-      imageUrl: "https://via.placeholder.com/300",
-      likeCount: 18,
-      commentCount: 3,
-    },
-    {
-      id: 3,
-      imageUrl: "https://via.placeholder.com/300",
-      likeCount: 32,
-      commentCount: 7,
-    },
-    {
-      id: 4,
-      imageUrl: "https://via.placeholder.com/300",
-      likeCount: 15,
-      commentCount: 2,
-    },
-    {
-      id: 5,
-      imageUrl: "https://via.placeholder.com/300",
-      likeCount: 27,
-      commentCount: 4,
-    },
-    {
-      id: 6,
-      imageUrl: "https://via.placeholder.com/300",
-      likeCount: 42,
-      commentCount: 9,
-    },
-  ];
+  // 게시물 탭 렌더링
+  const renderPostsTab = () => {
+    const dummyPosts = [
+      {
+        id: 1,
+        title: "내 첫 번째 게시물",
+        content: "이것은 내 첫 번째 게시물입니다.",
+        type: "post",
+      },
+      {
+        id: 2,
+        title: "두 번째 게시물",
+        content: "영화에 대한 생각을 공유합니다.",
+        type: "post",
+      },
+    ];
 
-  // 더미 리뷰 데이터
-  const dummyReviews = [
-    {
-      id: 1,
-      movieTitle: "인셉션",
-      rating: 4.5,
-      content: "꿈속의 꿈을 탐험하는 놀라운 영화였습니다.",
-      date: "2023-05-15",
-    },
-    {
-      id: 2,
-      movieTitle: "기생충",
-      rating: 5.0,
-      content: "사회 계층에 대한 날카로운 비판을 담은 걸작입니다.",
-      date: "2023-06-20",
-    },
-    {
-      id: 3,
-      movieTitle: "다크나이트",
-      rating: 4.8,
-      content: "히어로 영화의 한계를 뛰어넘은 명작입니다.",
-      date: "2023-07-08",
-    },
-  ];
+    return (
+      <div className={styles.tabContent}>
+        {dummyPosts.map((post) => (
+          <ProfilePageCard
+            key={post.id}
+            content={post}
+            className={styles.contentCard}
+          />
+        ))}
+      </div>
+    );
+  };
 
-  // 더미 좋아요 데이터
-  const dummyLikes = [
-    {
-      id: 1,
-      type: "movie",
-      title: "어벤져스: 엔드게임",
-      imageUrl: "https://via.placeholder.com/150",
-      date: "2023-08-12",
-    },
-    {
-      id: 2,
-      type: "review",
-      author: "영화광123",
-      title: "기생충 리뷰",
-      content: "사회 계층에 대한 날카로운 비판을 담은 걸작입니다.",
-      date: "2023-07-18",
-    },
-    {
-      id: 3,
-      type: "movie",
-      title: "라라랜드",
-      imageUrl: "https://via.placeholder.com/150",
-      date: "2023-06-05",
-    },
-    {
-      id: 4,
-      type: "review",
-      author: "시네필",
-      title: "인셉션 리뷰",
-      content: "꿈속의 꿈을 탐험하는 놀라운 영화였습니다.",
-      date: "2023-05-22",
-    },
-  ];
+  // 리뷰 탭 렌더링
+  const renderReviewsTab = () => {
+    const dummyReviews = [
+      {
+        id: 1,
+        movieTitle: "인셉션",
+        content: "놀라운 영화였습니다. 크리스토퍼 놀란의 걸작!",
+        rating: 4.8,
+        type: "review",
+      },
+      {
+        id: 2,
+        movieTitle: "인터스텔라",
+        content: "감동적인 스토리와 놀라운 영상미.",
+        rating: 4.9,
+        type: "review",
+      },
+    ];
+
+    return (
+      <div className={styles.tabContent}>
+        {dummyReviews.map((review) => (
+          <ProfilePageCard
+            key={review.id}
+            content={review}
+            className={styles.contentCard}
+          />
+        ))}
+      </div>
+    );
+  };
+
+  // 좋아요 탭 렌더링
+  const renderLikesTab = () => {
+    return (
+      <div className={styles.tabContent}>
+        {likedReviewsLoading ? (
+          <div className="text-center py-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">로딩 중...</span>
+            </div>
+          </div>
+        ) : likedReviews.content.length === 0 ? (
+          <div className="text-center py-5">
+            <p>좋아요한 리뷰가 없습니다.</p>
+          </div>
+        ) : (
+          <div className="row">
+            {likedReviews.content.map((review) => (
+              <div key={review.id} className="col-md-6 mb-4">
+                <div className="card h-100">
+                  <div className="card-body">
+                    <div className="d-flex justify-content-between">
+                      <h5 className="card-title">{review.movieTitle}</h5>
+                      <div>
+                        <span className="me-2">⭐ {review.rating}</span>
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => handleUnlikeReview(review.id)}
+                          title="좋아요 취소"
+                        >
+                          ❤️
+                        </button>
+                      </div>
+                    </div>
+                    <p className="card-text">{review.content}</p>
+                    <p className="card-text text-muted">
+                      <small>작성자: {review.username}</small><br />
+                      <small>작성일: {formatDate(review.createdAt)}</small>
+                    </p>
+                    <div className="d-flex justify-content-between align-items-center">
+                      <Link to={`/movie/${review.movieId}`} className="btn btn-sm btn-primary">
+                        영화 보기
+                      </Link>
+                      <div>
+                        <span className="me-2">❤️ {review.likeCount}</span>
+                        <span>👎 {review.dislikeCount}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // 스크랩 탭 렌더링
   const renderScrapsTab = () => {
-    if (loading) {
-      return <div className="text-center py-8">로딩 중...</div>;
-    }
-
-    if (!scrappedMovies || scrappedMovies.length === 0) {
-      return (
-        <div className="text-center py-8 text-gray-500">
-          스크랩한 영화가 없습니다.
-        </div>
-      );
-    }
+    const dummyScraps = [
+      {
+        id: 1,
+        title: "영화 추천 목록",
+        content: "꼭 봐야 할 영화 10선",
+        type: "scrap",
+      },
+      {
+        id: 2,
+        title: "영화 팬들이 선정한 베스트 영화",
+        content: "영화 커뮤니티가 선정한 올해의 영화 20선",
+        type: "scrap",
+      },
+    ];
 
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
-        {scrappedMovies.map((movie) => (
-          <ContentCard
-            key={movie.id}
-            content={movie}
-            type="movie"
-            className="w-full"
+      <div className={styles.tabContent}>
+        {dummyScraps.map((scrap) => (
+          <ProfilePageCard
+            key={scrap.id}
+            content={scrap}
+            className={styles.contentCard}
           />
         ))}
       </div>
@@ -263,298 +386,171 @@ const ProfilePage: React.FC = () => {
 
   if (!isLoggedIn) {
     return (
-      <div className="container mx-auto px-4 py-8 flex flex-col items-center justify-center h-64">
-        <h1 className="text-2xl font-bold mb-4">로그인이 필요합니다</h1>
-        <p className="mb-4">이 페이지를 보려면 로그인해주세요.</p>
-        <Link
-          to="/login"
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          로그인 페이지로 이동
-        </Link>
+      <div className={styles.container}>
+        <div className={styles.notLoggedIn}>
+          <h2>로그인이 필요합니다</h2>
+          <p>마이페이지를 이용하려면 로그인해 주세요.</p>
+          <Link to="/login" className={styles.loginButton}>
+            로그인 하기
+          </Link>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className={styles.container}>
       {/* 프로필 헤더 섹션 - 인스타그램 스타일 */}
-      <div className="mb-8">
-        <div className="flex flex-col md:flex-row items-start md:items-center">
-          {/* 프로필 이미지 */}
-          <div className="relative mb-4 md:mb-0 md:mr-10 flex-shrink-0">
-            <div
-              className="h-28 w-28 md:h-36 md:w-36 rounded-full overflow-hidden bg-gray-200 cursor-pointer group border border-gray-300"
-              onClick={handleProfileImageClick}
-            >
-              {user?.profileImageUrl ? (
-                <img
-                  src={user.profileImageUrl}
-                  alt="프로필 이미지"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="h-full w-full flex items-center justify-center bg-gray-100">
-                  <FaUser className="text-gray-400 text-4xl" />
-                </div>
-              )}
-              <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <FaCamera className="text-white text-xl" />
-              </div>
+      <div className={styles.profileHeader}>
+        <div className={styles.profileImage} onClick={handleProfileImageClick}>
+          {uploadingImage ? (
+            <div className={styles.uploadingOverlay}>
+              <div className={styles.spinner}></div>
             </div>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleImageChange}
-              accept="image/*"
-              className="hidden"
-              disabled={uploadingImage}
+          ) : null}
+          {profileData?.user.profileImageUrl ? (
+            <img
+              src={profileData.user.profileImageUrl}
+              alt="프로필 이미지"
+              className={styles.profileImg}
             />
-            {uploadingImage && (
-              <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70 rounded-full">
-                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            )}
+          ) : (
+            <div className={styles.defaultProfileImage}>
+              <FaUser />
+            </div>
+          )}
+          <div className={styles.editOverlay}>
+            <span>수정</span>
           </div>
-
-          {/* 프로필 정보 */}
-          <div className="flex-grow">
-            <div className="flex items-center justify-between mb-4">
-              <h1 className="text-xl md:text-2xl font-medium">
-                {user?.username || "사용자"}
-              </h1>
-              <div className="flex space-x-2">
-                <Link
-                  to="/profile/edit"
-                  className="text-sm px-3 py-1 border border-gray-300 rounded font-medium hover:bg-gray-50"
-                >
-                  프로필 편집
-                </Link>
-                <button className="p-2 text-gray-500">
-                  <FaEllipsisH />
-                </button>
-              </div>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImageChange}
+            accept="image/*"
+            style={{ display: "none" }}
+          />
+        </div>
+        <div className={styles.profileInfo}>
+          <div className={styles.flexItemsBetween}>
+            <h1 className={styles.username}>
+              {profileData?.user.username || user?.username}
+            </h1>
+            <div className={styles.flexSpaceX2}>
+              <Link
+                to="/profile/edit"
+                className={styles.editLink}
+              >
+                프로필 편집
+              </Link>
+              <button className={styles.editButton}>
+                <FaEllipsisH />
+              </button>
             </div>
-
-            {/* 통계 (팔로워, 팔로잉 등) */}
-            <div className="flex space-x-6 mb-4">
-              <div className="text-center md:text-left">
-                <span className="font-semibold">
-                  {profileData?.watchedMoviesCount || 0}
-                </span>
-                <span className="ml-1">게시물</span>
-              </div>
-              <div className="text-center md:text-left">
-                <span className="font-semibold">
-                  {profileData?.followerCount || 0}
-                </span>
-                <span className="ml-1">팔로워</span>
-              </div>
-              <div className="text-center md:text-left">
-                <span className="font-semibold">
-                  {profileData?.followingCount || 0}
-                </span>
-                <span className="ml-1">팔로우</span>
-              </div>
+          </div>
+          <div className={styles.stats}>
+            <div className={styles.stat}>
+              <span className={styles.count}>
+                {profileData?.watchedMoviesCount || 0}
+              </span>
+              <span className={styles.label}>게시물</span>
             </div>
-
-            {/* 프로필 소개 */}
-            <div>
-              <p className="text-sm">영화와 리뷰를 공유하는 공간</p>
-              <p className="text-sm text-gray-500 mt-1">{user?.email}</p>
+            <div className={styles.stat}>
+              <span className={styles.count}>
+                {profileData?.followerCount || 0}
+              </span>
+              <span className={styles.label}>팔로워</span>
             </div>
+            <div className={styles.stat}>
+              <span className={styles.count}>
+                {profileData?.followingCount || 0}
+              </span>
+              <span className={styles.label}>팔로우</span>
+            </div>
+          </div>
+          <div>
+            <p className={styles.bio}>{user?.email || "소개글이 없습니다."}</p>
+            <p className={styles.email}>{user?.email}</p>
           </div>
         </div>
       </div>
 
       {/* 스토리 하이라이트 */}
-      <div className="mb-8 border-t border-gray-200 pt-4">
-        <div className="flex space-x-4 overflow-x-auto pb-2">
-          {/* 하이라이트 항목들 */}
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 rounded-full border border-gray-300 flex items-center justify-center mb-1">
-              <span className="text-3xl text-gray-300">+</span>
+      <div className={styles.storyHighlight}>
+        <div className={styles.flexSpaceX4}>
+          <div className={styles.flexItemsCenter}>
+            <div className={styles.w16h16}>
+              <span className={styles.text3xl}>+</span>
             </div>
-            <span className="text-xs">새로 만들기</span>
+            <span className={styles.textxs}>새로 만들기</span>
           </div>
-          {/* 추가 하이라이트 */}
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 rounded-full border border-gray-300 overflow-hidden mb-1">
+          <div className={styles.flexItemsCenter}>
+            <div className={styles.w16h16}>
               <img
                 src="https://via.placeholder.com/64"
                 alt="하이라이트"
-                className="w-full h-full object-cover"
+                className={styles.wFull}
               />
             </div>
-            <span className="text-xs">좋아하는 영화</span>
+            <span className={styles.textxs}>좋아하는 영화</span>
           </div>
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 rounded-full border border-gray-300 overflow-hidden mb-1">
+          <div className={styles.flexItemsCenter}>
+            <div className={styles.w16h16}>
               <img
                 src="https://via.placeholder.com/64"
                 alt="하이라이트"
-                className="w-full h-full object-cover"
+                className={styles.wFull}
               />
             </div>
-            <span className="text-xs">리뷰 모음</span>
+            <span className={styles.textxs}>리뷰 모음</span>
           </div>
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 rounded-full border border-gray-300 overflow-hidden mb-1">
+          <div className={styles.flexItemsCenter}>
+            <div className={styles.w16h16}>
               <img
                 src="https://via.placeholder.com/64"
                 alt="하이라이트"
-                className="w-full h-full object-cover"
+                className={styles.wFull}
               />
             </div>
-            <span className="text-xs">영화제</span>
+            <span className={styles.textxs}>영화제</span>
           </div>
         </div>
       </div>
 
       {/* 탭 메뉴 */}
-      <div className="border-t border-gray-200">
-        <div className="flex justify-center">
-          <button
-            className={`px-6 py-3 flex items-center ${activeTab === "posts" ? "border-t border-black text-black" : "text-gray-500"}`}
-            onClick={() => setActiveTab("posts")}
-          >
-            <FaTh className="mr-1" /> 게시물
-          </button>
-          <button
-            className={`px-6 py-3 flex items-center ${activeTab === "reviews" ? "border-t border-black text-black" : "text-gray-500"}`}
-            onClick={() => setActiveTab("reviews")}
-          >
-            <FaPencilAlt className="mr-1" /> 리뷰
-          </button>
-          <button
-            className={`px-6 py-3 flex items-center ${activeTab === "likes" ? "border-t border-black text-black" : "text-gray-500"}`}
-            onClick={() => setActiveTab("likes")}
-          >
-            <FaHeart className="mr-1" /> 좋아요
-          </button>
-          <button
-            className={`px-6 py-3 flex items-center ${activeTab === "scraps" ? "border-t border-black text-black" : "text-gray-500"}`}
-            onClick={() => setActiveTab("scraps")}
-          >
-            <FaBookmark className="mr-1" /> 스크랩
-          </button>
-        </div>
+      <div className={styles.tabMenu}>
+        <button
+          className={activeTab === "posts" ? styles.activeTab : ""}
+          onClick={() => setActiveTab("posts")}
+        >
+          <FaTh className={styles.mr1} /> 게시물
+        </button>
+        <button
+          className={activeTab === "reviews" ? styles.activeTab : ""}
+          onClick={() => setActiveTab("reviews")}
+        >
+          <FaPencilAlt className={styles.mr1} /> 리뷰
+        </button>
+        <button
+          className={activeTab === "likes" ? styles.activeTab : ""}
+          onClick={() => setActiveTab("likes")}
+        >
+          <FaHeart className={styles.mr1} /> 좋아요
+        </button>
+        <button
+          className={activeTab === "scraps" ? styles.activeTab : ""}
+          onClick={() => setActiveTab("scraps")}
+        >
+          <FaBookmark className={styles.mr1} /> 스크랩
+        </button>
       </div>
 
-      {/* 게시물 그리드 */}
-      {activeTab === "posts" && (
-        <div className="grid grid-cols-3 gap-1 md:gap-4 mt-2">
-          {dummyPosts.map((post) => (
-            <div key={post.id} className="relative group aspect-square">
-              <img
-                src={post.imageUrl}
-                alt={`게시물 ${post.id}`}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200">
-                <div className="flex items-center space-x-4 text-white">
-                  <div className="flex items-center">
-                    <FaHeart className="mr-1" /> {post.likeCount}
-                  </div>
-                  <div className="flex items-center">
-                    <FaBookmark className="mr-1" /> {post.commentCount}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 리뷰 목록 */}
-      {activeTab === "reviews" && (
-        <div className="mt-4">
-          {dummyReviews.length > 0 ? (
-            <div className="space-y-4">
-              {dummyReviews.map((review) => (
-                <div
-                  key={review.id}
-                  className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold text-lg">{review.movieTitle}</h3>
-                    <div className="flex items-center">
-                      <FaStar className="text-yellow-400 mr-1" />
-                      <span className="font-medium">{review.rating}</span>
-                    </div>
-                  </div>
-                  <p className="text-gray-700 mb-3">{review.content}</p>
-                  <div className="text-sm text-gray-500">{review.date}</div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-8 text-center py-12 text-gray-500">
-              <FaPencilAlt className="text-4xl mx-auto mb-4" />
-              <h3 className="text-xl mb-2">작성한 리뷰가 없습니다</h3>
-              <p className="max-w-md mx-auto">
-                영화를 감상하고 첫 번째 리뷰를 작성해보세요.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 좋아요 목록 */}
-      {activeTab === "likes" && (
-        <div className="mt-4">
-          {dummyLikes.length > 0 ? (
-            <div className="space-y-4">
-              {dummyLikes.map((like) => (
-                <div
-                  key={like.id}
-                  className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
-                >
-                  {like.type === "movie" ? (
-                    <div className="flex">
-                      <img
-                        src={like.imageUrl}
-                        alt={like.title}
-                        className="w-16 h-24 object-cover rounded mr-4"
-                      />
-                      <div>
-                        <h3 className="font-bold">{like.title}</h3>
-                        <p className="text-sm text-gray-500 mt-1">영화</p>
-                        <p className="text-xs text-gray-400 mt-2">
-                          {like.date}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="flex items-center mb-2">
-                        <span className="font-medium mr-2">{like.author}</span>
-                        <span className="text-sm text-gray-500">의 리뷰</span>
-                      </div>
-                      <h3 className="font-bold mb-1">{like.title}</h3>
-                      <p className="text-gray-700 text-sm mb-2">
-                        {like.content}
-                      </p>
-                      <p className="text-xs text-gray-400">{like.date}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-8 text-center py-12 text-gray-500">
-              <FaHeart className="text-4xl mx-auto mb-4" />
-              <h3 className="text-xl mb-2">좋아요한 항목이 없습니다</h3>
-              <p className="max-w-md mx-auto">
-                영화, 리뷰, 게시물에 좋아요를 누르면 여기에 표시됩니다.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 스크랩 목록 */}
-      {activeTab === "scraps" && renderTabContent()}
+      {/* 탭 콘텐츠 */}
+      <div className={styles.tabContainer}>
+        {activeTab === "posts" && renderPostsTab()}
+        {activeTab === "reviews" && renderReviewsTab()}
+        {activeTab === "likes" && renderLikesTab()}
+        {activeTab === "scraps" && renderTabContent()}
+      </div>
     </div>
   );
 };

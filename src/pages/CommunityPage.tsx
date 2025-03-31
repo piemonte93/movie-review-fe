@@ -446,61 +446,107 @@ const CommunityPage: React.FC = () => {
     alert("테스트 알림이 생성되었습니다. 알림 아이콘을 확인해보세요.");
   };
 
-  // 좋아요 처리
-  const handlePostLike = async (postId: number) => {
+  // 게시글 좋아요 처리
+  const handleLike = async (postId: number) => {
     if (!isLoggedIn) {
       toast.error("좋아요를 누르려면 로그인이 필요합니다.");
+      navigate("/login", { state: { from: location } });
       return;
     }
 
     try {
-      const updatedPost = await backendApi.likePost(postId);
-      // 게시글 목록 새로고침
-      const postsResponse = await backendApi.getPosts(0, postsPerPage);
-      setPosts(postsResponse.content);
-      setVisiblePosts(postsResponse.content);
-      toast.success(
-        updatedPost.liked
-          ? "게시글을 좋아요 했습니다."
-          : "좋아요를 취소했습니다."
+      // 현재 게시글 찾기
+      const postToUpdate = visiblePosts.find((p) => p.id === postId);
+      if (!postToUpdate) return;
+      
+      // 현재 상태 확인
+      const wasLiked = postToUpdate.liked;
+      
+      await backendApi.likePost(postId);
+      setPosts((prevPosts) => 
+        prevPosts.map((post) => 
+          post.id === postId 
+            ? { 
+                ...post, 
+                liked: !post.liked,
+                disliked: post.disliked ? false : post.disliked,
+                likeCount: !post.liked ? post.likeCount + 1 : post.likeCount - 1,
+                dislikeCount: post.disliked ? post.dislikeCount - 1 : post.dislikeCount
+              } 
+            : post
+        )
       );
-    } catch (error: any) {
-      console.error("게시글 좋아요 실패:", error);
-      if (error.response?.status === 401) {
-        toast.error("세션이 만료되었습니다. 다시 로그인해주세요.");
-        navigate("/login", { state: { from: location } });
-      } else {
-        toast.error("게시글 좋아요에 실패했습니다.");
-      }
+      
+      setVisiblePosts((prevPosts) => 
+        prevPosts.map((post) => 
+          post.id === postId 
+            ? { 
+                ...post, 
+                liked: !post.liked,
+                disliked: post.disliked ? false : post.disliked,
+                likeCount: !post.liked ? post.likeCount + 1 : post.likeCount - 1,
+                dislikeCount: post.disliked ? post.dislikeCount - 1 : post.dislikeCount
+              } 
+            : post
+        )
+      );
+      
+      toast.success(wasLiked ? "좋아요를 취소했습니다" : "좋아요를 눌렀습니다");
+    } catch (error) {
+      console.error("좋아요 처리 실패:", error);
+      toast.error("좋아요 처리에 실패했습니다");
     }
   };
 
-  // 싫어요 처리
-  const handlePostDislike = async (postId: number) => {
+  // 게시글 싫어요 처리
+  const handleDislike = async (postId: number) => {
     if (!isLoggedIn) {
       toast.error("싫어요를 누르려면 로그인이 필요합니다.");
+      navigate("/login", { state: { from: location } });
       return;
     }
 
     try {
-      const updatedPost = await backendApi.dislikePost(postId);
-      // 게시글 목록 새로고침
-      const postsResponse = await backendApi.getPosts(0, postsPerPage);
-      setPosts(postsResponse.content);
-      setVisiblePosts(postsResponse.content);
-      toast.success(
-        updatedPost.disliked
-          ? "게시글을 싫어요 했습니다."
-          : "싫어요를 취소했습니다."
+      // 현재 게시글 찾기
+      const postToUpdate = visiblePosts.find((p) => p.id === postId);
+      if (!postToUpdate) return;
+      
+      // 현재 상태 확인
+      const wasDisliked = postToUpdate.disliked;
+      
+      await backendApi.dislikePost(postId);
+      setPosts((prevPosts) => 
+        prevPosts.map((post) => 
+          post.id === postId 
+            ? { 
+                ...post, 
+                disliked: !post.disliked,
+                liked: post.liked ? false : post.liked,
+                dislikeCount: !post.disliked ? post.dislikeCount + 1 : post.dislikeCount - 1,
+                likeCount: post.liked ? post.likeCount - 1 : post.likeCount
+              } 
+            : post
+        )
       );
-    } catch (error: any) {
-      console.error("게시글 싫어요 실패:", error);
-      if (error.response?.status === 401) {
-        toast.error("세션이 만료되었습니다. 다시 로그인해주세요.");
-        navigate("/login", { state: { from: location } });
-      } else {
-        toast.error("게시글 싫어요에 실패했습니다.");
-      }
+      
+      setVisiblePosts((prevPosts) => 
+        prevPosts.map((post) => 
+          post.id === postId 
+            ? { 
+                ...post, 
+                disliked: !post.disliked,
+                liked: post.liked ? false : post.liked,
+                dislikeCount: !post.disliked ? post.dislikeCount + 1 : post.dislikeCount - 1,
+                likeCount: post.liked ? post.likeCount - 1 : post.likeCount
+              } 
+            : post
+        )
+      );
+      
+      toast.success(wasDisliked ? "싫어요를 취소했습니다" : "싫어요를 눌렀습니다");
+    } catch (error) {
+      console.error("싫어요 처리 실패:", error);
+      toast.error("싫어요 처리에 실패했습니다");
     }
   };
 
@@ -963,7 +1009,7 @@ const CommunityPage: React.FC = () => {
                           <div className="flex items-center space-x-1">
                             <button
                               className={`p-1 rounded-md ${post.liked ? "text-blue-600" : "text-gray-400 hover:text-blue-600"}`}
-                              onClick={() => handlePostLike(post.id)}
+                              onClick={() => handleLike(post.id)}
                               disabled={!isLoggedIn}
                               title={isLoggedIn ? "좋아요" : "로그인 필요"}
                             >
@@ -976,7 +1022,7 @@ const CommunityPage: React.FC = () => {
                           <div className="flex items-center space-x-1">
                             <button
                               className={`p-1 rounded-md ${post.disliked ? "text-red-600" : "text-gray-400 hover:text-red-600"}`}
-                              onClick={() => handlePostDislike(post.id)}
+                              onClick={() => handleDislike(post.id)}
                               disabled={!isLoggedIn}
                               title={isLoggedIn ? "싫어요" : "로그인 필요"}
                             >
@@ -1218,18 +1264,20 @@ const CommunityPage: React.FC = () => {
                         <div className="flex items-center space-x-1">
                           <button
                             className={`p-1 rounded-md ${post.liked ? "text-blue-600" : "text-gray-400 hover:text-blue-600"}`}
-                            onClick={() => handlePostLike(post.id)}
+                            onClick={() => handleLike(post.id)}
                             disabled={!isLoggedIn}
                             title={isLoggedIn ? "좋아요" : "로그인 필요"}
                           >
                             <FaThumbsUp size={14} />
                           </button>
-                          <span className="text-sm">{post.likeCount || 0}</span>
+                          <span className="text-sm">
+                            {post.likeCount || 0}
+                          </span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <button
                             className={`p-1 rounded-md ${post.disliked ? "text-red-600" : "text-gray-400 hover:text-red-600"}`}
-                            onClick={() => handlePostDislike(post.id)}
+                            onClick={() => handleDislike(post.id)}
                             disabled={!isLoggedIn}
                             title={isLoggedIn ? "싫어요" : "로그인 필요"}
                           >

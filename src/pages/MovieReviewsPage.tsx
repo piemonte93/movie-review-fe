@@ -74,17 +74,17 @@ interface MovieReview {
   rating: number;
   movieTitle: string;
   movieId: number;
-  moviePoster?: string;
+  moviePoster: string;
   createdAt: Date;
   comments: Comment[];
-  likes: { userId: number }[];
-  dislikes: { userId: number }[];
+  likes: any[];
+  dislikes: any[];
   isSpoiler: boolean;
-  isLiked?: boolean;
-  isDisliked?: boolean;
-  likeCount?: number;
-  dislikeCount?: number;
-  commentCount?: number;
+  isLiked: boolean;
+  isDisliked: boolean;
+  likeCount: number;
+  dislikeCount: number;
+  commentCount: number;
   user: {
     id: number;
     username: string;
@@ -637,108 +637,129 @@ const MovieReviewsPage: React.FC = () => {
     }
   };
 
-  // 좋아요 처리
+  // 리뷰 좋아요 처리
   const handleReviewLike = async (reviewId: number) => {
     if (!isLoggedIn) {
+      toast.error("좋아요를 누르려면 로그인이 필요합니다.");
       navigate("/login", { state: { from: location } });
       return;
     }
 
     try {
-      // 실제 API 호출
-      const updatedReview = await backendApi.likeReview(reviewId);
-      console.log("서버 응답 (좋아요):", updatedReview);
-
-      // 리뷰 목록 업데이트
+      console.log("리뷰 좋아요 API 호출 시작:", reviewId);
+      const response = await backendApi.likeReview(reviewId);
+      console.log("리뷰 좋아요 API 응답:", response);
+      
+      // 현재 리뷰 찾기
+      const reviewToUpdate = reviews.find((r) => r.id === reviewId);
+      if (!reviewToUpdate) return;
+      
+      // 현재 상태 확인
+      const wasLiked = reviewToUpdate.isLiked;
+      
+      // 상태 업데이트 로직
       setReviews((prevReviews) =>
-        prevReviews.map((review) =>
+        prevReviews.map((review: MovieReview) =>
           review.id === reviewId
             ? {
                 ...review,
-                isLiked: updatedReview.isLiked,
-                likeCount: updatedReview.likeCount,
-                isDisliked: false,
-                dislikeCount: updatedReview.dislikeCount,
+                isLiked: !review.isLiked,
+                isDisliked: review.isDisliked ? false : review.isDisliked,
+                likeCount: !review.isLiked 
+                  ? (review.likeCount || 0) + 1 
+                  : Math.max(0, (review.likeCount || 0) - 1),
+                dislikeCount: review.isDisliked 
+                  ? Math.max(0, (review.dislikeCount || 0) - 1) 
+                  : review.dislikeCount || 0
               }
             : review
         )
       );
-
-      // 검색 결과도 업데이트
-      setSearchResults((prevResults) =>
-        prevResults.map((review) =>
+      
+      setVisibleReviews((prevReviews) =>
+        prevReviews.map((review: MovieReview) =>
           review.id === reviewId
             ? {
                 ...review,
-                isLiked: updatedReview.isLiked,
-                likeCount: updatedReview.likeCount,
-                isDisliked: false,
-                dislikeCount: updatedReview.dislikeCount,
+                isLiked: !review.isLiked,
+                isDisliked: review.isDisliked ? false : review.isDisliked,
+                likeCount: !review.isLiked 
+                  ? (review.likeCount || 0) + 1 
+                  : Math.max(0, (review.likeCount || 0) - 1),
+                dislikeCount: review.isDisliked 
+                  ? Math.max(0, (review.dislikeCount || 0) - 1) 
+                  : review.dislikeCount || 0
               }
             : review
         )
       );
-
-      toast.success(
-        updatedReview.isLiked
-          ? "좋아요가 추가되었습니다."
-          : "좋아요가 취소되었습니다."
-      );
+      
+      toast.success(wasLiked ? "좋아요를 취소했습니다." : "좋아요를 눌렀습니다.");
     } catch (error) {
-      console.error("좋아요 처리 실패:", error);
+      console.error("리뷰 좋아요 처리 실패:", error);
       toast.error("좋아요 처리에 실패했습니다.");
     }
   };
 
-  // 싫어요 처리
+  // 리뷰 싫어요 처리
   const handleReviewDislike = async (reviewId: number) => {
     if (!isLoggedIn) {
+      toast.error("싫어요를 누르려면 로그인이 필요합니다.");
       navigate("/login", { state: { from: location } });
       return;
     }
 
     try {
-      // 실제 API 호출
-      const updatedReview = await backendApi.dislikeReview(reviewId);
-      console.log("서버 응답 (싫어요):", updatedReview);
-
-      // 리뷰 목록 업데이트
+      console.log("리뷰 싫어요 API 호출 시작:", reviewId);
+      const response = await backendApi.dislikeReview(reviewId);
+      console.log("리뷰 싫어요 API 응답:", response);
+      
+      // 현재 리뷰 찾기
+      const reviewToUpdate = reviews.find((r) => r.id === reviewId);
+      if (!reviewToUpdate) return;
+      
+      // 현재 상태 확인
+      const wasDisliked = reviewToUpdate.isDisliked;
+      
       setReviews((prevReviews) =>
-        prevReviews.map((review) =>
+        prevReviews.map((review: MovieReview) =>
           review.id === reviewId
             ? {
                 ...review,
-                isDisliked: updatedReview.isDisliked,
-                dislikeCount: updatedReview.dislikeCount,
-                isLiked: false,
-                likeCount: updatedReview.likeCount,
+                isDisliked: !review.isDisliked,
+                isLiked: review.isLiked ? false : review.isLiked,
+                dislikeCount: !review.isDisliked 
+                  ? (review.dislikeCount || 0) + 1 
+                  : Math.max(0, (review.dislikeCount || 0) - 1),
+                likeCount: review.isLiked 
+                  ? Math.max(0, (review.likeCount || 0) - 1) 
+                  : review.likeCount || 0
               }
             : review
         )
       );
-
-      // 검색 결과도 업데이트
-      setSearchResults((prevResults) =>
-        prevResults.map((review) =>
+      
+      setVisibleReviews((prevReviews) =>
+        prevReviews.map((review: MovieReview) =>
           review.id === reviewId
             ? {
                 ...review,
-                isDisliked: updatedReview.isDisliked,
-                dislikeCount: updatedReview.dislikeCount,
-                isLiked: false,
-                likeCount: updatedReview.likeCount,
+                isDisliked: !review.isDisliked,
+                isLiked: review.isLiked ? false : review.isLiked,
+                dislikeCount: !review.isDisliked 
+                  ? (review.dislikeCount || 0) + 1 
+                  : Math.max(0, (review.dislikeCount || 0) - 1),
+                likeCount: review.isLiked 
+                  ? Math.max(0, (review.likeCount || 0) - 1) 
+                  : review.likeCount || 0
               }
             : review
         )
       );
-
-      toast.success(
-        updatedReview.isDisliked
-          ? "싫어요가 추가되었습니다."
-          : "싫어요가 취소되었습니다."
-      );
+      
+      toast.success(wasDisliked ? "싫어요를 취소했습니다." : "싫어요를 눌렀습니다.");
     } catch (error) {
-      console.error("싫어요 처리 실패:", error);
+      console.error("리뷰 싫어요 처리 실패:", error);
       toast.error("싫어요 처리에 실패했습니다.");
     }
   };

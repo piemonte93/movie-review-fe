@@ -68,6 +68,8 @@ export interface Comment {
   };
   likeCount: number;
   dislikeCount: number;
+  isLiked: boolean;
+  isDisliked: boolean;
 }
 
 // 게시글 관련 타입 정의
@@ -648,14 +650,36 @@ export const backendApi = {
     return response.data;
   },
 
-  // 리뷰 좋아요/싫어요 API
+  // 리뷰 좋아요
   likeReview: async (reviewId: number) => {
-    const response = await apiClient.post(`/reviews/${reviewId}/like`);
-    return response.data;
+    try {
+      const response = await apiClient.post(`/reviews/${reviewId}/like`);
+      return response.data;
+    } catch (error) {
+      console.error('리뷰 좋아요 처리 중 오류 발생:', error);
+      throw error;
+    }
   },
 
+  // 리뷰 싫어요
   dislikeReview: async (reviewId: number) => {
-    const response = await apiClient.post(`/reviews/${reviewId}/dislike`);
+    try {
+      const response = await apiClient.post(`/reviews/${reviewId}/dislike`);
+      return response.data;
+    } catch (error) {
+      console.error('리뷰 싫어요 처리 중 오류 발생:', error);
+      throw error;
+    }
+  },
+
+  // 좋아요한 리뷰 목록 가져오기
+  getLikedReviews: async (page = 0, size = 10) => {
+    const response = await apiClient.get("/users/me/liked-reviews", {
+      params: {
+        page,
+        size,
+      },
+    });
     return response.data;
   },
 };
