@@ -18,6 +18,20 @@ const apiClient = axios.create({
   timeout: 10000, // 10초 타임아웃
 });
 
+// 요청 인터셉터 추가
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 // 에러 발생 시 로그 기록을 위한 인터셉터 추가
 apiClient.interceptors.response.use(
   (response) => {
@@ -199,4 +213,96 @@ export const backendApi = {
   },
 
   // User related endpoints will be added later
+  getAllMovieReviews: async (
+    page = 0,
+    size = 10
+  ): Promise<{
+    content: {
+      id: number;
+      username: string;
+      user_profile_image_url: string | null;
+      movie_id: number;
+      movie_title: string;
+      movie_poster_path: string | null;
+      content: string;
+      rating: number;
+      created_at: string;
+      updated_at: string | null;
+    }[];
+    totalElements: number;
+    totalPages: number;
+    currentPage: number;
+    size: number;
+  }> => {
+    const response = await apiClient.get("/reviews", {
+      params: { page, size, sort: "created_at,desc" },
+    });
+    return response.data;
+  },
+
+  // TMDB 포스터 URL 생성 함수
+  getPosterUrl: (posterPath: string | null, size = "w154"): string => {
+    if (!posterPath) return "";
+    return `https://image.tmdb.org/t/p/${size}${posterPath}`;
+  },
+
+  // 영화 제목으로 검색하는 함수
+  searchMoviesByTitle: async (query: string): Promise<ContentResponse> => {
+    try {
+      const response = await apiClient.get("/contents/search", {
+        params: {
+          query,
+          page: 1,
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("영화 검색 API 요청 실패:", error);
+      if (axios.isAxiosError(error) && !error.response) {
+        throw new Error("네트워크 연결을 확인해 주세요.");
+      } else {
+        throw new Error("검색 결과를 불러오는데 실패했습니다.");
+      }
+    }
+  },
+
+  // 영화 리뷰 생성 함수
+  createMovieReview: async (reviewData: {
+    movie_id: number;
+    movie_title: string;
+    movie_poster_path: string;
+    content: string;
+    rating: number;
+  }): Promise<ReviewResponse> => {
+    try {
+      console.log("리뷰 생성 요청 데이터:", reviewData);
+      const token = localStorage.getItem("token");
+      console.log(
+        "토큰 페이로드:",
+        token ? JSON.parse(atob(token.split(".")[1])) : null
+      );
+      console.log("API 요청 헤더:", {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      });
+
+      const response = await apiClient.post("/review", reviewData);
+      return response.data;
+    } catch (error) {
+      console.log("리뷰 생성 API 요청 실패:", error);
+      if (axios.isAxiosError(error)) {
+        const errorMessage =
+          error.response?.data?.message || "리뷰 작성에 실패했습니다.";
+        if (
+          errorMessage.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다")
+        ) {
+          throw new Error(
+            "이미 이 영화에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
+          );
+        }
+        throw new Error(errorMessage);
+      }
+      throw new Error("리뷰 작성에 실패했습니다.");
+    }
+  },
 };

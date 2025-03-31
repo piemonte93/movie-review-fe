@@ -117,6 +117,25 @@ interface MovieReviewResponse {
   comments?: Comment[];
 }
 
+interface ReviewResponse {
+  content: Array<{
+    id: number;
+    username: string;
+    user_profile_image_url: string | null;
+    movie_id: number;
+    movie_title: string;
+    movie_poster_path: string | null;
+    content: string;
+    rating: number;
+    created_at: string;
+    updated_at: string | null;
+  }>;
+  totalElements: number;
+  totalPages: number;
+  currentPage: number;
+  size: number;
+}
+
 const MovieReviewsPage: React.FC = () => {
   const { isLoggedIn, user } = useAuth();
   const navigate = useNavigate();
@@ -240,319 +259,149 @@ const MovieReviewsPage: React.FC = () => {
     setMovieTitle("");
   };
 
-  // 리뷰 목록 가져오기
-  useEffect(() => {
-    const fetchReviews = async () => {
-      try {
-        setLoading(true);
-        const response = await backendApi.getAllMovieReviews(
-          page,
-          reviewsPerPage
+  // 리뷰 목록 가져오기 함수
+  const fetchReviews = async () => {
+    try {
+      setLoading(true);
+      const response = await backendApi.getAllMovieReviews(
+        page,
+        reviewsPerPage
+      );
+      console.log("리뷰 API 응답 원본:", JSON.stringify(response, null, 2));
+
+      if (response && response.content) {
+        const validReviews = response.content.filter(
+          (review) => review && review.id && review.username && review.movie_id
         );
-        console.log("리뷰 API 응답 원본:", JSON.stringify(response, null, 2)); // 전체 응답 로깅
+        console.log("유효한 리뷰:", validReviews);
 
-        // 디버깅용: 첫 번째 리뷰의 댓글 구조 확인
-        if (response?.content?.[0]) {
-          console.log("첫 번째 리뷰:", response.content[0]);
-          console.log("첫 번째 리뷰 댓글 필드:", response.content[0].comments);
-          if (response.content[0].commentList) {
-            console.log(
-              "첫 번째 리뷰 commentList 필드:",
-              response.content[0].commentList
-            );
-          }
-        }
+        const mappedReviews = validReviews.map((review) => {
+          const mappedComments: Comment[] = [];
+          console.log(`리뷰 ID ${review.id}의 댓글 데이터:`, []);
+          console.log(`리뷰 ID ${review.id}의 변환된 댓글:`, mappedComments);
 
-        if (response && response.content) {
-          // 백엔드 응답 구조에 맞게 필터링 로직 수정
-          const validReviews = response.content.filter(
-            (review) => review && review.id && review.userId && review.username
-          );
-          console.log("유효한 리뷰:", validReviews); // 디버깅용 로그 추가
+          return {
+            id: review.id,
+            title: review.movie_title,
+            content: review.content,
+            rating: review.rating,
+            movieTitle: review.movie_title,
+            movieId: review.movie_id,
+            moviePoster: review.movie_poster_path || "",
+            createdAt: new Date(review.created_at),
+            comments: mappedComments,
+            likes: [],
+            dislikes: [],
+            isSpoiler: false,
+            isLiked: false,
+            isDisliked: false,
+            likeCount: 0,
+            dislikeCount: 0,
+            commentCount: 0,
+            user: {
+              id: 0,
+              username: review.username,
+              profileImageUrl: review.user_profile_image_url,
+              reviewCount: 0,
+            },
+          };
+        });
 
-          // 리뷰 객체를 MovieReview 인터페이스에 맞게 변환
-          const mappedReviews = validReviews.map((review) => {
-            // 댓글 데이터는 초기에 빈 배열로 설정 (나중에 toggleComments에서 로드됨)
-            const mappedComments: Comment[] = [];
-            console.log(`리뷰 ID ${review.id}의 댓글 데이터:`, []);
-            console.log(`리뷰 ID ${review.id}의 변환된 댓글:`, mappedComments);
+        console.log("변환된 리뷰:", mappedReviews);
 
-            return {
-              id: review.id,
-              title: review.title,
-              content: review.content,
-              rating: review.rating,
-              movieTitle: review.movieTitle,
-              movieId: review.movieId,
-              moviePoster: review.moviePoster || "",
-              createdAt: new Date(review.createdAt),
-              comments: mappedComments, // 빈 배열로 시작
-              likes: review.likes || [],
-              dislikes: review.dislikes || [],
-              isSpoiler: review.isSpoiler,
-              isLiked: review.isLiked,
-              isDisliked: review.isDisliked,
-              likeCount: review.likeCount || 0,
-              dislikeCount: review.dislikeCount || 0,
-              commentCount: review.commentCount || 0,
-              user: {
-                id: review.userId,
-                username: review.username,
-                profileImageUrl: review.userProfileUrl,
-                reviewCount: review.reviewCount || 0,
-              },
-            };
-          });
-
-          console.log("변환된 리뷰:", mappedReviews); // 디버깅용 로그 추가
-
-          if (page === 0) {
-            setReviews(mappedReviews);
-            setVisibleReviews(mappedReviews);
-          } else {
-            setReviews((prev) => [...prev, ...mappedReviews]);
-            setVisibleReviews((prev) => [...prev, ...mappedReviews]);
-          }
-
-          setTotalPages(response.totalPages || 0);
-          setHasMore(response.number < (response.totalPages || 0) - 1);
+        if (page === 0) {
+          setReviews(mappedReviews);
+          setVisibleReviews(mappedReviews);
         } else {
-          console.error("Invalid response format:", response);
-          setReviews([]);
-          setVisibleReviews([]);
-          setTotalPages(0);
-          setHasMore(false);
+          setReviews((prev) => [...prev, ...mappedReviews]);
+          setVisibleReviews((prev) => [...prev, ...mappedReviews]);
         }
-      } catch (error) {
-        console.error("리뷰 목록 불러오기 실패:", error);
-        if (
-          error instanceof Error &&
-          error.message === "로그인이 필요합니다."
-        ) {
-          toast.error("로그인이 필요합니다.");
-          navigate("/login", { state: { from: location } });
-        } else {
-          toast.error("리뷰 목록을 불러오는데 실패했습니다.");
-        }
+
+        setTotalPages(response.totalPages || 0);
+        setHasMore(response.currentPage < (response.totalPages || 0) - 1);
+      } else {
+        console.error("Invalid response format:", response);
         setReviews([]);
         setVisibleReviews([]);
         setTotalPages(0);
         setHasMore(false);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (error) {
+      console.error("리뷰 목록 불러오기 실패:", error);
+      if (error instanceof Error && error.message === "로그인이 필요합니다.") {
+        toast.error("로그인이 필요합니다.");
+        navigate("/login", { state: { from: location } });
+      } else {
+        toast.error("리뷰 목록을 불러오는데 실패했습니다.");
+      }
+      setReviews([]);
+      setVisibleReviews([]);
+      setTotalPages(0);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // useEffect에서 fetchReviews 호출
+  useEffect(() => {
     fetchReviews();
   }, [page, navigate, location]);
-
-  // 검색 결과가 변경될 때 visibleReviews 업데이트
-  useEffect(() => {
-    if (searchResults && searchResults.length > 0) {
-      setVisibleReviews(searchResults);
-    } else if (reviews && reviews.length > 0) {
-      setVisibleReviews(reviews);
-    } else {
-      setVisibleReviews([]);
-    }
-  }, [searchResults, reviews]);
 
   // 리뷰 작성 처리
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLoggedIn) {
+      toast.error("리뷰를 작성하려면 로그인이 필요합니다.");
+      return;
+    }
+
+    if (!selectedMovie) {
+      toast.error("영화를 선택해주세요.");
+      return;
+    }
+
+    if (!content.trim()) {
+      toast.error("리뷰 내용을 입력해주세요.");
+      return;
+    }
+
+    if (rating === 0) {
+      toast.error("별점을 선택해주세요.");
+      return;
+    }
+
     setSubmitting(true);
-    setError("");
-
     try {
-      // 영화 선택 여부 확인
-      if (!selectedMovie) {
-        setError("영화를 선택해주세요.");
-        toast.error("영화를 선택해주세요.");
-        setSubmitting(false);
-        return;
-      }
-
-      // 영화 ID와 제목이 유효한지 확인
-      if (!selectedMovie.id || !selectedMovie.title) {
-        setError("영화 정보가 유효하지 않습니다. 다시 선택해주세요.");
-        toast.error("영화 정보가 유효하지 않습니다. 다시 선택해주세요.");
-        setSubmitting(false);
-        return;
-      }
-
-      // 리뷰 데이터 구성
       const reviewData = {
-        title: title.trim(),
+        movie_id: selectedMovie.id,
+        movie_title: selectedMovie.title,
+        movie_poster_path: selectedMovie.poster_path,
         content: content.trim(),
-        rating: Number(rating),
-        movieId: Number(selectedMovie.id),
-        movieTitle: selectedMovie.title.trim(),
-        moviePoster: selectedMovie.poster_path || "",
-        isSpoiler: isSpoiler,
+        rating: rating,
       };
 
-      // 데이터 검증
-      console.log("전송할 리뷰 데이터:", reviewData);
-      console.log("movieId 디버깅:", {
-        원래값: selectedMovie.id,
-        타입: typeof selectedMovie.id,
-        변환후: Number(selectedMovie.id),
-        변환후타입: "number",
-      });
-
-      // 사용자 정보 및 토큰 상태 디버깅
-      const token = localStorage.getItem("token");
-      if (!token) {
-        setError("로그인이 필요합니다.");
-        toast.error("로그인이 필요합니다.");
-        setSubmitting(false);
-        return;
-      }
-
-      // 토큰 페이로드 디버깅
-      try {
-        const tokenParts = token.split(".");
-        if (tokenParts.length === 3) {
-          const payload = JSON.parse(atob(tokenParts[1]));
-          console.log("토큰 페이로드:", payload);
-        }
-      } catch (e) {
-        console.error("토큰 파싱 오류:", e);
-      }
-
-      // API 요청 헤더 디버깅
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      };
-      console.log("API 요청 헤더:", headers);
-
-      // 데이터 유효성 검증
-      if (!reviewData.movieId || isNaN(reviewData.movieId)) {
-        throw new Error("유효하지 않은 영화 ID입니다.");
-      }
-
-      if (!reviewData.movieTitle || reviewData.movieTitle.trim().length === 0) {
-        throw new Error("유효하지 않은 영화 제목입니다.");
-      }
-
-      // 최종 요청 데이터 로깅
-      console.log("최종 요청 데이터:", reviewData);
-      console.log("필드 값 및 타입 확인:", {
-        title: { 값: reviewData.title, 타입: typeof reviewData.title },
-        content: { 값: reviewData.content, 타입: typeof reviewData.content },
-        rating: { 값: reviewData.rating, 타입: typeof reviewData.rating },
-        movieId: { 값: reviewData.movieId, 타입: typeof reviewData.movieId },
-        movieTitle: {
-          값: reviewData.movieTitle,
-          타입: typeof reviewData.movieTitle,
-        },
-        isSpoiler: {
-          값: reviewData.isSpoiler,
-          타입: typeof reviewData.isSpoiler,
-        },
-      });
-
-      // 데이터 타입 변환 및 검증
-      const validatedData = {
-        title: String(reviewData.title).trim(),
-        content: String(reviewData.content).trim(),
-        rating: Number(reviewData.rating),
-        movieId: Number(reviewData.movieId), // Long 타입으로 명시적 변환
-        movieTitle: String(reviewData.movieTitle).trim(),
-        moviePoster: reviewData.moviePoster || "",
-        isSpoiler: Boolean(reviewData.isSpoiler),
-      };
-
-      // API 호출
-      const response = await backendApi.createMovieReview(validatedData);
-      console.log("API 응답:", response);
-
-      // 성공 처리
-      toast.success("리뷰가 등록되었습니다.");
-
-      // 폼 초기화
+      await backendApi.createMovieReview(reviewData);
+      toast.success("리뷰가 성공적으로 등록되었습니다.");
       resetForm();
-      setShowWriteForm(false); // 작성 폼 닫기
-
-      // 리뷰 목록 새로고침
-      try {
-        setLoading(true);
-        const updatedResponse = await backendApi.getAllMovieReviews(
-          0,
-          reviewsPerPage
-        );
-
-        if (updatedResponse && updatedResponse.content) {
-          // 백엔드 응답 구조에 맞게 필터링 및 매핑
-          const validReviews = updatedResponse.content.filter(
-            (review) => review && review.id && review.userId && review.username
-          );
-
-          // 리뷰 객체를 MovieReview 인터페이스에 맞게 변환
-          const mappedReviews = validReviews.map((review) => {
-            // 댓글 객체 변환
-            const mappedComments = (review.comments || []).map(
-              (comment: CommentResponse) => ({
-                id: comment.id,
-                content: comment.content,
-                createdAt: comment.createdAt,
-                username: comment.username,
-                profileImageUrl: comment.profileImageUrl,
-                likeCount: comment.likeCount,
-                dislikeCount: comment.dislikeCount,
-                userId: comment.userId,
-              })
-            );
-
-            return {
-              id: review.id,
-              title: review.title,
-              content: review.content,
-              rating: review.rating,
-              movieTitle: review.movieTitle,
-              movieId: review.movieId,
-              moviePoster: review.moviePoster || "",
-              createdAt: new Date(review.createdAt),
-              comments: mappedComments,
-              likes: review.likes || [],
-              dislikes: review.dislikes || [],
-              isSpoiler: review.isSpoiler,
-              isLiked: review.isLiked,
-              isDisliked: review.isDisliked,
-              likeCount: review.likeCount || 0,
-              dislikeCount: review.dislikeCount || 0,
-              commentCount: review.commentCount || mappedComments.length || 0,
-              user: {
-                id: review.userId,
-                username: review.username,
-                profileImageUrl: review.userProfileUrl,
-                reviewCount: review.reviewCount || 0,
-              },
-            };
-          });
-
-          setReviews(mappedReviews);
-          setVisibleReviews(mappedReviews);
-          setTotalPages(updatedResponse.totalPages || 0);
-          setHasMore(
-            updatedResponse.number < (updatedResponse.totalPages || 0) - 1
-          );
-          setPage(0); // 페이지 초기화
-        }
-      } catch (error) {
-        console.error("리뷰 목록 새로고침 실패:", error);
-      } finally {
-        setLoading(false);
-      }
+      setPage(0); // 페이지를 0으로 리셋
+      fetchReviews(); // 리뷰 목록 새로고침
     } catch (error) {
       console.error("리뷰 등록 오류:", error);
       if (error instanceof Error) {
-        setError(error.message);
-        toast.error(error.message);
+        if (
+          error.message.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다")
+        ) {
+          const shouldEdit = window.confirm(error.message);
+          if (shouldEdit) {
+            // TODO: 기존 리뷰 수정 페이지로 이동하는 로직 추가
+            toast.info("리뷰 수정 페이지로 이동합니다.");
+          }
+        } else {
+          toast.error(error.message);
+        }
       } else {
-        setError("리뷰 등록 중 오류가 발생했습니다.");
-        toast.error("리뷰 등록 중 오류가 발생했습니다.");
+        toast.error("리뷰 작성에 실패했습니다.");
       }
     } finally {
       setSubmitting(false);
