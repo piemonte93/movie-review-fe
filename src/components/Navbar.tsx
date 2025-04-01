@@ -248,6 +248,16 @@ const Navbar: React.FC = () => {
                     <FaCog className="mr-2 text-gray-400" />
                     설정
                   </Link>
+                  {user?.roles?.includes("ROLE_ADMIN") && (
+                    <Link
+                      to="/admin"
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      <FaCog className="mr-2 text-gray-400" />
+                      관리자 페이지
+                    </Link>
+                  )}
                   <div className="border-t border-gray-100"></div>
                   <button
                     onClick={handleLogout}

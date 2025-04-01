@@ -18,6 +18,7 @@ import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
 import CommunityPage from "./pages/CommunityPage";
 import MovieReviewsPage from "./pages/MovieReviewsPage";
+import AdminPage from "./pages/AdminPage";
 import { ToastContainer } from "react-toastify";
 
 function App() {
@@ -50,6 +51,7 @@ function App() {
                 <Route path="/profile/:userId" element={<UserProfilePage />} />
                 <Route path="/community" element={<CommunityPage />} />
                 <Route path="/movie-reviews" element={<MovieReviewsPage />} />
+                <Route path="/admin" element={<AdminPage />} />
               </Routes>
             </main>
           </div>
