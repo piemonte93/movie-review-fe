@@ -1,4 +1,9 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Outlet,
+} from "react-router-dom";
 import Navbar from "./components/Navbar";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -16,10 +21,21 @@ import { NotificationProvider } from "./context/NotificationContext";
 import ScrollToTop from "./components/ScrollToTop";
 import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
-import ProfileEditPage from "./pages/ProfileEditPage";
 import CommunityPage from "./pages/CommunityPage";
 import MovieReviewsPage from "./pages/MovieReviewsPage";
 import { ToastContainer } from "react-toastify";
+
+// v7에서 Layout 컴포넌트 생성 - Outlet 사용
+function Layout() {
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <Navbar />
+      <main className="pt-16">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
 
 function App() {
   return (
@@ -27,32 +43,30 @@ function App() {
       <ScrollToTop />
       <AuthProvider>
         <NotificationProvider>
-          <div className="min-h-screen bg-gray-100">
-            <Navbar />
-            <main className="pt-16">
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/register" element={<RegisterPage />} />
-                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-                <Route path="/verify-code" element={<VerifyCodePage />} />
-                <Route path="/reset-password" element={<ResetPasswordPage />} />
-                <Route path="/movie/:id" element={<ContentDetailPage />} />
-                <Route path="/movie/:id/videos" element={<ContentVideosPage />} />
-                <Route path="/tv/:id" element={<ContentDetailPage />} />
-                <Route path="/tv/:id/videos" element={<ContentVideosPage />} />
-                <Route path="/oauth2/redirect" element={<OAuth2RedirectHandler />} />
-                <Route path="/search" element={<SearchPage />} />
-                <Route path="/movies" element={<MoviesPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/profile/edit" element={<ProfileEditPage />} />
-                <Route path="/profile/:userId" element={<UserProfilePage />} />
-                <Route path="/community" element={<CommunityPage />} />
-                <Route path="/movie-reviews" element={<MovieReviewsPage />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </main>
-          </div>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/verify-code" element={<VerifyCodePage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/movie/:id" element={<ContentDetailPage />} />
+              <Route path="/movie/:id/videos" element={<ContentVideosPage />} />
+              <Route path="/tv/:id" element={<ContentDetailPage />} />
+              <Route path="/tv/:id/videos" element={<ContentVideosPage />} />
+              <Route
+                path="/oauth2/redirect"
+                element={<OAuth2RedirectHandler />}
+              />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/movies" element={<MoviesPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/profile/:userId" element={<UserProfilePage />} />
+              <Route path="/community" element={<CommunityPage />} />
+              <Route path="/movie-reviews" element={<MovieReviewsPage />} />
+            </Route>
+          </Routes>
           <ToastContainer
             position="top-right"
             autoClose={3000}
