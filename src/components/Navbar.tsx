@@ -102,21 +102,30 @@ const Navbar: React.FC = () => {
           <nav className="hidden md:block">
             <ul className="flex space-x-6">
               <li>
-                <Link to="/" className="hover:text-blue-600">
+                <button
+                  onClick={() => navigate("/")}
+                  className="hover:text-blue-600"
+                >
                   Home
-                </Link>
+                </button>
               </li>
               <li>
-                <Link to="/movies" className="hover:text-blue-600">
+                <button
+                  onClick={() => navigate("/movies")}
+                  className="hover:text-blue-600"
+                >
                   Movie
-                </Link>
+                </button>
               </li>
               <li>
-                <Link to="/tv-shows" className="hover:text-blue-600">
+                <button
+                  onClick={() => navigate("/tv-shows")}
+                  className="hover:text-blue-600"
+                >
                   TV Show
-                </Link>
+                </button>
               </li>
-              <li className="relative community-menu">
+              <li className="relative">
                 <button 
                   className="community-button flex items-center hover:text-blue-600"
                   onMouseEnter={() => setIsCommunityMenuOpen(true)}
@@ -131,20 +140,24 @@ const Navbar: React.FC = () => {
                     className="absolute left-0 mt-2 w-48 rounded-md bg-white py-2 shadow-lg ring-1 ring-black ring-opacity-5 z-50"
                     onMouseLeave={() => setIsCommunityMenuOpen(false)}
                   >
-                    <Link
-                      to="/movie-reviews"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={() => setIsCommunityMenuOpen(false)}
+                    <button
+                      onClick={() => {
+                        navigate("/movie-reviews");
+                        setIsCommunityMenuOpen(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
                       영화 리뷰
-                    </Link>
-                    <Link
-                      to="/community"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={() => setIsCommunityMenuOpen(false)}
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate("/community");
+                        setIsCommunityMenuOpen(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
                       커뮤니티
-                    </Link>
+                    </button>
                   </div>
                 )}
               </li>
@@ -232,22 +245,26 @@ const Navbar: React.FC = () => {
                       {user?.email || "email@example.com"}
                     </div>
                   </div>
-                  <Link
-                    to="/profile"
-                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => setIsUserMenuOpen(false)}
+                  <button
+                    onClick={() => {
+                      navigate("/profile");
+                      setIsUserMenuOpen(false);
+                    }}
+                    className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                   >
                     <FaUser className="mr-2 text-gray-400" />
                     마이페이지
-                  </Link>
-                  <Link
-                    to="/settings"
-                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    onClick={() => setIsUserMenuOpen(false)}
+                  </button>
+                  <button
+                    onClick={() => {
+                      navigate("/settings");
+                      setIsUserMenuOpen(false);
+                    }}
+                    className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                   >
                     <FaCog className="mr-2 text-gray-400" />
                     설정
-                  </Link>
+                  </button>
                   <div className="border-t border-gray-100"></div>
                   <button
                     onClick={handleLogout}
@@ -261,12 +278,12 @@ const Navbar: React.FC = () => {
             </div>
           ) : (
             // 로그인 상태가 아닐 때는 로그인/회원가입 버튼 표시
-            <Link
-              to="/login"
+            <button
+              onClick={() => navigate("/login")}
               className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
             >
               Log in/ Sign Up
-            </Link>
+            </button>
           )}
         </div>
       </div>

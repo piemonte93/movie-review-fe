@@ -5,8 +5,14 @@ export interface User {
   email: string;
   roles: string[];
   profileImageUrl?: string;
+  bio?: string;
   createdAt?: string;
   updatedAt?: string;
+  followerCount?: number;
+  followingCount?: number;
+  watchedMoviesCount?: number;
+  reviewedMoviesCount?: number;
+  isFollowing?: boolean;
 }
 
 export interface UserProfile {
@@ -15,6 +21,7 @@ export interface UserProfile {
   followerCount: number;
   watchedMoviesCount: number;
   reviewedMoviesCount: number;
+  isFollowing?: boolean;
 }
 
 export interface UserActivity {

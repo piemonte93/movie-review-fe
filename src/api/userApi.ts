@@ -10,6 +10,8 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         id: 1,
         username: "사용자",
         email: "user@example.com",
+        profileImageUrl: undefined,
+        bio: "",
         roles: ["USER"],
         createdAt: "2023-01-01",
         updatedAt: "2023-01-01",
@@ -21,7 +23,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     };
 
     // 실제 API 연결 코드는 다음과 같습니다:
-    // const response = await apiClient.get('/api/users/profile');
+    // const response = await apiClient.get('/api/profile/me');
     // return response.data;
   } catch (error) {
     console.error("Failed to fetch user profile", error);
@@ -65,7 +67,7 @@ export const getFollowRecommendations = async () => {
 
 // 프로필 이미지 업로드 함수
 export const uploadProfileImage = async (
-  file: File
+    file: File
 ): Promise<{ profileImageUrl: string }> => {
   try {
     const formData = new FormData();
@@ -129,7 +131,7 @@ export const getUserScraps = async () => {
         release_date: "2019-04-24",
         media_type: "movie",
         overview:
-          "인피니티 워 이후 절반만 살아남은 지구, 마지막 희망이 된 어벤져스.",
+            "인피니티 워 이후 절반만 살아남은 지구, 마지막 희망이 된 어벤져스.",
         backdrop_path: "/7RyHsO4yDXtBv1zUU3mTpHeQ0d5.jpg",
       },
       {
@@ -167,7 +169,7 @@ export const getUserScraps = async () => {
 
 // 다른 사용자의 프로필 정보 가져오기
 export const getOtherUserProfile = async (
-  userId: string
+    userId: string
 ): Promise<UserProfile> => {
   try {
     // 백엔드 연결이 되지 않으므로 목업 데이터 반환
@@ -199,7 +201,7 @@ export const getOtherUserProfile = async (
 
 // 다른 사용자의 활동 정보 가져오기
 export const getOtherUserActivity = async (
-  userId: string
+    userId: string
 ): Promise<UserActivity> => {
   try {
     // 백엔드 연결이 되지 않으므로 목업 데이터 반환
@@ -258,17 +260,184 @@ export const getOtherUserScraps = async (userId: string) => {
 
 // 사용자 팔로우/언팔로우 함수
 export const toggleFollow = async (
-  userId: string
+    userId: string
 ): Promise<{ isFollowing: boolean }> => {
   try {
-    // 백엔드 연결이 되지 않으므로 목업 데이터 반환
-    return { isFollowing: true };
+    // 백엔드 연결이 되지 않으므로 임의로 상태를 변경하는 방식으로 구현
+    // 실제 구현에서는 이전 상태를 기억할 필요가 없고 서버에서 전달받은 결과를 사용합니다
+
+    // localStorage에서 현재 팔로우 상태를 확인합니다
+    const followStateKey = `follow_state_${userId}`;
+    const currentState = localStorage.getItem(followStateKey);
+
+    // 현재 상태의 반대 값으로 설정 (처음에는 팔로우 상태로 설정)
+    const newFollowState = currentState === 'true' ? false : true;
+
+    // 로컬 스토리지에 상태 저장
+    localStorage.setItem(followStateKey, String(newFollowState));
+
+    // 로컬 스토리지에 팔로잉 목록 관리
+    const followingIdsKey = 'following_ids';
+    const followingIdsStr = localStorage.getItem(followingIdsKey) || '[]';
+    const followingIds = JSON.parse(followingIdsStr);
+
+    // 현재 사용자 ID 숫자로 변환
+    const userIdNum = parseInt(userId);
+
+    if (newFollowState) {
+      // 팔로우 추가
+      if (!followingIds.includes(userIdNum)) {
+        followingIds.push(userIdNum);
+      }
+    } else {
+      // 팔로우 제거
+      const index = followingIds.indexOf(userIdNum);
+      if (index > -1) {
+        followingIds.splice(index, 1);
+      }
+    }
+
+    // 로컬 스토리지에 저장
+    localStorage.setItem(followingIdsKey, JSON.stringify(followingIds));
+
+    console.log(`사용자 ${userId} 팔로우 상태 변경: ${newFollowState}`);
+    console.log(`팔로잉 목록:`, followingIds);
+
+    return { isFollowing: newFollowState };
 
     // 실제 API 연결 코드는 다음과 같습니다:
     // const response = await apiClient.post(`/api/users/${userId}/follow`);
     // return response.data;
   } catch (error) {
     console.error("Failed to toggle follow", error);
+    throw error;
+  }
+};
+
+// 팔로잉 목록 가져오기
+export const getFollowingList = async () => {
+  try {
+    // 로컬 스토리지에서 팔로잉 목록 가져오기
+    const followingIdsKey = 'following_ids';
+    const followingIdsStr = localStorage.getItem(followingIdsKey) || '[]';
+    const followingIds = JSON.parse(followingIdsStr);
+
+    console.log("로컬 스토리지에서 팔로잉 ID 목록 가져옴:", followingIds);
+
+    // 백엔드 연결이 되지 않으므로 목업 데이터 반환
+    const mockUsers = [
+      {
+        id: 1,
+        username: "영화광123",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "영화 리뷰어 / 시나리오 작가 / 영화제 심사위원"
+      },
+      {
+        id: 2,
+        username: "시네필",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "매일 한 편씩 영화 감상 중. 좋아하는 감독은 크리스토퍼 놀란."
+      },
+      {
+        id: 3,
+        username: "무비맨",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "영화 평론가 / 매주 새로운 영화 리뷰 업로드"
+      },
+      {
+        id: 4,
+        username: "영화사랑",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "액션, 스릴러 영화 전문 리뷰어. 추천 문의 환영합니다!"
+      },
+      {
+        id: 5,
+        username: "필름러버",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "고전영화 마니아. 1950-60년대 작품 위주로 소개합니다."
+      },
+      {
+        id: 6,
+        username: "영화덕후",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "독립영화 마니아, 영화제 평가단"
+      },
+      {
+        id: 7,
+        username: "무비로그",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "모든 장르의 영화를 좋아하는 영화 애호가, A24 팬"
+      },
+      {
+        id: 8,
+        username: "시네마틱",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "영화 사진작가, 촬영감독 지망생. 영화 미학 연구"
+      },
+      {
+        id: 9,
+        username: "필름워커",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "영화 제작/연출 스태프. 영화 기술적인 이야기를 공유합니다."
+      }
+    ];
+
+    // 실제로 팔로우하고 있는 사용자만 필터링
+    const followingUsers = mockUsers.filter(user =>
+        followingIds.includes(user.id)
+    );
+
+    console.log("필터링된 팔로잉 목록:", followingUsers);
+
+    return followingUsers;
+
+    // 실제 API 연결 코드는 다음과 같습니다:
+    // const response = await apiClient.get('/api/users/following');
+    // return response.data;
+  } catch (error) {
+    console.error("팔로잉 목록 가져오기 실패", error);
+    throw error;
+  }
+};
+
+// 팔로워 목록 가져오기
+export const getFollowersList = async () => {
+  try {
+    // 백엔드 연결이 되지 않으므로 목업 데이터 반환
+    const mockFollowers = [
+      {
+        id: 6,
+        username: "영화덕후",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "독립영화 마니아, 영화제 평가단"
+      },
+      {
+        id: 7,
+        username: "무비로그",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "모든 장르의 영화를 좋아하는 영화 애호가, A24 팬"
+      },
+      {
+        id: 8,
+        username: "시네마틱",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "영화 사진작가, 촬영감독 지망생. 영화 미학 연구"
+      },
+      {
+        id: 9,
+        username: "필름워커",
+        profileImageUrl: "https://via.placeholder.com/40",
+        bio: "영화 제작/연출 스태프. 영화 기술적인 이야기를 공유합니다."
+      }
+    ];
+
+    return mockFollowers;
+
+    // 실제 API 연결 코드는 다음과 같습니다:
+    // const response = await apiClient.get('/api/users/followers');
+    // return response.data;
+  } catch (error) {
+    console.error("팔로워 목록 가져오기 실패", error);
     throw error;
   }
 };
