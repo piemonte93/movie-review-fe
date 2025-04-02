@@ -100,3 +100,22 @@ export interface VideoResponse {
   id: number;
   results: Video[];
 }
+
+export interface TvShow extends Content {
+  type: "tv";
+  first_air_date?: string;
+  last_air_date?: string;
+  number_of_seasons?: number;
+  number_of_episodes?: number;
+  status?: string;
+  networks?: Array<{
+    id: number;
+    name: string;
+    logo_path: string | null;
+  }>;
+  created_by?: Array<{
+    id: number;
+    name: string;
+    profile_path: string | null;
+  }>;
+}
