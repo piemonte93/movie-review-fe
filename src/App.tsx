@@ -19,6 +19,8 @@ import UserProfilePage from "./pages/UserProfilePage";
 import CommunityPage from "./pages/CommunityPage";
 import MovieReviewsPage from "./pages/MovieReviewsPage";
 import { ToastContainer } from "react-toastify";
+import TvShowsPage from "./pages/TvShowsPage";
+import Footer from "./components/Footer";
 
 function App() {
   return (
@@ -26,9 +28,9 @@ function App() {
       <ScrollToTop />
       <AuthProvider>
         <NotificationProvider>
-          <div className="min-h-screen bg-gray-100">
+          <div className="flex flex-col min-h-screen">
             <Navbar />
-            <main className="pt-16">
+            <main className="flex-grow pt-20 pb-8">
               <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/login" element={<LoginPage />} />
@@ -46,12 +48,14 @@ function App() {
                 />
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/movies" element={<MoviesPage />} />
+                <Route path="/tv" element={<TvShowsPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/profile/:userId" element={<UserProfilePage />} />
                 <Route path="/community" element={<CommunityPage />} />
                 <Route path="/movie-reviews" element={<MovieReviewsPage />} />
               </Routes>
             </main>
+            <Footer />
           </div>
           <ToastContainer
             position="top-right"

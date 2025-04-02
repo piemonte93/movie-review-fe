@@ -112,7 +112,7 @@ const Navbar: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/tv-shows" className="hover:text-blue-600">
+                <Link to="/tv" className="hover:text-blue-600">
                   TV Show
                 </Link>
               </li>

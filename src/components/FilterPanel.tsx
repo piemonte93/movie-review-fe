@@ -69,6 +69,9 @@ interface FilterPanelProps {
   setIsForeignMovie: (isForeign: boolean) => void;
   applyFilters: () => void;
   resetFilters: () => void;
+  networkInput?: string;
+  setNetworkInput?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  isTvShow?: boolean;
 }
 
 const FilterPanel: React.FC<FilterPanelProps> = ({
@@ -90,6 +93,9 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   setIsForeignMovie,
   applyFilters,
   resetFilters,
+  networkInput = "",
+  setNetworkInput,
+  isTvShow = false,
 }) => {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
@@ -183,42 +189,62 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         </div>
       </div>
 
-      {/* 국내/해외 영화 필터 */}
-      <div className="mb-6">
-        <h3 className="font-medium mb-2">영화 지역</h3>
-        <div className="space-y-2">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              className="mr-2"
-              checked={isKoreanMovie}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setIsKoreanMovie(checked);
-                if (checked && isForeignMovie) {
-                  setIsForeignMovie(false);
-                }
-              }}
-            />
-            <span className="text-sm">한국 영화만 보기</span>
-          </label>
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              className="mr-2"
-              checked={isForeignMovie}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setIsForeignMovie(checked);
-                if (checked && isKoreanMovie) {
-                  setIsKoreanMovie(false);
-                }
-              }}
-            />
-            <span className="text-sm">해외 영화만 보기</span>
-          </label>
+      {/* 국내/해외 영화 필터 - TV 쇼가 아닐 때만 표시 */}
+      {!isTvShow && (
+        <div className="mb-6">
+          <h3 className="font-medium mb-2">영화 지역</h3>
+          <div className="space-y-2">
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                className="mr-2"
+                checked={isKoreanMovie}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setIsKoreanMovie(checked);
+                  if (checked && isForeignMovie) {
+                    setIsForeignMovie(false);
+                  }
+                }}
+              />
+              <span className="text-sm">한국 영화만 보기</span>
+            </label>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                className="mr-2"
+                checked={isForeignMovie}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setIsForeignMovie(checked);
+                  if (checked && isKoreanMovie) {
+                    setIsKoreanMovie(false);
+                  }
+                }}
+              />
+              <span className="text-sm">해외 영화만 보기</span>
+            </label>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* 방송사 필터 - TV 쇼일 때만 표시 */}
+      {isTvShow && setNetworkInput && (
+        <div className="mb-6">
+          <h3 className="font-medium mb-2">방송사</h3>
+          <div className="space-y-2">
+            <input
+              type="text"
+              className="w-full p-2 border border-gray-300 rounded"
+              placeholder="방송사 이름 입력"
+              value={networkInput}
+              onChange={setNetworkInput}
+            />
+            <div className="text-xs text-gray-500 mt-1">
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 버튼 그룹 */}
       <div className="flex space-x-2">
