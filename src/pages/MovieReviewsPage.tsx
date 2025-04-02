@@ -649,35 +649,21 @@ const MovieReviewsPage: React.FC = () => {
       const updatedReview = await backendApi.likeReview(reviewId);
       console.log("서버 응답 (좋아요):", updatedReview);
 
-      // 리뷰 목록 업데이트
-      setReviews((prevReviews) =>
-        prevReviews.map((review) =>
-          review.id === reviewId
-            ? {
-                ...review,
-                isLiked: updatedReview.isLiked,
-                likeCount: updatedReview.likeCount,
-                isDisliked: false,
-                dislikeCount: updatedReview.dislikeCount,
-              }
-            : review
-        )
-      );
+      const updateReviewState = (review: MovieReview) =>
+        review.id === reviewId
+          ? {
+              ...review,
+              isLiked: updatedReview.isLiked,
+              likeCount: updatedReview.likeCount,
+              isDisliked: false,
+              dislikeCount: updatedReview.dislikeCount,
+            }
+          : review;
 
-      // 검색 결과도 업데이트
-      setSearchResults((prevResults) =>
-        prevResults.map((review) =>
-          review.id === reviewId
-            ? {
-                ...review,
-                isLiked: updatedReview.isLiked,
-                likeCount: updatedReview.likeCount,
-                isDisliked: false,
-                dislikeCount: updatedReview.dislikeCount,
-              }
-            : review
-        )
-      );
+      // 리뷰 목록 업데이트
+      setReviews((prevReviews) => prevReviews.map(updateReviewState));
+      setVisibleReviews((prevReviews) => prevReviews.map(updateReviewState));
+      setSearchResults((prevResults) => prevResults.map(updateReviewState));
 
       toast.success(
         updatedReview.isLiked
@@ -702,35 +688,21 @@ const MovieReviewsPage: React.FC = () => {
       const updatedReview = await backendApi.dislikeReview(reviewId);
       console.log("서버 응답 (싫어요):", updatedReview);
 
-      // 리뷰 목록 업데이트
-      setReviews((prevReviews) =>
-        prevReviews.map((review) =>
-          review.id === reviewId
-            ? {
-                ...review,
-                isDisliked: updatedReview.isDisliked,
-                dislikeCount: updatedReview.dislikeCount,
-                isLiked: false,
-                likeCount: updatedReview.likeCount,
-              }
-            : review
-        )
-      );
+      const updateReviewState = (review: MovieReview) =>
+        review.id === reviewId
+          ? {
+              ...review,
+              isDisliked: updatedReview.isDisliked,
+              dislikeCount: updatedReview.dislikeCount,
+              isLiked: false,
+              likeCount: updatedReview.likeCount,
+            }
+          : review;
 
-      // 검색 결과도 업데이트
-      setSearchResults((prevResults) =>
-        prevResults.map((review) =>
-          review.id === reviewId
-            ? {
-                ...review,
-                isDisliked: updatedReview.isDisliked,
-                dislikeCount: updatedReview.dislikeCount,
-                isLiked: false,
-                likeCount: updatedReview.likeCount,
-              }
-            : review
-        )
-      );
+      // 리뷰 목록 업데이트
+      setReviews((prevReviews) => prevReviews.map(updateReviewState));
+      setVisibleReviews((prevReviews) => prevReviews.map(updateReviewState));
+      setSearchResults((prevResults) => prevResults.map(updateReviewState));
 
       toast.success(
         updatedReview.isDisliked

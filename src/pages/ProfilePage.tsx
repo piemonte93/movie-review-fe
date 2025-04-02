@@ -20,9 +20,13 @@ import {
   uploadProfileImage,
   updateUserProfile,
   getUserScraps,
+  getMyFollowers,
+  getMyFollowing,
+  toggleFollow,
 } from "../api/userApi";
 import { UserProfile, UserActivity } from "../types/user";
 import ContentCard from "../components/ContentCard";
+import FollowModal from "../components/FollowModal";
 
 // 프로필 페이지 컴포넌트
 const ProfilePage: React.FC = () => {
@@ -37,12 +41,19 @@ const ProfilePage: React.FC = () => {
   const [uploadingImage, setUploadingImage] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>("posts");
   const [scrappedMovies, setScrappedMovies] = useState<any[]>([]);
+  
+  // 모달 상태
+  const [showFollowersModal, setShowFollowersModal] = useState<boolean>(false);
+  const [showFollowingModal, setShowFollowingModal] = useState<boolean>(false);
+  const [followersData, setFollowersData] = useState<any[]>([]);
+  const [followingData, setFollowingData] = useState<any[]>([]);
 
   useEffect(() => {
     // 사용자 데이터 로드
     const fetchUserData = async () => {
       try {
         setLoading(true);
+        console.log("프로필 페이지에서 사용자 데이터 로드 시작");
 
         // 병렬로 여러 API 요청 처리
         const [profile, activity, recommendations, scraps] = await Promise.all([
@@ -52,6 +63,7 @@ const ProfilePage: React.FC = () => {
           getUserScraps(),
         ]);
 
+        console.log("프로필 데이터:", profile);
         setProfileData(profile);
         setActivityData(activity);
         setFollowRecommendations(recommendations);
@@ -67,6 +79,115 @@ const ProfilePage: React.FC = () => {
       fetchUserData();
     }
   }, [isLoggedIn]);
+
+  // 팔로워 모달을 위한 데이터 로딩
+  const loadFollowers = async () => {
+    try {
+      console.log("나의 팔로워 목록 로드 시작");
+      const followers = await getMyFollowers();
+      console.log("팔로워 목록:", followers);
+      setFollowersData(followers);
+      setShowFollowersModal(true);
+    } catch (error) {
+      console.error("팔로워 목록 로드 실패:", error);
+    }
+  };
+
+  // 팔로잉 모달을 위한 데이터 로딩
+  const loadFollowing = async () => {
+    try {
+      console.log("나의 팔로잉 목록 로드 시작");
+      const following = await getMyFollowing();
+      console.log("팔로잉 목록:", following);
+      setFollowingData(following);
+      setShowFollowingModal(true);
+    } catch (error) {
+      console.error("팔로잉 목록 로드 실패:", error);
+    }
+  };
+
+  // 모달 내에서 팔로우 상태 변경 시 처리
+  const handleModalToggleFollow = async (userId: number, newStatus: boolean) => {
+    try {
+      console.log(`모달 내 사용자 ${userId} 팔로우 상태 변경: ${newStatus}`);
+      
+      // API 호출
+      const result = await toggleFollow(userId.toString());
+      console.log("팔로우 토글 API 응답:", result);
+      
+      if (!result) {
+        throw new Error("팔로우 상태 변경 실패");
+      }
+
+      // 팔로워 목록 업데이트
+      setFollowersData(prevData => 
+        prevData.map((user) => {
+          if (user.id === userId) {
+            return { 
+              ...user, 
+              isFollowing: result.isFollowing,
+              mutualFollow: result.isFollowing && user.followsMe
+            };
+          }
+          return user;
+        })
+      );
+      
+      // 팔로잉 목록 업데이트
+      setFollowingData(prevData => 
+        prevData.map((user) => {
+          if (user.id === userId) {
+            return { 
+              ...user, 
+              isFollowing: result.isFollowing,
+              mutualFollow: result.isFollowing && user.followsMe
+            };
+          }
+          return user;
+        })
+      );
+      
+      // 프로필 데이터 업데이트
+      if (profileData) {
+        setProfileData(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            followerCount: result.followerCount || prev.followerCount,
+            followingCount: result.followingCount || prev.followingCount
+          };
+        });
+      }
+    } catch (error) {
+      console.error("모달 내 팔로우 상태 업데이트 실패:", error);
+    }
+  };
+
+  // 팔로워/팔로우 숫자 업데이트
+  const updateFollowCounts = async (isFollowing: boolean, userId: number) => {
+    try {
+      // API 호출
+      const result = await toggleFollow(userId.toString());
+      
+      if (!result) {
+        throw new Error("팔로우 상태 변경 실패");
+      }
+
+      // 프로필 데이터 업데이트
+      if (profileData) {
+        setProfileData(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            followerCount: result.followerCount || prev.followerCount,
+            followingCount: result.followingCount || prev.followingCount
+          };
+        });
+      }
+    } catch (error) {
+      console.error("팔로우 카운트 업데이트 실패:", error);
+    }
+  };
 
   // 프로필 이미지 선택 처리
   const handleProfileImageClick = () => {
@@ -94,14 +215,32 @@ const ProfilePage: React.FC = () => {
           return;
         }
 
+        console.log("프로필 이미지 업로드 시작");
         // 이미지 업로드 API 호출
         const result = await uploadProfileImage(file);
+        console.log("이미지 업로드 결과:", result);
 
         // 프로필 정보 업데이트 API 호출
         await updateUserProfile({ profileImageUrl: result.profileImageUrl });
 
         // AuthContext를 통해 사용자 정보 업데이트
         updateUserInfo({ profileImageUrl: result.profileImageUrl });
+
+        // 로컬 스토리지의 캐시된 프로필 데이터 업데이트
+        try {
+          const cachedProfileDataStr = localStorage.getItem('cached_profile_data');
+          if (cachedProfileDataStr) {
+            const cachedProfileData = JSON.parse(cachedProfileDataStr);
+            const updatedCachedProfile = {
+              ...cachedProfileData,
+              profileImageUrl: result.profileImageUrl
+            };
+            localStorage.setItem('cached_profile_data', JSON.stringify(updatedCachedProfile));
+            console.log("캐시된 프로필 데이터 업데이트 완료");
+          }
+        } catch (cacheError) {
+          console.error("캐시된 프로필 데이터 업데이트 실패:", cacheError);
+        }
 
         // 성공 메시지
         alert("프로필 이미지가 업데이트되었습니다.");
@@ -237,10 +376,143 @@ const ProfilePage: React.FC = () => {
           <ContentCard
             key={movie.id}
             content={movie}
-            type="movie"
             className="w-full"
           />
         ))}
+      </div>
+    );
+  };
+
+  // 포스트 탭 렌더링
+  const renderPostsTab = () => {
+    if (loading) {
+      return <div className="text-center py-8">로딩 중...</div>;
+    }
+
+    if (!dummyPosts || dummyPosts.length === 0) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          게시물이 없습니다.
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-3 gap-1 md:gap-4 mt-2">
+        {dummyPosts.map((post) => (
+          <div key={post.id} className="relative group aspect-square">
+            <img
+              src={post.imageUrl}
+              alt={`게시물 ${post.id}`}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200">
+              <div className="flex items-center space-x-4 text-white">
+                <div className="flex items-center">
+                  <FaHeart className="mr-1" /> {post.likeCount}
+                </div>
+                <div className="flex items-center">
+                  <FaComment className="mr-1" /> {post.commentCount}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // 리뷰 탭 렌더링
+  const renderReviewsTab = () => {
+    if (loading) {
+      return <div className="text-center py-8">로딩 중...</div>;
+    }
+
+    if (!dummyReviews || dummyReviews.length === 0) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          작성한 리뷰가 없습니다.
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-4">
+        <div className="space-y-4">
+          {dummyReviews.map((review) => (
+            <div
+              key={review.id}
+              className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="font-bold text-lg">{review.movieTitle}</h3>
+                <div className="flex items-center">
+                  <FaStar className="text-yellow-400 mr-1" />
+                  <span className="font-medium">{review.rating}</span>
+                </div>
+              </div>
+              <p className="text-gray-700 mb-3">{review.content}</p>
+              <div className="text-sm text-gray-500">{review.date}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // 좋아요 탭 렌더링
+  const renderLikesTab = () => {
+    if (loading) {
+      return <div className="text-center py-8">로딩 중...</div>;
+    }
+
+    if (!dummyLikes || dummyLikes.length === 0) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          좋아요한 항목이 없습니다.
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-4">
+        <div className="space-y-4">
+          {dummyLikes.map((like) => (
+            <div
+              key={like.id}
+              className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
+            >
+              {like.type === "movie" ? (
+                <div className="flex">
+                  <img
+                    src={like.imageUrl}
+                    alt={like.title}
+                    className="w-16 h-24 object-cover rounded mr-4"
+                  />
+                  <div>
+                    <h3 className="font-bold">{like.title}</h3>
+                    <p className="text-sm text-gray-500 mt-1">영화</p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      {like.date}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center mb-2">
+                    <span className="font-medium mr-2">{like.author}</span>
+                    <span className="text-sm text-gray-500">의 리뷰</span>
+                  </div>
+                  <h3 className="font-bold mb-1">{like.title}</h3>
+                  <p className="text-gray-700 text-sm mb-2">
+                    {like.content}
+                  </p>
+                  <p className="text-xs text-gray-400">{like.date}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
@@ -344,69 +616,31 @@ const ProfilePage: React.FC = () => {
                 </span>
                 <span className="ml-1">게시물</span>
               </div>
-              <div className="text-center md:text-left">
+              <button
+                onClick={loadFollowers}
+                className="text-center md:text-left hover:underline"
+              >
                 <span className="font-semibold">
                   {profileData?.followerCount || 0}
                 </span>
                 <span className="ml-1">팔로워</span>
-              </div>
-              <div className="text-center md:text-left">
+              </button>
+              <button
+                onClick={loadFollowing}
+                className="text-center md:text-left hover:underline"
+              >
                 <span className="font-semibold">
                   {profileData?.followingCount || 0}
                 </span>
                 <span className="ml-1">팔로우</span>
-              </div>
+              </button>
             </div>
 
             {/* 프로필 소개 */}
             <div>
-              <p className="text-sm">영화와 리뷰를 공유하는 공간</p>
+              <p className="text-sm">{user?.bio || "영화와 리뷰를 공유하는 공간"}</p>
               <p className="text-sm text-gray-500 mt-1">{user?.email}</p>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 스토리 하이라이트 */}
-      <div className="mb-8 border-t border-gray-200 pt-4">
-        <div className="flex space-x-4 overflow-x-auto pb-2">
-          {/* 하이라이트 항목들 */}
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 rounded-full border border-gray-300 flex items-center justify-center mb-1">
-              <span className="text-3xl text-gray-300">+</span>
-            </div>
-            <span className="text-xs">새로 만들기</span>
-          </div>
-          {/* 추가 하이라이트 */}
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 rounded-full border border-gray-300 overflow-hidden mb-1">
-              <img
-                src="https://via.placeholder.com/64"
-                alt="하이라이트"
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <span className="text-xs">좋아하는 영화</span>
-          </div>
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 rounded-full border border-gray-300 overflow-hidden mb-1">
-              <img
-                src="https://via.placeholder.com/64"
-                alt="하이라이트"
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <span className="text-xs">리뷰 모음</span>
-          </div>
-          <div className="flex flex-col items-center">
-            <div className="w-16 h-16 rounded-full border border-gray-300 overflow-hidden mb-1">
-              <img
-                src="https://via.placeholder.com/64"
-                alt="하이라이트"
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <span className="text-xs">영화제</span>
           </div>
         </div>
       </div>
@@ -442,119 +676,27 @@ const ProfilePage: React.FC = () => {
       </div>
 
       {/* 게시물 그리드 */}
-      {activeTab === "posts" && (
-        <div className="grid grid-cols-3 gap-1 md:gap-4 mt-2">
-          {dummyPosts.map((post) => (
-            <div key={post.id} className="relative group aspect-square">
-              <img
-                src={post.imageUrl}
-                alt={`게시물 ${post.id}`}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200">
-                <div className="flex items-center space-x-4 text-white">
-                  <div className="flex items-center">
-                    <FaHeart className="mr-1" /> {post.likeCount}
-                  </div>
-                  <div className="flex items-center">
-                    <FaBookmark className="mr-1" /> {post.commentCount}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      {renderTabContent()}
+      
+      {/* 팔로워 모달 */}
+      <FollowModal
+        isOpen={showFollowersModal}
+        onClose={() => setShowFollowersModal(false)}
+        title="팔로워"
+        users={followersData}
+        onToggleFollow={handleModalToggleFollow}
+        updateFollowCounts={updateFollowCounts}
+      />
 
-      {/* 리뷰 목록 */}
-      {activeTab === "reviews" && (
-        <div className="mt-4">
-          {dummyReviews.length > 0 ? (
-            <div className="space-y-4">
-              {dummyReviews.map((review) => (
-                <div
-                  key={review.id}
-                  className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold text-lg">{review.movieTitle}</h3>
-                    <div className="flex items-center">
-                      <FaStar className="text-yellow-400 mr-1" />
-                      <span className="font-medium">{review.rating}</span>
-                    </div>
-                  </div>
-                  <p className="text-gray-700 mb-3">{review.content}</p>
-                  <div className="text-sm text-gray-500">{review.date}</div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-8 text-center py-12 text-gray-500">
-              <FaPencilAlt className="text-4xl mx-auto mb-4" />
-              <h3 className="text-xl mb-2">작성한 리뷰가 없습니다</h3>
-              <p className="max-w-md mx-auto">
-                영화를 감상하고 첫 번째 리뷰를 작성해보세요.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 좋아요 목록 */}
-      {activeTab === "likes" && (
-        <div className="mt-4">
-          {dummyLikes.length > 0 ? (
-            <div className="space-y-4">
-              {dummyLikes.map((like) => (
-                <div
-                  key={like.id}
-                  className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
-                >
-                  {like.type === "movie" ? (
-                    <div className="flex">
-                      <img
-                        src={like.imageUrl}
-                        alt={like.title}
-                        className="w-16 h-24 object-cover rounded mr-4"
-                      />
-                      <div>
-                        <h3 className="font-bold">{like.title}</h3>
-                        <p className="text-sm text-gray-500 mt-1">영화</p>
-                        <p className="text-xs text-gray-400 mt-2">
-                          {like.date}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="flex items-center mb-2">
-                        <span className="font-medium mr-2">{like.author}</span>
-                        <span className="text-sm text-gray-500">의 리뷰</span>
-                      </div>
-                      <h3 className="font-bold mb-1">{like.title}</h3>
-                      <p className="text-gray-700 text-sm mb-2">
-                        {like.content}
-                      </p>
-                      <p className="text-xs text-gray-400">{like.date}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-8 text-center py-12 text-gray-500">
-              <FaHeart className="text-4xl mx-auto mb-4" />
-              <h3 className="text-xl mb-2">좋아요한 항목이 없습니다</h3>
-              <p className="max-w-md mx-auto">
-                영화, 리뷰, 게시물에 좋아요를 누르면 여기에 표시됩니다.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 스크랩 목록 */}
-      {activeTab === "scraps" && renderTabContent()}
+      {/* 팔로잉 모달 */}
+      <FollowModal
+        isOpen={showFollowingModal}
+        onClose={() => setShowFollowingModal(false)}
+        title="팔로잉"
+        users={followingData}
+        onToggleFollow={handleModalToggleFollow}
+        updateFollowCounts={updateFollowCounts}
+      />
     </div>
   );
 };

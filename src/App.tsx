@@ -15,6 +15,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import ScrollToTop from "./components/ScrollToTop";
 import ProfilePage from "./pages/ProfilePage";
+import ProfileEditPage from "./pages/ProfileEditPage";
 import UserProfilePage from "./pages/UserProfilePage";
 import CommunityPage from "./pages/CommunityPage";
 import MovieReviewsPage from "./pages/MovieReviewsPage";
@@ -51,6 +52,7 @@ function App() {
                 <Route path="/movies" element={<MoviesPage />} />
                 <Route path="/tv" element={<TvShowsPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/profile/edit" element={<ProfileEditPage />} />
                 <Route path="/profile/:userId" element={<UserProfilePage />} />
                 <Route path="/community" element={<CommunityPage />} />
                 <Route path="/movie-reviews" element={<MovieReviewsPage />} />

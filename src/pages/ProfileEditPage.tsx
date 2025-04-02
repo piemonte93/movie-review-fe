@@ -4,6 +4,9 @@ import { useAuth } from "../context/AuthContext";
 import { getUserProfile, updateUserProfile, uploadProfileImage } from "../api/userApi";
 import { FaUser, FaCamera, FaCheck } from "react-icons/fa";
 
+// 프로필 정보를 캐싱하기 위한 로컬 스토리지 키
+const PROFILE_CACHE_KEY = 'cached_profile_data';
+
 const ProfileEditPage: React.FC = () => {
   const { user, isLoggedIn, updateUserInfo } = useAuth();
   const navigate = useNavigate();
@@ -21,36 +24,8 @@ const ProfileEditPage: React.FC = () => {
   
   // 사용자 데이터 로딩
   useEffect(() => {
-    const initUserData = () => {
-      // 로컬 스토리지에서 사용자 정보 직접 가져오기
-      const userStr = localStorage.getItem('user');
-      if (userStr) {
-        try {
-          const localUser = JSON.parse(userStr);
-          setUsername(localUser.username || "");
-          setBio(localUser.bio || "");
-          setProfileImage(localUser.profileImageUrl);
-          setLoading(false);
-        } catch (e) {
-          console.error("사용자 정보 파싱 오류:", e);
-          // 파싱 오류 시 컨텍스트의 user 정보 사용
-          if (user) {
-            setUsername(user.username || "");
-            setBio(user.bio || "");
-            setProfileImage(user.profileImageUrl);
-            setLoading(false);
-          }
-        }
-      } else if (user) {
-        // 로컬 스토리지에 정보가 없으면 컨텍스트에서 가져오기 (폴백)
-        setUsername(user.username || "");
-        setBio(user.bio || "");
-        setProfileImage(user.profileImageUrl);
-        setLoading(false);
-      }
-    };
-    
     const fetchUserData = async () => {
+      console.log("====== 프로필 편집 페이지: 사용자 데이터 로딩 시작 ======");
       // 로컬 스토리지에서 직접 토큰 확인
       const token = localStorage.getItem('token');
       const userStr = localStorage.getItem('user');
@@ -64,17 +39,87 @@ const ProfileEditPage: React.FC = () => {
       
       try {
         setLoading(true);
-        initUserData(); // 먼저 로컬 상태로 초기화
+        console.log("인증된 사용자:", JSON.parse(userStr));
         
-        // 서버에서 최신 데이터 가져오기
-        const profile = await getUserProfile();
-        if (profile && profile.user) {
-          setUsername(profile.user.username || "");
-          setBio(profile.user.bio || "");
-          setProfileImage(profile.user.profileImageUrl);
+        // 로컬 스토리지에서 기본 사용자 정보 설정 (최우선 폴백)
+        if (userStr) {
+          try {
+            const localUser = JSON.parse(userStr);
+            console.log("로컬 스토리지에서 가져온 기본 사용자 정보:", localUser);
+            // 기본값 설정
+            setUsername(localUser.username || "");
+            setBio(localUser.bio || "");
+            setProfileImage(localUser.profileImageUrl);
+          } catch (e) {
+            console.error("로컬 스토리지 사용자 정보 파싱 오류:", e);
+          }
         }
+        
+        // 1. 캐시된 프로필 데이터 체크
+        const cachedProfileStr = localStorage.getItem(PROFILE_CACHE_KEY);
+        if (cachedProfileStr) {
+          try {
+            const cachedProfile = JSON.parse(cachedProfileStr);
+            console.log("캐시된 프로필 데이터 사용:", cachedProfile);
+            // 캐시된 데이터가 있으면 덮어씌움
+            if (cachedProfile.username) setUsername(cachedProfile.username);
+            if (cachedProfile.bio !== undefined) setBio(cachedProfile.bio);
+            if (cachedProfile.profileImageUrl) setProfileImage(cachedProfile.profileImageUrl);
+          } catch (cacheError) {
+            console.error("캐시된 프로필 데이터 파싱 오류:", cacheError);
+          }
+        }
+        
+        // 2. 서버에서 프로필 데이터 가져오기 (최신 데이터)
+        try {
+          console.log("서버에서 프로필 데이터 요청 중...");
+          const profile = await getUserProfile();
+          console.log("서버에서 받은 프로필 데이터:", profile);
+          
+          if (profile && profile.user) {
+            console.log("서버에서 가져온 프로필 데이터 상세:", profile.user);
+            
+            // 프로필 데이터 캐싱
+            try {
+              localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile.user));
+            } catch (cacheError) {
+              console.error("프로필 데이터 캐싱 오류:", cacheError);
+            }
+            
+            // 사용자 이름과 소개 설정 (서버 데이터 우선)
+            setUsername(profile.user.username || "");
+            setBio(profile.user.bio || "");
+            setProfileImage(profile.user.profileImageUrl);
+            
+            // local storage에 저장된 사용자 정보에도 bio 필드 업데이트
+            try {
+              const localUser = JSON.parse(userStr);
+              // bio가 undefined나 null이 아닌 경우에만 업데이트
+              const updatedUser = { 
+                ...localUser, 
+                username: profile.user.username || localUser.username || "",
+                bio: profile.user.bio !== undefined ? profile.user.bio : (localUser.bio || ""),
+                profileImageUrl: profile.user.profileImageUrl || localUser.profileImageUrl
+              };
+              localStorage.setItem('user', JSON.stringify(updatedUser));
+              console.log("로컬 스토리지 사용자 정보 업데이트 후:", updatedUser);
+            } catch (e) {
+              console.error("로컬 사용자 정보 업데이트 실패:", e);
+            }
+          } else {
+            console.warn("서버에서 받은 프로필 데이터가 없거나 불완전합니다:", profile);
+          }
+        } catch (apiError) {
+          console.error("API에서 프로필 정보 가져오기 실패:", apiError);
+        }
+        
+        console.log("====== 프로필 편집 페이지: 최종 상태 ======");
+        console.log("username:", username);
+        console.log("bio:", bio);
+        console.log("profileImage:", profileImage ? "있음" : "없음");
+        
       } catch (error) {
-        console.error("Failed to fetch user profile", error);
+        console.error("사용자 프로필 정보 로딩 실패:", error);
         setError("프로필 정보를 불러오는데 실패했습니다.");
       } finally {
         setLoading(false);
@@ -93,13 +138,9 @@ const ProfileEditPage: React.FC = () => {
       setSubmitting(true);
       setError("");
       
-      // 백엔드 API 호출
-      await updateUserProfile({
-        username: username,
-        bio: bio,
-      });
+      console.log("프로필 업데이트 시작:", { username, bio });
       
-      // 사용자 정보 가져오기 및 로컬 스토리지 업데이트
+      // 프로필 정보를 미리 업데이트 (실제 API 호출 전)
       const userStr = localStorage.getItem('user');
       if (userStr) {
         try {
@@ -109,23 +150,45 @@ const ProfileEditPage: React.FC = () => {
             username: username,
             bio: bio
           };
+          
+          // 즉시 로컬 스토리지 업데이트 (API 호출 결과와 상관없이)
           localStorage.setItem('user', JSON.stringify(updatedUser));
+          console.log("로컬 스토리지 사용자 정보 사전 업데이트:", updatedUser);
+          
+          // 프로필 캐시도 즉시 업데이트
+          localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({
+            ...localUser,
+            username: username,
+            bio: bio,
+            profileImageUrl: profileImage
+          }));
+          
+          // Context 업데이트도 즉시 수행
+          updateUserInfo({
+            username: username,
+            bio: bio,
+          });
         } catch (e) {
-          console.error("사용자 정보 업데이트 오류:", e);
+          console.error("사용자 정보 사전 업데이트 오류:", e);
         }
       }
       
-      // Context 업데이트
-      updateUserInfo({
+      // 백엔드 API 호출
+      const result = await updateUserProfile({
         username: username,
         bio: bio,
       });
       
-      // 성공 메시지 설정
+      console.log("프로필 업데이트 결과:", result);
+      
+      // 백엔드 응답이 성공이면 성공 메시지 표시
       setSuccess(true);
       
-      // 프로필 페이지로 즉시 리디렉션
-      window.location.href = '/profile';
+      // 프로필 페이지로 리디렉션 (약간 지연)
+      setTimeout(() => {
+        console.log("프로필 페이지로 리디렉션 중...");
+        window.location.href = '/profile';
+      }, 1000); // 사용자가 성공 메시지를 볼 수 있도록 짧은 지연
       
     } catch (error) {
       console.error("프로필 정보 업데이트 실패:", error);
@@ -161,8 +224,11 @@ const ProfileEditPage: React.FC = () => {
           return;
         }
 
+        console.log("프로필 이미지 업로드 시작:", file.name);
+        
         // 이미지 업로드 API 호출
         const result = await uploadProfileImage(file);
+        console.log("이미지 업로드 결과:", result);
         
         // 프로필 이미지 URL 업데이트
         setProfileImage(result.profileImageUrl);
@@ -177,6 +243,22 @@ const ProfileEditPage: React.FC = () => {
               profileImageUrl: result.profileImageUrl
             };
             localStorage.setItem('user', JSON.stringify(updatedUser));
+            console.log("로컬 스토리지 사용자 정보에 이미지 업데이트:", updatedUser);
+            
+            // 프로필 캐시 업데이트
+            try {
+              const cachedProfileStr = localStorage.getItem(PROFILE_CACHE_KEY);
+              if (cachedProfileStr) {
+                const cachedProfile = JSON.parse(cachedProfileStr);
+                localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({
+                  ...cachedProfile,
+                  profileImageUrl: result.profileImageUrl
+                }));
+                console.log("캐시된 프로필 데이터에 이미지 업데이트");
+              }
+            } catch (cacheError) {
+              console.error("캐시 업데이트 오류:", cacheError);
+            }
           } catch (e) {
             console.error("사용자 정보 업데이트 오류:", e);
           }
