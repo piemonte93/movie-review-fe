@@ -103,6 +103,7 @@ export interface VideoResponse {
 
 export interface TvShow extends Content {
   type: "tv";
+  title: string;
   first_air_date?: string;
   last_air_date?: string;
   number_of_seasons?: number;

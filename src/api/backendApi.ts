@@ -658,4 +658,60 @@ export const backendApi = {
     const response = await apiClient.post(`/reviews/${reviewId}/dislike`);
     return response.data;
   },
+
+  // TV 프로그램 필터링 API
+  getFilteredTvShows: async (
+    genres?: number | number[],
+    year?: number,
+    sortBy?: string,
+    page = 1,
+    query?: string,
+    voteAvgMin?: number,
+    isKoreanTv?: boolean,
+    isForeignTv?: boolean,
+    network?: string
+  ): Promise<ContentResponse> => {
+    try {
+      // genres가 배열인 경우 comma-separated string으로 변환
+      const genreParam = Array.isArray(genres) ? genres.join(",") : genres;
+
+      // 요청 파라미터 정리 - 불필요한 항목 제거
+      const params: Record<string, any> = {};
+      if (genreParam) params.genres = genreParam;
+      if (year) params.year = year;
+      if (sortBy) params.sort_by = sortBy;
+      if (page) params.page = page;
+      if (query) params.query = query;
+      if (voteAvgMin) params.voteAvgMin = voteAvgMin;
+      if (isKoreanTv) params.isKorean = isKoreanTv;
+      if (isForeignTv) params.isForeign = isForeignTv;
+      if (network) params.network = network;
+
+      const response = await apiClient.get("/contents/discover/tv", {
+        params: params,
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error("TV 프로그램 필터링 API 요청 실패:", error);
+
+      if (axios.isAxiosError(error)) {
+        if (error.code === "ECONNABORTED") {
+          throw new Error("요청 시간이 초과되었습니다. 다시 시도해 주세요.");
+        } else if (!error.response) {
+          throw new Error(
+            "백엔드 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해 주세요."
+          );
+        } else if (error.response.status === 404) {
+          return emptyContentResponse();
+        } else if (error.response.status >= 500) {
+          throw new Error(
+            "백엔드 서버에 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+          );
+        }
+      }
+
+      throw new Error("TV 프로그램 목록을 불러오는데 실패했습니다.");
+    }
+  },
 };
