@@ -276,7 +276,7 @@ const MovieReviewsPage: React.FC = () => {
         console.log("유효한 리뷰:", validReviews);
         console.log(
           "리뷰의 comment_count 값들:",
-          validReviews.map((review) => ({
+          validReviews.map((review: ReviewResponse["content"][0]) => ({
             id: review.id,
             comment_count: review.comment_count,
           }))
@@ -923,9 +923,9 @@ const MovieReviewsPage: React.FC = () => {
           </div>
         }
       >
-        <div className="space-y-6">
+        <div className="space-y-8">
           {visibleReviews.map((review) => (
-            <div key={review.id} className="bg-white rounded-lg shadow p-6">
+            <div key={review.id} className="bg-white rounded-lg shadow p-6 border border-gray-300">
               {/* 리뷰 헤더 - 작성자 정보 */}
               <div className="flex items-center mb-4">
                 <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center">
@@ -975,11 +975,11 @@ const MovieReviewsPage: React.FC = () => {
                     </span>
                   </p>
                   <div
-                    className={`inline-block transition-all duration-300 ${
+                    className={`transition-all duration-300 ${
                       review.isSpoiler ? "blur-sm hover:blur-none" : ""
                     }`}
                   >
-                    <p className="text-gray-700">{review.content}</p>
+                    <p className="text-gray-700 break-words whitespace-pre-wrap">{review.content}</p>
                   </div>
                 </div>
               </div>
