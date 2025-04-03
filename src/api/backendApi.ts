@@ -7,7 +7,7 @@ import {
 } from "../types/content";
 
 // This will point to our Spring Boot backend
-const BASE_URL = "http://localhost:8080/api";
+const BASE_URL = "http://localhost:8080";
 
 // Create axios instance with timeout
 const apiClient = axios.create({
@@ -15,7 +15,7 @@ const apiClient = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 10000, // 10초 타임아웃
+  timeout: 15000, // 15초 타임아웃
 });
 
 // 요청 인터셉터 추가
@@ -142,65 +142,65 @@ export interface UserItem {
 export const backendApi = {
   // Movie endpoints
   getTrendingMovies: async (): Promise<ContentResponse> => {
-    const response = await apiClient.get("/contents/trending");
+    const response = await apiClient.get("/api/contents/trending");
     return response.data;
   },
 
   getTrendingAll: async (): Promise<ContentResponse> => {
-    const response = await apiClient.get("/contents/trending-all");
+    const response = await apiClient.get("/api/contents/trending-all");
     return response.data;
   },
 
   getTopRatedMovies: async (): Promise<ContentResponse> => {
-    const response = await apiClient.get("/contents/top-rated");
+    const response = await apiClient.get("/api/contents/top-rated");
     return response.data;
   },
 
   getUpcomingMovies: async (): Promise<ContentResponse> => {
-    const response = await apiClient.get("/contents/upcoming");
+    const response = await apiClient.get("/api/contents/upcoming");
     return response.data;
   },
 
   getNowPlayingMovies: async (): Promise<ContentResponse> => {
-    const response = await apiClient.get("/contents/now-playing");
+    const response = await apiClient.get("/api/contents/now-playing");
     return response.data;
   },
 
   getMovieDetails: async (id: number): Promise<ContentDetail> => {
-    const response = await apiClient.get(`/contents/movie/${id}`);
+    const response = await apiClient.get(`/api/contents/movie/${id}`);
     return response.data;
   },
 
   getMovieReviews: async (id: number): Promise<ReviewResponse> => {
-    const response = await apiClient.get(`/contents/movie/${id}/reviews`);
+    const response = await apiClient.get(`/api/contents/movie/${id}/reviews`);
     return response.data;
   },
 
   getMovieVideos: async (id: number): Promise<VideoResponse> => {
-    const response = await apiClient.get(`/contents/movie/${id}/videos`);
+    const response = await apiClient.get(`/api/contents/movie/${id}/videos`);
     return response.data;
   },
 
   // TV 프로그램 관련 API
   getTvDetails: async (id: number): Promise<ContentDetail> => {
-    const response = await apiClient.get(`/contents/tv/${id}`);
+    const response = await apiClient.get(`/api/contents/tv/${id}`);
     return response.data;
   },
 
   getTvReviews: async (id: number): Promise<ReviewResponse> => {
-    const response = await apiClient.get(`/contents/tv/${id}/reviews`);
+    const response = await apiClient.get(`/api/contents/tv/${id}/reviews`);
     return response.data;
   },
 
   getTvVideos: async (id: number): Promise<VideoResponse> => {
-    const response = await apiClient.get(`/contents/tv/${id}/videos`);
+    const response = await apiClient.get(`/api/contents/tv/${id}/videos`);
     return response.data;
   },
 
   // 검색 API
   searchContents: async (query: string, page = 1): Promise<ContentResponse> => {
     try {
-      const response = await apiClient.get("/contents/search", {
+      const response = await apiClient.get("/api/contents/search", {
         params: {
           query,
           page,
@@ -243,7 +243,7 @@ export const backendApi = {
       if (isKoreanMovie) params.isKorean = isKoreanMovie;
       if (isForeignMovie) params.isForeign = isForeignMovie;
 
-      const response = await apiClient.get("/contents/discover/movie", {
+      const response = await apiClient.get("/api/contents/discover/movie", {
         params: params,
       });
 
@@ -275,7 +275,7 @@ export const backendApi = {
   getMovieCredits: async (movieId: number) => {
     try {
       const response = await apiClient.get(
-        `/contents/movie/${movieId}/credits`
+        `/api/contents/movie/${movieId}/credits`
       );
       return response.data;
     } catch (error) {
@@ -287,7 +287,7 @@ export const backendApi = {
   // TV 프로그램 출연진 정보 가져오기
   getTvCredits: async (tvId: number) => {
     try {
-      const response = await apiClient.get(`/contents/tv/${tvId}/credits`);
+      const response = await apiClient.get(`/api/contents/tv/${tvId}/credits`);
       return response.data;
     } catch (error) {
       console.error("Error fetching TV credits:", error);
@@ -317,7 +317,7 @@ export const backendApi = {
     currentPage: number;
     size: number;
   }> => {
-    const response = await apiClient.get("/reviews", {
+    const response = await apiClient.get("/api/reviews", {
       params: { page, size, sort: "created_at,desc" },
     });
     return response.data;
@@ -332,7 +332,7 @@ export const backendApi = {
   // 영화 제목으로 검색하는 함수
   searchMoviesByTitle: async (query: string): Promise<ContentResponse> => {
     try {
-      const response = await apiClient.get("/contents/search", {
+      const response = await apiClient.get("/api/contents/search", {
         params: {
           query,
           page: 1,
@@ -353,49 +353,39 @@ export const backendApi = {
   createMovieReview: async (reviewData: {
     movie_id: number;
     movie_title: string;
-    movie_poster_path: string;
+    movie_poster_path: string | null;
     title: string;
     content: string;
     rating: number;
     is_spoiler: boolean;
-  }): Promise<ReviewResponse> => {
+  }) => {
     try {
-      // 요청 데이터 유효성 검사
-      if (!reviewData.title) {
-        console.error("리뷰 제목이 없습니다:", reviewData);
-        throw new Error("리뷰 제목을 입력해주세요.");
-      }
-
-      if (!reviewData.content) {
-        console.error("리뷰 내용이 없습니다:", reviewData);
-        throw new Error("리뷰 내용을 입력해주세요.");
-      }
-
-      if (!reviewData.movie_id) {
-        console.error("영화 ID가 없습니다:", reviewData);
-        throw new Error("영화를 선택해주세요.");
-      }
-
-      // 요청 로깅
-      console.log(
-        "리뷰 생성 요청 데이터:",
-        JSON.stringify(reviewData, null, 2)
-      );
+      console.log("리뷰 작성 요청 데이터:", {
+        ...reviewData,
+        url: "/api/review",
+      });
 
       const token = localStorage.getItem("token");
-      if (!token) {
-        console.error("인증 토큰이 없습니다.");
-        throw new Error("로그인이 필요합니다.");
+
+      // JWT 토큰 디버깅
+      if (token) {
+        try {
+          const base64Url = token.split(".")[1];
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          const payload = JSON.parse(atob(base64));
+          console.log("토큰 페이로드:", payload);
+          console.log(
+            "토큰 만료 시간:",
+            new Date(payload.exp * 1000).toLocaleString()
+          );
+        } catch (e) {
+          console.error("토큰 파싱 실패:", e);
+        }
       }
 
-      console.log(
-        "토큰 페이로드:",
-        token ? JSON.parse(atob(token.split(".")[1])) : null
-      );
-
-      // API 요청 직전 확인 로그
-      console.log("최종 요청 데이터:", {
-        url: "/review",
+      // Axios 요청 사전 확인
+      console.log("API 요청 설정:", {
+        url: "/api/review",
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -404,7 +394,7 @@ export const backendApi = {
         data: reviewData,
       });
 
-      const response = await apiClient.post("/review", reviewData);
+      const response = await apiClient.post("/api/review", reviewData);
       console.log("리뷰 생성 성공 응답:", response.data);
       return response.data;
     } catch (error) {
@@ -533,7 +523,7 @@ export const backendApi = {
     size: number;
   }> => {
     try {
-      const response = await apiClient.get("/community/posts", {
+      const response = await apiClient.get("/api/community/posts", {
         params: { page, size },
       });
 
@@ -584,7 +574,7 @@ export const backendApi = {
     };
   }> => {
     try {
-      const response = await apiClient.post("/community/posts", postData);
+      const response = await apiClient.post("/api/community/posts", postData);
       return response.data;
     } catch (error) {
       console.error("게시글 작성 실패:", error);
@@ -611,7 +601,7 @@ export const backendApi = {
   }> => {
     try {
       const response = await apiClient.put(
-        `/community/posts/${postId}`,
+        `/api/community/posts/${postId}`,
         postData
       );
       return response.data;
@@ -623,7 +613,7 @@ export const backendApi = {
 
   deletePost: async (postId: number): Promise<void> => {
     try {
-      await apiClient.delete(`/community/posts/${postId}`);
+      await apiClient.delete(`/api/community/posts/${postId}`);
     } catch (error) {
       console.error("게시글 삭제 실패:", error);
       throw new Error("게시글 삭제에 실패했습니다.");
@@ -638,7 +628,9 @@ export const backendApi = {
     liked: boolean;
   }> => {
     try {
-      const response = await apiClient.post(`/community/posts/${postId}/like`);
+      const response = await apiClient.post(
+        `/api/community/posts/${postId}/like`
+      );
       return response.data;
     } catch (error) {
       console.error("게시글 좋아요 실패:", error);
@@ -655,7 +647,7 @@ export const backendApi = {
   }> => {
     try {
       const response = await apiClient.post(
-        `/community/posts/${postId}/dislike`
+        `/api/community/posts/${postId}/dislike`
       );
       return response.data;
     } catch (error) {
@@ -677,7 +669,7 @@ export const backendApi = {
     size: number;
   }> => {
     try {
-      const response = await apiClient.get("/community/posts/search", {
+      const response = await apiClient.get("/api/community/posts/search", {
         params: { query, category, page, size },
       });
       return response.data;
@@ -691,7 +683,7 @@ export const backendApi = {
   createComment: async (postId: number, content: string): Promise<Comment> => {
     try {
       const response = await apiClient.post(
-        `/community/posts/${postId}/comments`,
+        `/api/community/posts/${postId}/comments`,
         { content }
       );
       console.log("생성된 댓글의 날짜 형식:", response.data.createdAt);
@@ -706,7 +698,7 @@ export const backendApi = {
   likeComment: async (commentId: number): Promise<void> => {
     try {
       await apiClient.post(
-        `/comments/${commentId}/like`,
+        `/api/community/comments/${commentId}/like`,
         {},
         {
           headers: {
@@ -724,7 +716,7 @@ export const backendApi = {
   dislikeComment: async (commentId: number): Promise<void> => {
     try {
       await apiClient.post(
-        `/comments/${commentId}/dislike`,
+        `/api/community/comments/${commentId}/dislike`,
         {},
         {
           headers: {
@@ -742,7 +734,7 @@ export const backendApi = {
   deleteComment: async (commentId: number): Promise<void> => {
     try {
       console.log(`댓글 삭제 요청: commentId=${commentId}`);
-      await apiClient.delete(`/community/comments/${commentId}`);
+      await apiClient.delete(`/api/community/comments/${commentId}`);
     } catch (error) {
       console.error("댓글 삭제 실패:", error);
       throw new Error("댓글 삭제에 실패했습니다.");
@@ -752,7 +744,7 @@ export const backendApi = {
   // 사용자 검색
   searchUsers: async (query: string): Promise<UserItem[]> => {
     try {
-      const response = await apiClient.get("/users/search", {
+      const response = await apiClient.get("/api/users/search", {
         params: { query },
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -767,18 +759,55 @@ export const backendApi = {
 
   // 리뷰 관련 API
   getReviews: async (page = 0, size = 10, sort = "created_at,desc") => {
-    const response = await apiClient.get("/reviews", {
-      params: {
-        page,
-        size,
-        sort,
-      },
-    });
-    return response.data;
+    try {
+      console.log(`리뷰 데이터 요청: page=${page}, size=${size}, sort=${sort}`);
+      const response = await apiClient.get("/api/reviews", {
+        params: {
+          page,
+          size,
+          sort,
+        },
+      });
+
+      console.log("리뷰 API 응답 코드:", response.status);
+      console.log("리뷰 API 응답 헤더:", response.headers);
+
+      // 응답 데이터 구조 로깅
+      const responseData = response.data;
+      console.log("리뷰 응답 데이터 키:", Object.keys(responseData));
+
+      if (responseData.content) {
+        console.log(`리뷰 데이터 ${responseData.content.length}개 수신 성공`);
+        // 첫 번째 리뷰의 데이터 구조 샘플로 확인
+        if (responseData.content.length > 0) {
+          console.log("첫 번째 리뷰 샘플:", {
+            id: responseData.content[0].id,
+            title: responseData.content[0].title,
+            username: responseData.content[0].username,
+            // 추가 필드들...
+          });
+        }
+      } else {
+        console.log("리뷰 데이터가 없거나 content 배열이 없습니다");
+      }
+
+      return responseData;
+    } catch (error) {
+      console.error("리뷰 목록 가져오기 실패:", error);
+      if (axios.isAxiosError(error)) {
+        console.error("API 호출 오류 상세:", {
+          status: error.response?.status,
+          data: error.response?.data,
+          url: error.config?.url,
+          method: error.config?.method,
+        });
+      }
+      throw error;
+    }
   },
 
   getReviewComments: async (reviewId: number, page = 0, size = 10) => {
-    const response = await apiClient.get(`/reviews/${reviewId}/comments`, {
+    const response = await apiClient.get(`/api/reviews/${reviewId}/comments`, {
       params: {
         page,
         size,
@@ -788,7 +817,7 @@ export const backendApi = {
   },
 
   addReviewComment: async (reviewId: number, content: string) => {
-    const response = await apiClient.post(`/reviews/${reviewId}/comments`, {
+    const response = await apiClient.post(`/api/reviews/${reviewId}/comments`, {
       content,
     });
     return response.data;
@@ -800,7 +829,7 @@ export const backendApi = {
     content: string
   ) => {
     const response = await apiClient.put(
-      `/reviews/${reviewId}/comments/${commentId}`,
+      `/api/reviews/${reviewId}/comments/${commentId}`,
       {
         content,
       }
@@ -813,13 +842,13 @@ export const backendApi = {
       console.log(
         `댓글 삭제 요청: reviewId=${reviewId}, commentId=${commentId}`
       );
-      console.log(`요청 URL: /reviews/${reviewId}/comments/${commentId}`);
+      console.log(`요청 URL: /api/reviews/${reviewId}/comments/${commentId}`);
 
       const token = localStorage.getItem("token");
       console.log("인증 토큰:", token ? "토큰 있음" : "토큰 없음");
 
       const response = await apiClient.delete(
-        `/reviews/${reviewId}/comments/${commentId}`
+        `/api/reviews/${reviewId}/comments/${commentId}`
       );
 
       console.log("댓글 삭제 응답 상세:", {
@@ -846,33 +875,33 @@ export const backendApi = {
 
   likeReviewComment: async (reviewId: number, commentId: number) => {
     const response = await apiClient.post(
-      `/reviews/${reviewId}/comments/${commentId}/like`
+      `/api/reviews/${reviewId}/comments/${commentId}/like`
     );
     return response.data;
   },
 
   dislikeReviewComment: async (reviewId: number, commentId: number) => {
     const response = await apiClient.post(
-      `/reviews/${reviewId}/comments/${commentId}/dislike`
+      `/api/reviews/${reviewId}/comments/${commentId}/dislike`
     );
     return response.data;
   },
 
   // 리뷰 좋아요/싫어요 API
   likeReview: async (reviewId: number) => {
-    const response = await apiClient.post(`/reviews/${reviewId}/like`);
+    const response = await apiClient.post(`/api/reviews/${reviewId}/like`);
     return response.data;
   },
 
   dislikeReview: async (reviewId: number) => {
-    const response = await apiClient.post(`/reviews/${reviewId}/dislike`);
+    const response = await apiClient.post(`/api/reviews/${reviewId}/dislike`);
     return response.data;
   },
 
   // 영화 리뷰 삭제
   deleteMovieReview: async (reviewId: number): Promise<void> => {
     try {
-      await apiClient.delete(`/reviews/${reviewId}`);
+      await apiClient.delete(`/api/reviews/${reviewId}`);
     } catch (error) {
       console.error("리뷰 삭제 실패:", error);
       throw error;
@@ -894,7 +923,7 @@ export const backendApi = {
   ): Promise<void> => {
     try {
       console.log("리뷰 수정 데이터:", reviewData);
-      await apiClient.put(`/reviews/${reviewId}`, reviewData);
+      await apiClient.put(`/api/reviews/${reviewId}`, reviewData);
     } catch (error) {
       console.error("리뷰 수정 실패:", error);
       throw error;
@@ -904,7 +933,7 @@ export const backendApi = {
   // 사용자가 특정 영화에 대해 작성한 리뷰가 있는지 확인
   checkUserReviewForMovie: async (movieId: number): Promise<boolean> => {
     try {
-      const response = await apiClient.get(`/reviews/check`, {
+      const response = await apiClient.get(`/api/reviews/check`, {
         params: { movie_id: movieId },
       });
       return response.data.exists;
@@ -918,7 +947,7 @@ export const backendApi = {
   updateReviewTitle: async (reviewId: number, title: string): Promise<void> => {
     try {
       console.log("리뷰 제목 수정 데이터:", { title });
-      await apiClient.put(`/reviews/${reviewId}/title`, { title });
+      await apiClient.put(`/api/reviews/${reviewId}/title`, { title });
     } catch (error) {
       console.error("리뷰 제목 수정 실패:", error);
       throw error;

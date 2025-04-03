@@ -270,57 +270,59 @@ const MovieReviewsPage: React.FC = () => {
       setLoading(true);
       const response = await backendApi.getReviews(page, reviewsPerPage);
       console.log("리뷰 API 응답 원본:", JSON.stringify(response, null, 2));
+      console.log("API 응답 구조:", Object.keys(response));
+      console.log("content 배열 존재 여부:", !!response.content);
+      console.log("content 배열 길이:", response.content?.length || 0);
 
       if (response && response.content) {
+        // 로그에서 확인된 3개 리뷰가 있지만 프론트에서 보이지 않는 문제 해결
         const validReviews = response.content.filter(
-          (review: ReviewResponse["content"][0]) =>
-            review && review.id && review.username && review.movie_id
+          (review: any) => review && typeof review === "object"
         );
-        console.log("유효한 리뷰:", validReviews);
-        console.log(
-          "리뷰의 comment_count 값들:",
-          validReviews.map((review: ReviewResponse["content"][0]) => ({
+
+        console.log("유효한 리뷰 수:", validReviews.length);
+        console.log("유효한 리뷰 목록:", validReviews);
+
+        if (validReviews.length === 0) {
+          console.log("유효한 리뷰가 없습니다.");
+          setReviews([]);
+          setVisibleReviews([]);
+          setTotalPages(response.totalPages || 0);
+          setHasMore(false);
+          setLoading(false);
+          return;
+        }
+
+        const mappedReviews = validReviews.map((review: any) => {
+          console.log("리뷰 데이터 변환:", review.id, review);
+          return {
             id: review.id,
-            comment_count: review.comment_count,
-          }))
-        );
-
-        const mappedComments: Comment[] = [];
-        console.log(`리뷰 ID ${validReviews[0].id}의 댓글 데이터:`, []);
-        console.log(
-          `리뷰 ID ${validReviews[0].id}의 변환된 댓글:`,
-          mappedComments
-        );
-
-        const mappedReviews = validReviews.map(
-          (review: ReviewResponse["content"][0]) => {
-            return {
-              id: review.id,
-              title: review.title,
-              content: review.content,
-              rating: review.rating,
-              movieTitle: review.movie_title,
-              movieId: review.movie_id,
-              moviePoster: review.movie_poster_path || "",
-              createdAt: new Date(review.created_at),
-              comments: mappedComments,
-              likes: [],
-              dislikes: [],
-              isSpoiler: review.is_spoiler,
-              isLiked: false,
-              isDisliked: false,
-              likeCount: 0,
-              dislikeCount: 0,
-              commentCount: review.comment_count ?? 0,
-              user: {
-                id: 0,
-                username: review.username,
-                profileImageUrl: review.user_profile_image_url,
-                reviewCount: 0,
-              },
-            };
-          }
-        );
+            title: review.title || "",
+            content: review.content || "",
+            rating: review.rating || 0,
+            movieTitle: review.movieTitle || "",
+            movieId: review.movieId || 0,
+            moviePoster: review.moviePosterPath || "",
+            createdAt: review.createdAt
+              ? new Date(review.createdAt)
+              : new Date(),
+            comments: [],
+            likes: [],
+            dislikes: [],
+            isSpoiler: !!review.isSpoiler,
+            isLiked: !!review.isLiked,
+            isDisliked: !!review.isDisliked,
+            likeCount: review.likeCount || 0,
+            dislikeCount: review.dislikeCount || 0,
+            commentCount: review.commentCount || 0,
+            user: {
+              id: review.userId || 0,
+              username: review.username || "",
+              profileImageUrl: review.userProfileImageUrl || null,
+              reviewCount: 0,
+            },
+          };
+        });
 
         console.log("변환된 리뷰:", mappedReviews);
 
@@ -335,7 +337,7 @@ const MovieReviewsPage: React.FC = () => {
         setTotalPages(response.totalPages || 0);
         setHasMore(response.currentPage < (response.totalPages || 0) - 1);
       } else {
-        console.error("Invalid response format:", response);
+        console.log("리뷰 데이터가 없거나 형식이 올바르지 않습니다:", response);
         setReviews([]);
         setVisibleReviews([]);
         setTotalPages(0);
@@ -343,6 +345,11 @@ const MovieReviewsPage: React.FC = () => {
       }
     } catch (error) {
       console.error("리뷰 목록 불러오기 실패:", error);
+      if (error instanceof Error) {
+        console.error("에러 메시지:", error.message);
+        console.error("에러 스택:", error.stack);
+      }
+
       if (error instanceof Error && error.message === "로그인이 필요합니다.") {
         toast.error("로그인이 필요합니다.");
         navigate("/login", { state: { from: location } });
@@ -957,7 +964,25 @@ const MovieReviewsPage: React.FC = () => {
 
   // 포스터 URL 가져오기 함수
   const getPosterUrl = (posterPath: string | null, size = "w154") => {
-    return backendApi.getPosterUrl(posterPath, size);
+    if (!posterPath) return "https://via.placeholder.com/154x231?text=No+Image";
+
+    console.log("포스터 경로 처리 중:", posterPath);
+
+    // TMDB 포스터 URL 형식 확인 (일반적으로 "/abc123.jpg" 형태로 시작)
+    if (posterPath.startsWith("/")) {
+      console.log("TMDB 형식 포스터 경로 감지");
+      return `https://image.tmdb.org/t/p/${size}${posterPath}`;
+    }
+
+    // HTTP/HTTPS로 시작하는 전체 URL
+    if (posterPath.startsWith("http")) {
+      console.log("HTTP/HTTPS 형식 포스터 URL 감지");
+      return posterPath;
+    }
+
+    // 어떤 형식도 아닌 경우 (상대 경로)
+    console.log("알 수 없는 포스터 형식, 기본 API URL 경로 사용");
+    return posterPath;
   };
 
   // 폼 리셋 함수 추가
@@ -1296,18 +1321,40 @@ const MovieReviewsPage: React.FC = () => {
 
               {/* 영화 정보와 리뷰 내용 */}
               <div className="flex mb-4">
-                {review.moviePoster && (
-                  <img
-                    src={getPosterUrl(review.moviePoster)}
-                    alt={review.movieTitle}
-                    className="w-24 h-36 object-cover rounded mr-4"
-                  />
+                {review.moviePoster ? (
+                  <div className="w-24 mr-4">
+                    <img
+                      src={getPosterUrl(review.moviePoster)}
+                      alt={review.movieTitle || "영화 포스터"}
+                      className="w-24 h-36 object-cover rounded shadow-md"
+                      onError={(e) => {
+                        console.log("포스터 로딩 실패:", review.moviePoster);
+                        (e.target as HTMLImageElement).src =
+                          "https://via.placeholder.com/154x231?text=No+Image";
+                      }}
+                    />
+                    <p className="text-xs text-center mt-1 font-semibold text-gray-700 break-words">
+                      {review.movieTitle || "제목 없음"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="w-24 h-36 bg-gray-200 flex items-center justify-center rounded mr-4">
+                    <FaFilm className="text-gray-400 text-3xl" />
+                    <p className="text-xs text-center mt-1 font-semibold text-gray-700">
+                      {review.movieTitle || "제목 없음"}
+                    </p>
+                  </div>
                 )}
                 <div className="flex-1">
                   <p className="text-sm text-gray-600 mb-2">
-                    영화:{" "}
-                    <span className="text-blue-600 font-medium">
-                      {review.movieTitle}
+                    <span className="font-medium">영화:</span>{" "}
+                    <span
+                      className="text-blue-600 font-medium cursor-pointer hover:underline"
+                      onClick={() =>
+                        review.movieId && navigateToMovieDetail(review.movieId)
+                      }
+                    >
+                      {review.movieTitle || "제목 정보 없음"}
                     </span>
                   </p>
                   <div
