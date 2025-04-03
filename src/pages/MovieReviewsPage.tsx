@@ -119,21 +119,25 @@ interface MovieReviewResponse {
   comments?: Comment[];
 }
 
+// 백엔드 API 응답 구조에 맞게 인터페이스 수정
 interface ReviewResponse {
   content: {
     id: number;
+    userId: number;
     username: string;
-    user_profile_image_url: string | null;
-    movie_id: number;
-    movie_title: string;
-    movie_poster_path: string | null;
+    userProfileImageUrl: string | null;
+    movieId: number;
+    movieTitle: string;
+    moviePosterPath: string | null;
     title: string;
     content: string;
     rating: number;
-    created_at: string;
-    updated_at: string | null;
-    comment_count: number;
-    is_spoiler: boolean;
+    createdAt: string;
+    updatedAt: string | null;
+    commentCount: number;
+    likeCount: number;
+    dislikeCount: number;
+    isSpoiler: boolean;
   }[];
   totalElements: number;
   totalPages: number;
@@ -271,17 +275,31 @@ const MovieReviewsPage: React.FC = () => {
       const response = await backendApi.getReviews(page, reviewsPerPage);
       console.log("리뷰 API 응답 원본:", JSON.stringify(response, null, 2));
 
-      if (response && response.content) {
-        const validReviews = response.content.filter(
-          (review: ReviewResponse["content"][0]) =>
-            review && review.id && review.username && review.movie_id
+      // response 객체 유효성 검사 강화
+      if (response && Array.isArray(response.content)) {
+        // 타입 안전성 강화를 위해 타입 명시
+        const validReviews: ReviewResponse["content"] = response.content.filter(
+          (review: any) => review && typeof review === "object" && review.id
         );
+
         console.log("유효한 리뷰:", validReviews);
+
+        // 빈 리뷰 목록 처리
+        if (validReviews.length === 0) {
+          console.log("유효한 리뷰가 없습니다.");
+          setReviews([]);
+          setVisibleReviews([]);
+          setTotalPages(response.totalPages || 0);
+          setHasMore(false);
+          setLoading(false);
+          return;
+        }
+
         console.log(
           "리뷰의 comment_count 값들:",
-          validReviews.map((review: ReviewResponse["content"][0]) => ({
+          validReviews.map((review) => ({
             id: review.id,
-            comment_count: review.comment_count,
+            comment_count: review.commentCount || 0,
           }))
         );
 
@@ -292,35 +310,34 @@ const MovieReviewsPage: React.FC = () => {
           mappedComments
         );
 
-        const mappedReviews = validReviews.map(
-          (review: ReviewResponse["content"][0]) => {
-            return {
-              id: review.id,
-              title: review.title,
-              content: review.content,
-              rating: review.rating,
-              movieTitle: review.movie_title,
-              movieId: review.movie_id,
-              moviePoster: review.movie_poster_path || "",
-              createdAt: new Date(review.created_at),
-              comments: mappedComments,
-              likes: [],
-              dislikes: [],
-              isSpoiler: review.is_spoiler,
-              isLiked: false,
-              isDisliked: false,
-              likeCount: 0,
-              dislikeCount: 0,
-              commentCount: review.comment_count ?? 0,
-              user: {
-                id: 0,
-                username: review.username,
-                profileImageUrl: review.user_profile_image_url,
-                reviewCount: 0,
-              },
-            };
-          }
-        );
+        // 필드명 매핑 처리 개선 및 타입 안전성 강화
+        const mappedReviews: MovieReview[] = validReviews.map((review) => {
+          return {
+            id: review.id,
+            title: review.title,
+            content: review.content,
+            rating: review.rating,
+            movieTitle: review.movieTitle || "",
+            movieId: review.movieId,
+            moviePoster: review.moviePosterPath || "",
+            createdAt: new Date(review.createdAt),
+            comments: mappedComments,
+            likes: [],
+            dislikes: [],
+            isSpoiler: review.isSpoiler,
+            isLiked: false,
+            isDisliked: false,
+            likeCount: review.likeCount || 0,
+            dislikeCount: review.dislikeCount || 0,
+            commentCount: review.commentCount || 0,
+            user: {
+              id: review.userId || 0,
+              username: review.username || "",
+              profileImageUrl: review.userProfileImageUrl,
+              reviewCount: 0,
+            },
+          };
+        });
 
         console.log("변환된 리뷰:", mappedReviews);
 
@@ -622,51 +639,65 @@ const MovieReviewsPage: React.FC = () => {
     }
   };
 
-  // 댓글 작성 처리
+  // 리뷰 댓글 작성 처리
   const handleCommentSubmit = async (reviewId: number) => {
-    if (!isLoggedIn) {
-      navigate("/login", { state: { from: location } });
-      return;
-    }
-
-    if (!commentContent.trim()) {
-      toast.error("댓글 내용을 입력해주세요.");
-      return;
-    }
+    if (!commentContent.trim()) return;
 
     try {
-      // 실제 API 호출
       const response = await backendApi.addReviewComment(
         reviewId,
         commentContent
       );
-      console.log("댓글 작성 서버 응답:", response);
+      console.log("새 리뷰 댓글 응답:", response);
 
-      // 서버에서 반환한 댓글 데이터를 Comment 인터페이스에 맞게 변환
+      // createdAt 필드 확인 및 보정
+      if (!response.createdAt || response.createdAt === "") {
+        console.warn(
+          "리뷰 댓글의 createdAt 필드가 비어있습니다. 현재 시간으로 대체합니다."
+        );
+        response.createdAt = new Date().toISOString();
+      }
+
+      // 명시적으로 날짜가 있는 새 댓글 객체 생성
       const newComment: Comment = {
         id: response.id,
         content: response.content,
-        createdAt: response.created_at,
-        username: response.username,
-        profileImageUrl: response.user_profile_image_url,
+        createdAt: response.createdAt || new Date().toISOString(),
+        username: user?.username || "알 수 없는 사용자",
+        profileImageUrl: user?.profileImageUrl || null,
+        userId: user?.id || 0,
         likeCount: 0,
         dislikeCount: 0,
-        userId: response.user_id,
       };
 
-      // 리뷰 목록 업데이트
-      const updatedReviews = reviews.map((review) =>
-        review.id === reviewId
-          ? {
+      // 리뷰 업데이트
+      setReviews((prevReviews) =>
+        prevReviews.map((review) => {
+          if (review.id === reviewId) {
+            return {
               ...review,
-              comments: [newComment, ...(review.comments || [])],
+              comments: [...(review.comments || []), newComment],
               commentCount: (review.commentCount || 0) + 1,
-            }
-          : review
+            };
+          }
+          return review;
+        })
       );
 
-      setReviews(updatedReviews);
-      setVisibleReviews(updatedReviews);
+      setVisibleReviews((prevReviews) =>
+        prevReviews.map((review) => {
+          if (review.id === reviewId) {
+            return {
+              ...review,
+              comments: [...(review.comments || []), newComment],
+              commentCount: (review.commentCount || 0) + 1,
+            };
+          }
+          return review;
+        })
+      );
+
+      // 댓글 입력창 초기화
       setCommentContent("");
       toast.success("댓글이 등록되었습니다.");
     } catch (error) {
@@ -779,39 +810,93 @@ const MovieReviewsPage: React.FC = () => {
 
       // 댓글 데이터 가져오기 시도
       const response = await backendApi.getReviewComments(reviewId);
-      console.log(`리뷰 ID ${reviewId}의 댓글 데이터:`, response);
+      console.log(`리뷰 ID ${reviewId}의 댓글 데이터 매핑 시작:`, response);
 
       // 댓글 데이터 매핑
       const mappedComments: Comment[] = response.content.map(
-        (comment: CommentResponse) => ({
-          id: comment.id,
-          content: comment.content,
-          createdAt: comment.created_at,
-          username: comment.username,
-          profileImageUrl: comment.user_profile_image_url,
-          likeCount: 0,
-          dislikeCount: 0,
-          userId: comment.user_id,
-        })
+        (comment: CommentResponse) => {
+          // 날짜 데이터 확인 및 처리
+          let createdAt;
+
+          if (comment.created_at && comment.created_at.trim() !== "") {
+            try {
+              // 서버로부터 온 LocalDateTime 문자열 처리 (2023-04-03T15:30:45)
+              const localDateTimeRegex =
+                /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
+              if (localDateTimeRegex.test(comment.created_at)) {
+                // 서버측 날짜가 타임존 정보가 없는 경우 ISO 형식으로 변환
+                createdAt = new Date(comment.created_at + "Z").toISOString();
+                console.log(
+                  `날짜 형식 변환 완료 (댓글 ID: ${comment.id}):`,
+                  createdAt
+                );
+              } else {
+                createdAt = comment.created_at;
+              }
+
+              // 날짜 형식 검증
+              const testDate = new Date(createdAt);
+              if (!isNaN(testDate.getTime())) {
+                if (testDate.getTime() > Date.now()) {
+                  // 미래 날짜인 경우 (타임존 문제일 가능성)
+                  console.warn(
+                    `댓글 ID ${comment.id}의 날짜가 미래입니다. 현재 시간으로 조정합니다.`,
+                    createdAt
+                  );
+                  createdAt = new Date().toISOString();
+                }
+                console.log(`유효한 날짜 형식: ${createdAt}`);
+              } else {
+                throw new Error("유효하지 않은 날짜 형식");
+              }
+            } catch (error) {
+              console.warn(`날짜 파싱 오류 (댓글 ID: ${comment.id}):`, error);
+              createdAt = new Date().toISOString();
+            }
+          } else {
+            console.warn(`댓글 ID ${comment.id}의 created_at이 비어있습니다.`);
+            createdAt = new Date().toISOString();
+          }
+
+          console.log(`댓글 ID ${comment.id}의 최종 날짜 값:`, createdAt);
+
+          return {
+            id: comment.id,
+            content: comment.content,
+            createdAt: createdAt,
+            username: comment.username,
+            profileImageUrl: comment.user_profile_image_url,
+            likeCount: 0,
+            dislikeCount: 0,
+            userId: comment.user_id,
+          };
+        }
       );
 
       console.log(`리뷰 ID ${reviewId}의 변환된 댓글:`, mappedComments);
 
-      // 리뷰 상태 업데이트
-      const updatedReviews = reviews.map((review) =>
-        review.id === reviewId
-          ? {
-              ...review,
-              comments: mappedComments,
-            }
-          : review
+      // 댓글 상태 업데이트
+      setReviews((prevReviews) =>
+        prevReviews.map((review) =>
+          review.id === reviewId
+            ? { ...review, comments: mappedComments }
+            : review
+        )
       );
 
-      setReviews(updatedReviews);
-      setVisibleReviews(updatedReviews);
+      // 가시적인 리뷰 목록도 업데이트
+      setVisibleReviews((prevReviews) =>
+        prevReviews.map((review) =>
+          review.id === reviewId
+            ? { ...review, comments: mappedComments }
+            : review
+        )
+      );
+
+      // 성공적으로 댓글을 가져왔으므로 확장된 댓글 ID 설정
       setExpandedCommentId(reviewId);
     } catch (error) {
-      console.error(`리뷰 ID ${reviewId}의 댓글 목록 가져오기 실패:`, error);
+      console.error(`리뷰 ID ${reviewId}의 댓글 목록 불러오기 실패:`, error);
       toast.error("댓글 목록을 불러오는데 실패했습니다.");
     } finally {
       setLoading(false);
@@ -950,16 +1035,63 @@ const MovieReviewsPage: React.FC = () => {
       console.log(`리뷰 ID ${reviewId}의 댓글 데이터 매핑 시작:`, response);
 
       const mappedComments: Comment[] = response.content.map(
-        (comment: CommentResponse) => ({
-          id: comment.id,
-          content: comment.content,
-          createdAt: comment.created_at,
-          username: comment.username,
-          profileImageUrl: comment.user_profile_image_url,
-          likeCount: 0,
-          dislikeCount: 0,
-          userId: comment.user_id,
-        })
+        (comment: CommentResponse) => {
+          // 날짜 데이터 확인 및 처리
+          let createdAt;
+
+          if (comment.created_at && comment.created_at.trim() !== "") {
+            try {
+              // 서버로부터 온 LocalDateTime 문자열 처리 (2023-04-03T15:30:45)
+              const localDateTimeRegex =
+                /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
+              if (localDateTimeRegex.test(comment.created_at)) {
+                // 서버측 날짜가 타임존 정보가 없는 경우 ISO 형식으로 변환
+                createdAt = new Date(comment.created_at + "Z").toISOString();
+                console.log(
+                  `날짜 형식 변환 완료 (댓글 ID: ${comment.id}):`,
+                  createdAt
+                );
+              } else {
+                createdAt = comment.created_at;
+              }
+
+              // 날짜 형식 검증
+              const testDate = new Date(createdAt);
+              if (!isNaN(testDate.getTime())) {
+                if (testDate.getTime() > Date.now()) {
+                  // 미래 날짜인 경우 (타임존 문제일 가능성)
+                  console.warn(
+                    `댓글 ID ${comment.id}의 날짜가 미래입니다. 현재 시간으로 조정합니다.`,
+                    createdAt
+                  );
+                  createdAt = new Date().toISOString();
+                }
+                console.log(`유효한 날짜 형식: ${createdAt}`);
+              } else {
+                throw new Error("유효하지 않은 날짜 형식");
+              }
+            } catch (error) {
+              console.warn(`날짜 파싱 오류 (댓글 ID: ${comment.id}):`, error);
+              createdAt = new Date().toISOString();
+            }
+          } else {
+            console.warn(`댓글 ID ${comment.id}의 created_at이 비어있습니다.`);
+            createdAt = new Date().toISOString();
+          }
+
+          console.log(`댓글 ID ${comment.id}의 최종 날짜 값:`, createdAt);
+
+          return {
+            id: comment.id,
+            content: comment.content,
+            createdAt: createdAt,
+            username: comment.username,
+            profileImageUrl: comment.user_profile_image_url,
+            likeCount: 0,
+            dislikeCount: 0,
+            userId: comment.user_id,
+          };
+        }
       );
 
       console.log(`리뷰 ID ${reviewId}의 변환된 댓글:`, mappedComments);

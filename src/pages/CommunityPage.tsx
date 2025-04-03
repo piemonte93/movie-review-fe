@@ -461,15 +461,29 @@ const CommunityPage: React.FC = () => {
     if (!newComment.trim()) return;
 
     try {
-      const response = await backendApi.addComment(postId, newComment);
+      const response = await backendApi.createComment(postId, newComment);
       console.log("새 댓글 응답:", response);
       console.log("댓글 날짜 형식:", response.createdAt);
+
+      // createdAt 필드 확인 및 보정
+      if (!response.createdAt || response.createdAt === "") {
+        console.warn(
+          "createdAt 필드가 비어있습니다. 현재 시간으로 대체합니다."
+        );
+        response.createdAt = new Date().toISOString();
+      }
+
+      // 명시적으로 날짜가 있는 새 댓글 객체 생성
+      const newCommentWithDate = {
+        ...response,
+        createdAt: response.createdAt || new Date().toISOString(),
+      };
 
       // 성공적으로 댓글을 추가한 후 현재 게시글 목록을 업데이트
       setPosts((prevPosts) =>
         prevPosts.map((post) =>
           post.id === postId
-            ? { ...post, comments: [...post.comments, response] }
+            ? { ...post, comments: [...post.comments, newCommentWithDate] }
             : post
         )
       );
@@ -614,8 +628,9 @@ const CommunityPage: React.FC = () => {
     }
 
     try {
-      const updatedComment = await backendApi.likeComment(commentId);
-      // 게시글 목록에서 해당 댓글 업데이트
+      await backendApi.likeComment(commentId);
+
+      // API가 업데이트된 정보를 반환하지 않으므로 프론트엔드에서 직접 상태 업데이트
       setPosts((prevPosts) =>
         prevPosts.map((post) => ({
           ...post,
@@ -623,15 +638,21 @@ const CommunityPage: React.FC = () => {
             comment.id === commentId
               ? {
                   ...comment,
-                  likeCount: updatedComment.likeCount,
-                  dislikeCount: updatedComment.dislikeCount,
-                  liked: updatedComment.liked,
-                  disliked: updatedComment.disliked,
+                  likeCount: comment.liked
+                    ? comment.likeCount - 1
+                    : comment.likeCount + 1,
+                  liked: !comment.liked,
+                  // 좋아요를 누르면 싫어요는 해제
+                  disliked: false,
+                  dislikeCount: comment.disliked
+                    ? comment.dislikeCount - 1
+                    : comment.dislikeCount,
                 }
               : comment
           ),
         }))
       );
+
       setVisiblePosts((prevPosts) =>
         prevPosts.map((post) => ({
           ...post,
@@ -639,23 +660,25 @@ const CommunityPage: React.FC = () => {
             comment.id === commentId
               ? {
                   ...comment,
-                  likeCount: updatedComment.likeCount,
-                  dislikeCount: updatedComment.dislikeCount,
-                  liked: updatedComment.liked,
-                  disliked: updatedComment.disliked,
+                  likeCount: comment.liked
+                    ? comment.likeCount - 1
+                    : comment.likeCount + 1,
+                  liked: !comment.liked,
+                  // 좋아요를 누르면 싫어요는 해제
+                  disliked: false,
+                  dislikeCount: comment.disliked
+                    ? comment.dislikeCount - 1
+                    : comment.dislikeCount,
                 }
               : comment
           ),
         }))
       );
-      toast.success(
-        updatedComment.liked
-          ? "댓글을 좋아요 했습니다."
-          : "좋아요를 취소했습니다."
-      );
+
+      toast.success("댓글 평가가 반영되었습니다.");
     } catch (error) {
       console.error("댓글 좋아요 실패:", error);
-      toast.error("댓글 좋아요에 실패했습니다.");
+      toast.error("댓글 평가에 실패했습니다.");
     }
   };
 
@@ -667,8 +690,9 @@ const CommunityPage: React.FC = () => {
     }
 
     try {
-      const updatedComment = await backendApi.dislikeComment(commentId);
-      // 게시글 목록에서 해당 댓글 업데이트
+      await backendApi.dislikeComment(commentId);
+
+      // API가 업데이트된 정보를 반환하지 않으므로 프론트엔드에서 직접 상태 업데이트
       setPosts((prevPosts) =>
         prevPosts.map((post) => ({
           ...post,
@@ -676,15 +700,21 @@ const CommunityPage: React.FC = () => {
             comment.id === commentId
               ? {
                   ...comment,
-                  likeCount: updatedComment.likeCount,
-                  dislikeCount: updatedComment.dislikeCount,
-                  liked: updatedComment.liked,
-                  disliked: updatedComment.disliked,
+                  dislikeCount: comment.disliked
+                    ? comment.dislikeCount - 1
+                    : comment.dislikeCount + 1,
+                  disliked: !comment.disliked,
+                  // 싫어요를 누르면 좋아요는 해제
+                  liked: false,
+                  likeCount: comment.liked
+                    ? comment.likeCount - 1
+                    : comment.likeCount,
                 }
               : comment
           ),
         }))
       );
+
       setVisiblePosts((prevPosts) =>
         prevPosts.map((post) => ({
           ...post,
@@ -692,23 +722,25 @@ const CommunityPage: React.FC = () => {
             comment.id === commentId
               ? {
                   ...comment,
-                  likeCount: updatedComment.likeCount,
-                  dislikeCount: updatedComment.dislikeCount,
-                  liked: updatedComment.liked,
-                  disliked: updatedComment.disliked,
+                  dislikeCount: comment.disliked
+                    ? comment.dislikeCount - 1
+                    : comment.dislikeCount + 1,
+                  disliked: !comment.disliked,
+                  // 싫어요를 누르면 좋아요는 해제
+                  liked: false,
+                  likeCount: comment.liked
+                    ? comment.likeCount - 1
+                    : comment.likeCount,
                 }
               : comment
           ),
         }))
       );
-      toast.success(
-        updatedComment.disliked
-          ? "댓글을 싫어요 했습니다."
-          : "싫어요를 취소했습니다."
-      );
+
+      toast.success("댓글 평가가 반영되었습니다.");
     } catch (error) {
       console.error("댓글 싫어요 실패:", error);
-      toast.error("댓글 싫어요에 실패했습니다.");
+      toast.error("댓글 평가에 실패했습니다.");
     }
   };
 

@@ -10,7 +10,7 @@ import {
 const BASE_URL = "http://localhost:8080";
 
 // Create axios instance with timeout
-export const apiClient = axios.create({
+const apiClient = axios.create({
   baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
@@ -109,8 +109,6 @@ export interface Comment {
   };
   likeCount: number;
   dislikeCount: number;
-  liked: boolean;
-  disliked: boolean;
 }
 
 // 게시글 관련 타입 정의
@@ -689,16 +687,7 @@ export const backendApi = {
         { content }
       );
       console.log("생성된 댓글의 날짜 형식:", response.data.createdAt);
-
-      // 날짜 필드 확인 및 처리
-      const commentData = response.data;
-      if (!commentData.createdAt || commentData.createdAt === "") {
-        console.warn("댓글 생성 응답에 createdAt 필드가 없거나 비어 있습니다.");
-        // 현재 시간으로 기본값 설정
-        commentData.createdAt = new Date().toISOString();
-      }
-
-      return commentData;
+      return response.data;
     } catch (error) {
       console.error("댓글 작성 실패:", error);
       throw error;
@@ -760,41 +749,9 @@ export const backendApi = {
   deleteComment: async (commentId: number): Promise<void> => {
     try {
       console.log(`댓글 삭제 요청: commentId=${commentId}`);
-      console.log(`요청 URL: /api/community/comments/${commentId}`);
-
-      const token = localStorage.getItem("token");
-      console.log("인증 토큰:", token ? "토큰 있음" : "토큰 없음");
-
-      // 요청 시작 시간 기록
-      const startTime = new Date().getTime();
-
-      // API 호출
-      const response = await apiClient.delete(
-        `/api/community/comments/${commentId}`
-      );
-
-      // 응답 시간 계산
-      const endTime = new Date().getTime();
-      const responseTime = endTime - startTime;
-
-      console.log(`댓글 삭제 응답 시간: ${responseTime}ms`);
-      console.log("댓글 삭제 응답 상세:", {
-        status: response.status,
-        statusText: response.statusText,
-        data: response.data,
-      });
-
-      console.log("댓글 삭제 성공");
+      await apiClient.delete(`/api/community/comments/${commentId}`);
     } catch (error) {
       console.error("댓글 삭제 실패:", error);
-      if (axios.isAxiosError(error)) {
-        console.error("API 호출 오류 상세:", {
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data,
-          message: error.message,
-        });
-      }
       throw new Error("댓글 삭제에 실패했습니다.");
     }
   },
@@ -833,10 +790,6 @@ export const backendApi = {
       // 응답 데이터 구조 로깅
       const responseData = response.data;
       console.log("리뷰 응답 데이터 키:", Object.keys(responseData));
-      console.log(
-        "리뷰 전체 응답 데이터:",
-        JSON.stringify(responseData, null, 2)
-      );
 
       if (responseData.content) {
         console.log(`리뷰 데이터 ${responseData.content.length}개 수신 성공`);
@@ -846,9 +799,7 @@ export const backendApi = {
             id: responseData.content[0].id,
             title: responseData.content[0].title,
             username: responseData.content[0].username,
-            // 백엔드 응답 구조 확인
-            allKeys: Object.keys(responseData.content[0]),
-            allValues: JSON.stringify(responseData.content[0]),
+            // 추가 필드들...
           });
         }
       } else {
@@ -871,134 +822,22 @@ export const backendApi = {
   },
 
   getReviewComments: async (reviewId: number, page = 0, size = 10) => {
-    try {
-      console.log(
-        `리뷰 ID ${reviewId}의 댓글 목록 요청: 페이지=${page}, 사이즈=${size}`
-      );
-
-      const response = await apiClient.get(
-        `/api/reviews/${reviewId}/comments`,
-        {
-          params: {
-            page,
-            size,
-          },
-        }
-      );
-
-      // 응답 데이터 로깅
-      console.log(`리뷰 ID ${reviewId}의 댓글 응답 데이터:`, response.data);
-
-      // 날짜 형식 디버깅
-      if (response.data.content && response.data.content.length > 0) {
-        const firstComment = response.data.content[0];
-        console.log(
-          `첫 번째 댓글(ID: ${firstComment.id}) 날짜 형식:`,
-          firstComment.created_at
-        );
-        console.log(
-          "첫 번째 댓글 전체 데이터:",
-          JSON.stringify(firstComment, null, 2)
-        );
-
-        // 서버에서 받은 날짜의 타입 확인
-        console.log("날짜 데이터 타입:", typeof firstComment.created_at);
-
-        if (firstComment.created_at) {
-          // Date 객체로 변환 테스트
-          try {
-            const testDate = new Date(firstComment.created_at);
-            console.log("변환된 날짜:", testDate.toISOString());
-            console.log("유효한 날짜인지:", !isNaN(testDate.getTime()));
-          } catch (e) {
-            console.error("날짜 변환 오류:", e);
-          }
-        }
-      } else {
-        console.log("리뷰에 댓글이 없습니다.");
-      }
-
-      // 댓글 날짜 처리
-      if (response.data.content) {
-        response.data.content = response.data.content.map((comment: any) => {
-          // created_at 필드 처리
-          if (!comment.created_at || comment.created_at.trim() === "") {
-            console.warn(
-              `댓글 ID ${comment.id}의 날짜가 비어있습니다. 현재 시간으로 설정합니다.`
-            );
-            comment.created_at = new Date().toISOString();
-          } else {
-            try {
-              // 서버로부터 온 LocalDateTime 문자열 처리 (2023-04-03T15:30:45)
-              const localDateTimeRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
-              if (localDateTimeRegex.test(comment.created_at)) {
-                // 서버측 날짜가 타임존 정보가 없는 경우 ISO 형식으로 변환
-                comment.created_at = new Date(comment.created_at + 'Z').toISOString();
-                console.log(`날짜 형식 변환 완료 (댓글 ID: ${comment.id}):`, comment.created_at);
-              }
-              
-              // 날짜 형식 검증
-              const testDate = new Date(comment.created_at);
-              if (isNaN(testDate.getTime())) {
-                console.warn(
-                  `댓글 ID ${comment.id}의 날짜 형식이 잘못되었습니다:`,
-                  comment.created_at
-                );
-                comment.created_at = new Date().toISOString();
-              } else if (testDate.getTime() > Date.now()) {
-                // 미래 날짜인 경우 (타임존 문제일 가능성)
-                console.warn(
-                  `댓글 ID ${comment.id}의 날짜가 미래입니다. 현재 시간으로 조정합니다.`,
-                  comment.created_at
-                );
-                comment.created_at = new Date().toISOString();
-              }
-            } catch (error) {
-              console.error(
-                `댓글 ID ${comment.id}의 날짜 처리 중 오류:`,
-                error
-              );
-              comment.created_at = new Date().toISOString();
-            }
-          }
-          return comment;
-        });
-      }
-
-      console.log(`리뷰 ID ${reviewId}의 댓글 데이터 처리 완료`);
-      return response.data;
-    } catch (error) {
-      console.error(`리뷰 ID ${reviewId}의 댓글 목록 가져오기 실패:`, error);
-      throw error;
-    }
+    const response = await apiClient.get(`/api/reviews/${reviewId}/comments`, {
+      params: {
+        page,
+        size,
+      },
+    });
+    console.log("리뷰 댓글 응답 데이터:", response.data);
+    return response.data;
   },
 
   addReviewComment: async (reviewId: number, content: string) => {
-    try {
-      const response = await apiClient.post(
-        `/api/reviews/${reviewId}/comments`,
-        {
-          content,
-        }
-      );
-
-      console.log("새 댓글 생성 응답 데이터:", response.data);
-
-      // 날짜 필드 확인 및 처리
-      const commentData = response.data;
-      if (!commentData.createdAt || commentData.createdAt === "") {
-        console.warn(
-          "리뷰 댓글 생성 응답에 createdAt 필드가 없거나 비어 있습니다."
-        );
-        // 현재 시간으로 기본값 설정
-        commentData.createdAt = new Date().toISOString();
-      }
-
-      return commentData;
-    } catch (error) {
-      console.error("리뷰 댓글 작성 실패:", error);
-      throw error;
-    }
+    const response = await apiClient.post(`/api/reviews/${reviewId}/comments`, {
+      content,
+    });
+    console.log("새 댓글 생성 응답 데이터:", response.data);
+    return response.data;
   },
 
   updateReviewComment: async (
