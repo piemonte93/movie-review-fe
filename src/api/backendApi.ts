@@ -121,12 +121,13 @@ export interface Post {
     id: number;
     username: string;
     profileImageUrl: string | null;
-    reviewCount: number;
+    reviewCount?: number;
   };
   comments: Comment[];
-  mentions: UserItem[];
+  mentions?: UserItem[];
   likeCount: number;
   dislikeCount: number;
+  commentCount: number;
   liked: boolean;
   disliked: boolean;
 }
@@ -525,22 +526,7 @@ export const backendApi = {
     page = 0,
     size = 10
   ): Promise<{
-    content: {
-      id: number;
-      title: string;
-      content: string;
-      createdAt: string;
-      user: {
-        id: number;
-        username: string;
-        profileImageUrl: string | null;
-      };
-      likeCount: number;
-      dislikeCount: number;
-      commentCount: number;
-      liked: boolean;
-      disliked: boolean;
-    }[];
+    content: Post[];
     totalElements: number;
     totalPages: number;
     currentPage: number;
@@ -550,6 +536,32 @@ export const backendApi = {
       const response = await apiClient.get("/community/posts", {
         params: { page, size },
       });
+
+      // 서버 응답 로그
+      console.log("서버에서 받은 게시글 데이터:", response.data);
+
+      // 백엔드에서 날짜 형식을 확인하기 위한 로그
+      if (response.data.content && response.data.content.length > 0) {
+        const firstPost = response.data.content[0];
+        console.log("첫 번째 게시글 날짜 형식:", firstPost.createdAt);
+        console.log(
+          "첫 번째 게시글 전체 데이터:",
+          JSON.stringify(firstPost, null, 2)
+        );
+
+        // 댓글 확인
+        if (firstPost.comments && firstPost.comments.length > 0) {
+          console.log(
+            "첫 번째 댓글 날짜 형식:",
+            firstPost.comments[0].createdAt
+          );
+          console.log(
+            "첫 번째 댓글 전체 데이터:",
+            JSON.stringify(firstPost.comments[0], null, 2)
+          );
+        }
+      }
+
       return response.data;
     } catch (error) {
       console.error("게시글 목록 조회 실패:", error);
@@ -658,22 +670,7 @@ export const backendApi = {
     page = 0,
     size = 10
   ): Promise<{
-    content: {
-      id: number;
-      title: string;
-      content: string;
-      createdAt: string;
-      user: {
-        id: number;
-        username: string;
-        profileImageUrl: string | null;
-      };
-      likeCount: number;
-      dislikeCount: number;
-      commentCount: number;
-      liked: boolean;
-      disliked: boolean;
-    }[];
+    content: Post[];
     totalElements: number;
     totalPages: number;
     currentPage: number;
@@ -697,6 +694,7 @@ export const backendApi = {
         `/community/posts/${postId}/comments`,
         { content }
       );
+      console.log("생성된 댓글의 날짜 형식:", response.data.createdAt);
       return response.data;
     } catch (error) {
       console.error("댓글 작성 실패:", error);
@@ -737,6 +735,17 @@ export const backendApi = {
     } catch (error) {
       console.error("댓글 싫어요 실패:", error);
       throw error;
+    }
+  },
+
+  // 댓글 삭제
+  deleteComment: async (commentId: number): Promise<void> => {
+    try {
+      console.log(`댓글 삭제 요청: commentId=${commentId}`);
+      await apiClient.delete(`/community/comments/${commentId}`);
+    } catch (error) {
+      console.error("댓글 삭제 실패:", error);
+      throw new Error("댓글 삭제에 실패했습니다.");
     }
   },
 

@@ -22,6 +22,7 @@ import { backendApi } from "../api/backendApi";
 import { toast } from "react-toastify";
 import { Content } from "../types/content";
 import axios from "axios";
+import { formatDate } from "../utils/dateUtils";
 
 // Content 타입을 Movie 타입으로 매핑하는 함수
 const mapContentToMovie = (content: Content): Movie => {
@@ -674,22 +675,6 @@ const MovieReviewsPage: React.FC = () => {
     }
   };
 
-  // 날짜 포맷팅 함수
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (days > 0) return `${days}일 전`;
-    if (hours > 0) return `${hours}시간 전`;
-    if (minutes > 0) return `${minutes}분 전`;
-    return "방금 전";
-  };
-
   // 별점 렌더링 함수
   const renderStars = (rating: number) => {
     const stars = [];
@@ -1340,7 +1325,11 @@ const MovieReviewsPage: React.FC = () => {
               {/* 리뷰 액션 버튼 */}
               <div className="flex items-center justify-between border-t pt-3">
                 <div className="text-xs text-gray-500">
-                  {formatDate(review.createdAt)}
+                  {formatDate(
+                    typeof review.createdAt === "object"
+                      ? review.createdAt.toISOString()
+                      : review.createdAt
+                  )}
                 </div>
                 <div className="flex items-center space-x-4">
                   <button
@@ -1404,8 +1393,8 @@ const MovieReviewsPage: React.FC = () => {
                                 {comment.username || "알 수 없는 사용자"}
                               </span>
                               <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">
-                                  {formatDate(new Date(comment.createdAt))}
+                                <span className="text-sm text-gray-500">
+                                  {formatDate(comment.createdAt)}
                                 </span>
                                 {isLoggedIn &&
                                   user?.username === comment.username && (
