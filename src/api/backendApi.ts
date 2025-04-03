@@ -38,12 +38,53 @@ apiClient.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error("[API 오류]", {
+    // 오류 상세 정보 콘솔에 출력
+    console.error("[API 오류 상세]", {
       url: error.config?.url,
       method: error.config?.method,
       status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
       message: error.message,
     });
+
+    // 토큰 유효성 체크
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      const token = localStorage.getItem("token");
+      console.log("현재 토큰 확인:", token ? "토큰 있음" : "토큰 없음");
+
+      if (token) {
+        try {
+          // 토큰 만료 시간 체크
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          const expiration = payload.exp * 1000; // 밀리초로 변환
+          const now = Date.now();
+
+          console.log("토큰 만료 정보:", {
+            현재시간: new Date(now).toLocaleString(),
+            만료시간: new Date(expiration).toLocaleString(),
+            만료여부: now > expiration ? "만료됨" : "유효함",
+          });
+
+          if (now > expiration) {
+            console.log("토큰이 만료되었습니다. 로그아웃이 필요합니다.");
+          }
+        } catch (e) {
+          console.error("토큰 분석 중 오류:", e);
+        }
+      }
+    }
+
+    // 오류 응답 구조 분석
+    if (error.response?.data) {
+      const errorData = error.response.data;
+      if (typeof errorData === "string") {
+        console.error("[API 오류 메시지]", errorData);
+      } else if (typeof errorData === "object") {
+        console.error("[API 오류 객체]", JSON.stringify(errorData, null, 2));
+      }
+    }
+
     return Promise.reject(error);
   }
 );
@@ -312,39 +353,170 @@ export const backendApi = {
     movie_id: number;
     movie_title: string;
     movie_poster_path: string;
+    title: string;
     content: string;
     rating: number;
     is_spoiler: boolean;
   }): Promise<ReviewResponse> => {
     try {
-      console.log("리뷰 생성 요청 데이터:", reviewData);
+      // 요청 데이터 유효성 검사
+      if (!reviewData.title) {
+        console.error("리뷰 제목이 없습니다:", reviewData);
+        throw new Error("리뷰 제목을 입력해주세요.");
+      }
+
+      if (!reviewData.content) {
+        console.error("리뷰 내용이 없습니다:", reviewData);
+        throw new Error("리뷰 내용을 입력해주세요.");
+      }
+
+      if (!reviewData.movie_id) {
+        console.error("영화 ID가 없습니다:", reviewData);
+        throw new Error("영화를 선택해주세요.");
+      }
+
+      // 요청 로깅
+      console.log(
+        "리뷰 생성 요청 데이터:",
+        JSON.stringify(reviewData, null, 2)
+      );
+
       const token = localStorage.getItem("token");
+      if (!token) {
+        console.error("인증 토큰이 없습니다.");
+        throw new Error("로그인이 필요합니다.");
+      }
+
       console.log(
         "토큰 페이로드:",
         token ? JSON.parse(atob(token.split(".")[1])) : null
       );
-      console.log("API 요청 헤더:", {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+
+      // API 요청 직전 확인 로그
+      console.log("최종 요청 데이터:", {
+        url: "/review",
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        data: reviewData,
       });
 
       const response = await apiClient.post("/review", reviewData);
+      console.log("리뷰 생성 성공 응답:", response.data);
       return response.data;
     } catch (error) {
-      console.log("리뷰 생성 API 요청 실패:", error);
+      console.log("===== 리뷰 생성 API 요청 실패 =====");
+
+      // Axios 오류인 경우
       if (axios.isAxiosError(error)) {
-        const errorMessage =
-          error.response?.data?.message || "리뷰 작성에 실패했습니다.";
+        console.log("요청 URL:", error.config?.url);
+        console.log("요청 메소드:", error.config?.method);
+        console.log(
+          "요청 데이터:",
+          typeof error.config?.data === "string"
+            ? JSON.parse(error.config?.data)
+            : error.config?.data
+        );
+        console.log("Axios 오류 상태 코드:", error.response?.status);
+        console.log("Axios 오류 상태 텍스트:", error.response?.statusText);
+
+        // 응답이 없는 경우 (네트워크 오류 등)
+        if (!error.response) {
+          console.log("서버 응답 없음 (네트워크 오류)");
+          throw new Error(
+            "서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요."
+          );
+        }
+
+        // 응답 데이터 추출 (문자열 또는 객체)
+        let errorMessage: string;
+        const responseData = error.response.data;
+
+        if (typeof responseData === "string") {
+          errorMessage = responseData;
+          console.log("문자열 오류 응답:", errorMessage);
+
+          // 백엔드에서 보내는 "이미 이 영화에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?" 메시지 처리
+          if (
+            responseData.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다")
+          ) {
+            throw new Error(
+              "이미 이 영화에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
+            );
+          }
+        } else if (responseData && typeof responseData === "object") {
+          errorMessage =
+            responseData.message ||
+            responseData.error ||
+            JSON.stringify(responseData);
+          console.log("객체 오류 응답:", responseData);
+
+          // 객체 형태의 오류 메시지에서도 중복 리뷰 확인
+          if (
+            errorMessage.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다")
+          ) {
+            throw new Error(
+              "이미 이 영화에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
+            );
+          }
+        } else {
+          errorMessage = "알 수 없는 오류가 발생했습니다.";
+          console.log("예상치 못한 응답 형식:", responseData);
+        }
+
+        // 빈 오류 메시지 처리
+        if (!errorMessage || errorMessage.trim() === "") {
+          errorMessage = "서버에서 자세한 오류 메시지를 제공하지 않았습니다.";
+        }
+
+        console.log("최종 오류 메시지:", errorMessage);
+
+        // HTTP 상태 코드별 처리
+        if (error.response.status === 401) {
+          throw new Error("인증이 필요합니다. 다시 로그인해주세요.");
+        } else if (error.response.status === 403) {
+          // 403 권한 오류일 때 명확한 메시지 전달
+          if (errorMessage.includes("리뷰 작성 권한이 없습니다")) {
+            throw new Error("리뷰 작성 권한이 없습니다.");
+          } else if (
+            errorMessage.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다")
+          ) {
+            throw new Error(
+              "이미 이 영화에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
+            );
+          } else {
+            throw new Error("접근 권한이 없습니다.");
+          }
+        } else if (error.response.status === 400) {
+          throw new Error(`입력 데이터가 올바르지 않습니다: ${errorMessage}`);
+        } else if (error.response.status === 500) {
+          throw new Error(
+            "서버 오류가 발생했습니다. 나중에 다시 시도해주세요."
+          );
+        }
+
+        // 기본 오류 메시지 반환
+        throw new Error(errorMessage);
+      }
+
+      // Axios 오류가 아닌 경우
+      console.log("일반 오류:", error);
+      if (error instanceof Error) {
+        // 이미 Error 객체인 경우 그대로 전달
+        // 중복 리뷰 문구가 포함된 경우 확인
         if (
-          errorMessage.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다")
+          error.message.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다")
         ) {
           throw new Error(
             "이미 이 영화에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
           );
         }
-        throw new Error(errorMessage);
+        throw error;
+      } else {
+        throw new Error("리뷰 작성에 실패했습니다. 다시 시도해주세요.");
       }
-      throw new Error("리뷰 작성에 실패했습니다.");
     }
   },
 
@@ -482,7 +654,7 @@ export const backendApi = {
 
   searchPosts: async (
     query: string,
-    category: string = "title",
+    category = "title",
     page = 0,
     size = 10
   ): Promise<{
@@ -628,10 +800,39 @@ export const backendApi = {
   },
 
   deleteReviewComment: async (reviewId: number, commentId: number) => {
-    const response = await apiClient.delete(
-      `/reviews/${reviewId}/comments/${commentId}`
-    );
-    return response.data;
+    try {
+      console.log(
+        `댓글 삭제 요청: reviewId=${reviewId}, commentId=${commentId}`
+      );
+      console.log(`요청 URL: /reviews/${reviewId}/comments/${commentId}`);
+
+      const token = localStorage.getItem("token");
+      console.log("인증 토큰:", token ? "토큰 있음" : "토큰 없음");
+
+      const response = await apiClient.delete(
+        `/reviews/${reviewId}/comments/${commentId}`
+      );
+
+      console.log("댓글 삭제 응답 상세:", {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        data: response.data,
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error("댓글 삭제 API 호출 실패:", error);
+      if (axios.isAxiosError(error)) {
+        console.error("Axios 에러 상세:", {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          message: error.message,
+        });
+      }
+      throw error;
+    }
   },
 
   likeReviewComment: async (reviewId: number, commentId: number) => {
@@ -657,5 +858,61 @@ export const backendApi = {
   dislikeReview: async (reviewId: number) => {
     const response = await apiClient.post(`/reviews/${reviewId}/dislike`);
     return response.data;
+  },
+
+  // 영화 리뷰 삭제
+  deleteMovieReview: async (reviewId: number): Promise<void> => {
+    try {
+      await apiClient.delete(`/reviews/${reviewId}`);
+    } catch (error) {
+      console.error("리뷰 삭제 실패:", error);
+      throw error;
+    }
+  },
+
+  // 영화 리뷰 수정
+  updateMovieReview: async (
+    reviewId: number,
+    reviewData: {
+      title: string;
+      content: string;
+      rating: number;
+      is_spoiler: boolean;
+      movie_id?: number;
+      movie_title?: string;
+      movie_poster_path?: string;
+    }
+  ): Promise<void> => {
+    try {
+      console.log("리뷰 수정 데이터:", reviewData);
+      await apiClient.put(`/reviews/${reviewId}`, reviewData);
+    } catch (error) {
+      console.error("리뷰 수정 실패:", error);
+      throw error;
+    }
+  },
+
+  // 사용자가 특정 영화에 대해 작성한 리뷰가 있는지 확인
+  checkUserReviewForMovie: async (movieId: number): Promise<boolean> => {
+    try {
+      const response = await apiClient.get(`/reviews/check`, {
+        params: { movie_id: movieId },
+      });
+      return response.data.exists;
+    } catch (error) {
+      console.error("리뷰 확인 실패:", error);
+      return false;
+    }
+  },
+
+  // 영화 리뷰 제목 직접 수정 (타이틀만 업데이트)
+  updateReviewTitle: async (reviewId: number, title: string): Promise<void> => {
+    try {
+      console.log("리뷰 제목 수정 데이터:", { title });
+      await apiClient.put(`/reviews/${reviewId}/title`, { title });
+    } catch (error) {
+      console.error("리뷰 제목 수정 실패:", error);
+      throw error;
+    }
   },
 };
