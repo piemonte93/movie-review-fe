@@ -7,10 +7,10 @@ import {
 } from "../types/content";
 
 // This will point to our Spring Boot backend
-const BASE_URL = "http://localhost:8080/api";
+const BASE_URL = "http://localhost:8080"; // '/api' 접두사 제거
 
 // Create axios instance with timeout
-const apiClient = axios.create({
+export const apiClient = axios.create({
   baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
@@ -61,13 +61,18 @@ export interface Comment {
   id: number;
   content: string;
   createdAt: string;
+  username: string;
+  profileImageUrl: string | null;
+  userId: number;
+  likeCount: number;
+  dislikeCount: number;
+  liked: boolean;
+  disliked: boolean;
   user: {
     id: number;
     username: string;
     profileImageUrl: string | null;
   };
-  likeCount: number;
-  dislikeCount: number;
 }
 
 // 게시글 관련 타입 정의
@@ -83,9 +88,13 @@ export interface Post {
     reviewCount: number;
   };
   comments: Comment[];
-  mentions: UserItem[];
+  mentions: {
+    id: number;
+    username: string;
+  }[];
   likeCount: number;
   dislikeCount: number;
+  commentCount: number;
   liked: boolean;
   disliked: boolean;
 }
@@ -100,65 +109,65 @@ export interface UserItem {
 export const backendApi = {
   // Movie endpoints
   getTrendingMovies: async (): Promise<ContentResponse> => {
-    const response = await apiClient.get("/contents/trending");
+    const response = await apiClient.get("/api/contents/trending");
     return response.data;
   },
 
   getTrendingAll: async (): Promise<ContentResponse> => {
-    const response = await apiClient.get("/contents/trending-all");
+    const response = await apiClient.get("/api/contents/trending-all");
     return response.data;
   },
 
   getTopRatedMovies: async (): Promise<ContentResponse> => {
-    const response = await apiClient.get("/contents/top-rated");
+    const response = await apiClient.get("/api/contents/top-rated");
     return response.data;
   },
 
   getUpcomingMovies: async (): Promise<ContentResponse> => {
-    const response = await apiClient.get("/contents/upcoming");
+    const response = await apiClient.get("/api/contents/upcoming");
     return response.data;
   },
 
   getNowPlayingMovies: async (): Promise<ContentResponse> => {
-    const response = await apiClient.get("/contents/now-playing");
+    const response = await apiClient.get("/api/contents/now-playing");
     return response.data;
   },
 
   getMovieDetails: async (id: number): Promise<ContentDetail> => {
-    const response = await apiClient.get(`/contents/movie/${id}`);
+    const response = await apiClient.get(`/api/contents/movie/${id}`);
     return response.data;
   },
 
   getMovieReviews: async (id: number): Promise<ReviewResponse> => {
-    const response = await apiClient.get(`/contents/movie/${id}/reviews`);
+    const response = await apiClient.get(`/api/contents/movie/${id}/reviews`);
     return response.data;
   },
 
   getMovieVideos: async (id: number): Promise<VideoResponse> => {
-    const response = await apiClient.get(`/contents/movie/${id}/videos`);
+    const response = await apiClient.get(`/api/contents/movie/${id}/videos`);
     return response.data;
   },
 
   // TV 프로그램 관련 API
   getTvDetails: async (id: number): Promise<ContentDetail> => {
-    const response = await apiClient.get(`/contents/tv/${id}`);
+    const response = await apiClient.get(`/api/contents/tv/${id}`);
     return response.data;
   },
 
   getTvReviews: async (id: number): Promise<ReviewResponse> => {
-    const response = await apiClient.get(`/contents/tv/${id}/reviews`);
+    const response = await apiClient.get(`/api/contents/tv/${id}/reviews`);
     return response.data;
   },
 
   getTvVideos: async (id: number): Promise<VideoResponse> => {
-    const response = await apiClient.get(`/contents/tv/${id}/videos`);
+    const response = await apiClient.get(`/api/contents/tv/${id}/videos`);
     return response.data;
   },
 
   // 검색 API
   searchContents: async (query: string, page = 1): Promise<ContentResponse> => {
     try {
-      const response = await apiClient.get("/contents/search", {
+      const response = await apiClient.get("/api/contents/search", {
         params: {
           query,
           page,
@@ -353,29 +362,14 @@ export const backendApi = {
     page = 0,
     size = 10
   ): Promise<{
-    content: {
-      id: number;
-      title: string;
-      content: string;
-      createdAt: string;
-      user: {
-        id: number;
-        username: string;
-        profileImageUrl: string | null;
-      };
-      likeCount: number;
-      dislikeCount: number;
-      commentCount: number;
-      liked: boolean;
-      disliked: boolean;
-    }[];
+    content: Post[];
     totalElements: number;
     totalPages: number;
     currentPage: number;
     size: number;
   }> => {
     try {
-      const response = await apiClient.get("/community/posts", {
+      const response = await apiClient.get("/api/community/posts", {
         params: { page, size },
       });
       return response.data;
@@ -388,19 +382,9 @@ export const backendApi = {
   createPost: async (postData: {
     title: string;
     content: string;
-  }): Promise<{
-    id: number;
-    title: string;
-    content: string;
-    createdAt: string;
-    user: {
-      id: number;
-      username: string;
-      profileImageUrl: string | null;
-    };
-  }> => {
+  }): Promise<Post> => {
     try {
-      const response = await apiClient.post("/community/posts", postData);
+      const response = await apiClient.post("/api/community/posts", postData);
       return response.data;
     } catch (error) {
       console.error("게시글 작성 실패:", error);
@@ -427,7 +411,7 @@ export const backendApi = {
   }> => {
     try {
       const response = await apiClient.put(
-        `/community/posts/${postId}`,
+        `/api/community/posts/${postId}`,
         postData
       );
       return response.data;
@@ -439,22 +423,17 @@ export const backendApi = {
 
   deletePost: async (postId: number): Promise<void> => {
     try {
-      await apiClient.delete(`/community/posts/${postId}`);
+      await apiClient.delete(`/api/community/posts/${postId}`);
     } catch (error) {
       console.error("게시글 삭제 실패:", error);
       throw new Error("게시글 삭제에 실패했습니다.");
     }
   },
 
-  likePost: async (
-    postId: number
-  ): Promise<{
-    id: number;
-    likeCount: number;
-    liked: boolean;
-  }> => {
+  // 게시글 좋아요
+  likePost: async (postId: number): Promise<Post> => {
     try {
-      const response = await apiClient.post(`/community/posts/${postId}/like`);
+      const response = await apiClient.post(`/api/community/posts/${postId}/like`);
       return response.data;
     } catch (error) {
       console.error("게시글 좋아요 실패:", error);
@@ -462,17 +441,10 @@ export const backendApi = {
     }
   },
 
-  dislikePost: async (
-    postId: number
-  ): Promise<{
-    id: number;
-    dislikeCount: number;
-    disliked: boolean;
-  }> => {
+  // 게시글 싫어요
+  dislikePost: async (postId: number): Promise<Post> => {
     try {
-      const response = await apiClient.post(
-        `/community/posts/${postId}/dislike`
-      );
+      const response = await apiClient.post(`/api/community/posts/${postId}/dislike`);
       return response.data;
     } catch (error) {
       console.error("게시글 싫어요 실패:", error);
@@ -483,32 +455,17 @@ export const backendApi = {
   searchPosts: async (
     query: string,
     category: string = "title",
-    page = 0,
-    size = 10
+    page: number = 0,
+    size: number = 10
   ): Promise<{
-    content: {
-      id: number;
-      title: string;
-      content: string;
-      createdAt: string;
-      user: {
-        id: number;
-        username: string;
-        profileImageUrl: string | null;
-      };
-      likeCount: number;
-      dislikeCount: number;
-      commentCount: number;
-      liked: boolean;
-      disliked: boolean;
-    }[];
+    content: Post[];
     totalElements: number;
     totalPages: number;
     currentPage: number;
     size: number;
   }> => {
     try {
-      const response = await apiClient.get("/community/posts/search", {
+      const response = await apiClient.get("/api/community/posts/search", {
         params: { query, category, page, size },
       });
       return response.data;
@@ -518,53 +475,66 @@ export const backendApi = {
     }
   },
 
-  // 댓글 작성
-  createComment: async (postId: number, content: string): Promise<Comment> => {
+  // 댓글 관련 API
+  getComments: async (postId: number): Promise<Comment[]> => {
     try {
-      const response = await apiClient.post(
-        `/community/posts/${postId}/comments`,
-        { content }
-      );
+      const response = await apiClient.get(`/api/community/posts/${postId}/comments`);
+      return response.data;
+    } catch (error) {
+      console.error("댓글 목록 조회 실패:", error);
+      throw new Error("댓글 목록을 불러오는데 실패했습니다.");
+    }
+  },
+
+  addComment: async (postId: number, content: string): Promise<Comment> => {
+    try {
+      const response = await apiClient.post(`/api/community/posts/${postId}/comments`, {
+        content,
+      });
       return response.data;
     } catch (error) {
       console.error("댓글 작성 실패:", error);
-      throw error;
+      throw new Error("댓글 작성에 실패했습니다.");
+    }
+  },
+
+  deleteComment: async (commentId: number): Promise<void> => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("로그인이 필요합니다.");
+      }
+      
+      await apiClient.delete(`/api/community/comments/${commentId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+    } catch (error) {
+      console.error("댓글 삭제 실패:", error);
+      throw new Error("댓글 삭제에 실패했습니다.");
     }
   },
 
   // 댓글 좋아요
-  likeComment: async (commentId: number): Promise<void> => {
+  likeComment: async (commentId: number): Promise<Comment> => {
     try {
-      await apiClient.post(
-        `/comments/${commentId}/like`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
-      );
+      const response = await apiClient.post(`/api/community/comments/${commentId}/like`);
+      return response.data;
     } catch (error) {
       console.error("댓글 좋아요 실패:", error);
-      throw error;
+      throw new Error("댓글 좋아요에 실패했습니다.");
     }
   },
 
   // 댓글 싫어요
-  dislikeComment: async (commentId: number): Promise<void> => {
+  dislikeComment: async (commentId: number): Promise<Comment> => {
     try {
-      await apiClient.post(
-        `/comments/${commentId}/dislike`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
-      );
+      const response = await apiClient.post(`/api/community/comments/${commentId}/dislike`);
+      return response.data;
     } catch (error) {
       console.error("댓글 싫어요 실패:", error);
-      throw error;
+      throw new Error("댓글 싫어요에 실패했습니다.");
     }
   },
 
@@ -586,7 +556,7 @@ export const backendApi = {
 
   // 리뷰 관련 API
   getReviews: async (page = 0, size = 10, sort = "created_at,desc") => {
-    const response = await apiClient.get("/reviews", {
+    const response = await apiClient.get("/api/reviews", {
       params: {
         page,
         size,
@@ -597,7 +567,7 @@ export const backendApi = {
   },
 
   getReviewComments: async (reviewId: number, page = 0, size = 10) => {
-    const response = await apiClient.get(`/reviews/${reviewId}/comments`, {
+    const response = await apiClient.get(`/api/reviews/${reviewId}/comments`, {
       params: {
         page,
         size,
@@ -607,7 +577,7 @@ export const backendApi = {
   },
 
   addReviewComment: async (reviewId: number, content: string) => {
-    const response = await apiClient.post(`/reviews/${reviewId}/comments`, {
+    const response = await apiClient.post(`/api/reviews/${reviewId}/comments`, {
       content,
     });
     return response.data;
@@ -619,7 +589,7 @@ export const backendApi = {
     content: string
   ) => {
     const response = await apiClient.put(
-      `/reviews/${reviewId}/comments/${commentId}`,
+      `/api/reviews/${reviewId}/comments/${commentId}`,
       {
         content,
       }
@@ -629,33 +599,33 @@ export const backendApi = {
 
   deleteReviewComment: async (reviewId: number, commentId: number) => {
     const response = await apiClient.delete(
-      `/reviews/${reviewId}/comments/${commentId}`
+      `/api/reviews/${reviewId}/comments/${commentId}`
     );
     return response.data;
   },
 
   likeReviewComment: async (reviewId: number, commentId: number) => {
     const response = await apiClient.post(
-      `/reviews/${reviewId}/comments/${commentId}/like`
+      `/api/reviews/${reviewId}/comments/${commentId}/like`
     );
     return response.data;
   },
 
   dislikeReviewComment: async (reviewId: number, commentId: number) => {
     const response = await apiClient.post(
-      `/reviews/${reviewId}/comments/${commentId}/dislike`
+      `/api/reviews/${reviewId}/comments/${commentId}/dislike`
     );
     return response.data;
   },
 
   // 리뷰 좋아요/싫어요 API
   likeReview: async (reviewId: number) => {
-    const response = await apiClient.post(`/reviews/${reviewId}/like`);
+    const response = await apiClient.post(`/api/reviews/${reviewId}/like`);
     return response.data;
   },
 
   dislikeReview: async (reviewId: number) => {
-    const response = await apiClient.post(`/reviews/${reviewId}/dislike`);
+    const response = await apiClient.post(`/api/reviews/${reviewId}/dislike`);
     return response.data;
   },
 };

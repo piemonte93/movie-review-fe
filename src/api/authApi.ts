@@ -1,7 +1,7 @@
 import axios from "axios";
 
 // 백엔드 서버 URL
-const BASE_URL = "http://localhost:8080/api";
+const BASE_URL = "http://localhost:8080";
 
 // Axios 인스턴스 생성
 const apiClient = axios.create({
@@ -147,7 +147,7 @@ export const authApi = {
   login: async (loginData: LoginRequest): Promise<AuthResponse> => {
     try {
       const response = await apiClient.post<AuthResponse>(
-        "/auth/login",
+        "/api/auth/login",
         loginData
       );
 
@@ -184,7 +184,7 @@ export const authApi = {
   register: async (registerData: RegisterRequest): Promise<AuthResponse> => {
     try {
       const response = await apiClient.post<AuthResponse>(
-        "/auth/register",
+        "/api/auth/register",
         registerData
       );
       return response.data;

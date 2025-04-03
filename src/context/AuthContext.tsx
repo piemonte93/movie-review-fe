@@ -14,6 +14,7 @@ interface User {
   email: string;
   roles: string[];
   profileImageUrl?: string;
+  bio?: string;
 }
 
 interface AuthContextType {

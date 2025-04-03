@@ -3,6 +3,7 @@ export interface User {
   id: number;
   username: string;
   email: string;
+  bio?: string;
   roles: string[];
   profileImageUrl?: string;
   createdAt?: string;
@@ -15,6 +16,9 @@ export interface UserProfile {
   followerCount: number;
   watchedMoviesCount: number;
   reviewedMoviesCount: number;
+  isFollowing?: boolean;
+  mutualFollow?: boolean;
+  followsMe?: boolean;
 }
 
 export interface UserActivity {

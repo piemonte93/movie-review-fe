@@ -2,10 +2,14 @@ import React from "react";
 import { FaStar } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { Content } from "../types/content";
+
 interface ContentCardProps {
   content: Content;
+  className?: string;
+  type?: string;
 }
-const ContentCard: React.FC<ContentCardProps> = ({ content }) => {
+
+const ContentCard: React.FC<ContentCardProps> = ({ content, className = "", type }) => {
   const navigate = useNavigate();
   const imageUrl = content.poster_path
     ? `https://image.tmdb.org/t/p/w500${content.poster_path}`
@@ -25,14 +29,14 @@ const ContentCard: React.FC<ContentCardProps> = ({ content }) => {
     : content.media_type === "tv"
       ? "방영일 미정"
       : "개봉일 미정";
-  const typeLabel = content.media_type === "tv" ? "TV" : "영화";
+  const typeLabel = type || (content.media_type === "tv" ? "TV" : "영화");
   const handleClick = () => {
     const mediaType = content.media_type === "tv" ? "tv" : "movie";
     navigate(`/${mediaType}/${content.id}`);
   };
   return (
     <div
-      className="min-w-[200px] max-w-[220px] flex-shrink-0 overflow-hidden rounded-lg shadow-md transition-transform hover:scale-105 sm:min-w-[220px] md:min-w-[200px] cursor-pointer"
+      className={`min-w-[200px] max-w-[220px] flex-shrink-0 overflow-hidden rounded-lg shadow-md transition-transform hover:scale-105 sm:min-w-[220px] md:min-w-[200px] cursor-pointer ${className}`}
       onClick={handleClick}
     >
       {" "}
