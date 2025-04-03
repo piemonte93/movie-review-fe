@@ -21,6 +21,7 @@ import { backendApi } from "../api/backendApi";
 import { toast } from "react-toastify";
 import type { Post, Comment, UserItem } from "../api/backendApi";
 import { formatDate } from "../utils/dateUtils";
+import axios from "axios";
 
 // 알림 데이터 타입 정의
 interface Notification {
@@ -244,42 +245,8 @@ const CommunityPage: React.FC = () => {
 
   // 멘션 선택 핸들러
   const handleSelectMention = (selectedUser: UserItem) => {
-    if (!mentionedUsers.some((user) => user.id === selectedUser.id)) {
-      setMentionedUsers([...mentionedUsers, selectedUser]);
-    }
-
-    if (textareaRef.current) {
-      const value = textareaRef.current.value;
-      const cursorPos = cursorPosition;
-      const textBeforeCursor = value.substring(0, cursorPos);
-      const textAfterCursor = value.substring(cursorPos);
-
-      // 마지막 '@' 위치 찾기
-      const lastAtIndex = textBeforeCursor.lastIndexOf("@");
-
-      if (lastAtIndex !== -1) {
-        // '@query' 대신 '@username ' 넣기
-        const newText =
-          value.substring(0, lastAtIndex) +
-          `@${selectedUser.username} ` +
-          textAfterCursor;
-
-        setContent(newText);
-
-        setShowMentionList(false);
-
-        // 포커스 및 커서 위치 설정
-        setTimeout(() => {
-          if (textareaRef.current) {
-            textareaRef.current.focus();
-            const newCursorPos = lastAtIndex + selectedUser.username.length + 2; // '@username ' 길이
-            textareaRef.current.selectionStart = newCursorPos;
-            textareaRef.current.selectionEnd = newCursorPos;
-            setCursorPosition(newCursorPos);
-          }
-        }, 0);
-      }
-    }
+    setMentions([]);
+    setNewComment((prev: string) => prev + `@${selectedUser.username} `);
   };
 
   // 알림 생성 함수
@@ -481,34 +448,50 @@ const CommunityPage: React.FC = () => {
     setNewComment((prev: string) => prev + `@${user.username} `);
   };
 
-  const handleCommentSubmit = async (postId: number) => {
-    if (!isLoggedIn) {
-      navigate("/login", { state: { from: location } });
-      return;
-    }
+  // 멘션된 사용자 표시 형식으로 텍스트 변환
+  const formatContentWithMentions = (text: string) => {
+    // '@username' 패턴을 찾아 강조 표시
+    return text.replace(
+      /@(\w+)/g,
+      '<span class="text-blue-600 font-medium">@$1</span>'
+    );
+  };
 
-    if (!newComment.trim()) {
-      toast.error("댓글 내용을 입력해주세요.");
-      return;
-    }
+  // 댓글 작성 처리
+  const handleCommentSubmit = async (postId: number) => {
+    if (!newComment.trim()) return;
 
     try {
       const response = await backendApi.createComment(postId, newComment);
       console.log("새 댓글 응답:", response);
       console.log("댓글 날짜 형식:", response.createdAt);
 
-      // Post 타입에 맞게 업데이트
+      // 성공적으로 댓글을 추가한 후 현재 게시글 목록을 업데이트
       setPosts((prevPosts) =>
         prevPosts.map((post) =>
           post.id === postId
             ? {
                 ...post,
                 comments: [...(post.comments || []), response],
-                commentCount: post.commentCount + 1,
+                commentCount: (post.commentCount || 0) + 1,
               }
             : post
         )
       );
+
+      // visiblePosts도 동일하게 업데이트 (화면에 바로 반영되도록)
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId
+            ? {
+                ...post,
+                comments: [...(post.comments || []), response],
+                commentCount: (post.commentCount || 0) + 1,
+              }
+            : post
+        )
+      );
+
       setNewComment("");
       toast.success("댓글이 등록되었습니다.");
     } catch (error) {
@@ -517,13 +500,235 @@ const CommunityPage: React.FC = () => {
     }
   };
 
-  // 멘션된 사용자 표시 형식으로 텍스트 변환
-  const formatContentWithMentions = (text: string) => {
-    // '@username' 패턴을 찾아 강조 표시
-    return text.replace(
-      /@(\w+)/g,
-      '<span class="text-blue-500 font-medium">@$1</span>'
-    );
+  // 댓글 토글
+  const toggleComments = async (postId: number) => {
+    if (expandedPostId === postId) {
+      setExpandedPostId(null);
+      return;
+    }
+
+    try {
+      // API 호출을 backendApi.getComments 함수를 통해 수행
+      const comments = await backendApi.getComments(postId);
+      console.log(`게시글 ID ${postId}의 댓글 목록:`, comments);
+
+      // 게시글 목록에서 해당 게시글의 댓글 목록 업데이트
+      setPosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId ? { ...post, comments } : post
+        )
+      );
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId ? { ...post, comments } : post
+        )
+      );
+      setExpandedPostId(postId);
+    } catch (error) {
+      console.error(`게시글 ID ${postId}의 댓글 목록 가져오기 실패:`, error);
+      toast.error("댓글 목록을 불러오는데 실패했습니다.");
+    }
+  };
+
+  // 게시글 좋아요 처리
+  const handlePostLike = async (postId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    try {
+      const updatedPost = await backendApi.likePost(postId);
+      console.log("좋아요 응답 데이터:", updatedPost);
+      // 게시글 목록 업데이트
+      setPosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId
+            ? {
+                ...post,
+                likeCount: updatedPost.likeCount,
+                dislikeCount: updatedPost.dislikeCount,
+                liked: updatedPost.liked,
+                disliked: updatedPost.disliked,
+              }
+            : post
+        )
+      );
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId
+            ? {
+                ...post,
+                likeCount: updatedPost.likeCount,
+                dislikeCount: updatedPost.dislikeCount,
+                liked: updatedPost.liked,
+                disliked: updatedPost.disliked,
+              }
+            : post
+        )
+      );
+      toast.success(
+        updatedPost.liked
+          ? "게시글을 좋아요 했습니다."
+          : "좋아요를 취소했습니다."
+      );
+    } catch (error) {
+      console.error("게시글 좋아요 실패:", error);
+      toast.error("게시글 좋아요에 실패했습니다.");
+    }
+  };
+
+  // 게시글 싫어요 처리
+  const handlePostDislike = async (postId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    try {
+      const updatedPost = await backendApi.dislikePost(postId);
+      // 게시글 목록 업데이트
+      setPosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId
+            ? {
+                ...post,
+                likeCount: updatedPost.likeCount,
+                dislikeCount: updatedPost.dislikeCount,
+                liked: updatedPost.liked,
+                disliked: updatedPost.disliked,
+              }
+            : post
+        )
+      );
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId
+            ? {
+                ...post,
+                likeCount: updatedPost.likeCount,
+                dislikeCount: updatedPost.dislikeCount,
+                liked: updatedPost.liked,
+                disliked: updatedPost.disliked,
+              }
+            : post
+        )
+      );
+      toast.success(
+        updatedPost.disliked
+          ? "게시글을 싫어요 했습니다."
+          : "싫어요를 취소했습니다."
+      );
+    } catch (error) {
+      console.error("게시글 싫어요 실패:", error);
+      toast.error("게시글 싫어요에 실패했습니다.");
+    }
+  };
+
+  // 댓글 좋아요 처리
+  const handleCommentLike = async (commentId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    try {
+      const updatedComment = await backendApi.likeComment(commentId);
+      // 게시글 목록에서 해당 댓글 업데이트
+      setPosts((prevPosts) =>
+        prevPosts.map((post) => ({
+          ...post,
+          comments: post.comments?.map((comment) =>
+            comment.id === commentId
+              ? {
+                  ...comment,
+                  likeCount: updatedComment.likeCount,
+                  dislikeCount: updatedComment.dislikeCount,
+                  liked: updatedComment.liked,
+                  disliked: updatedComment.disliked,
+                }
+              : comment
+          ),
+        }))
+      );
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) => ({
+          ...post,
+          comments: post.comments?.map((comment) =>
+            comment.id === commentId
+              ? {
+                  ...comment,
+                  likeCount: updatedComment.likeCount,
+                  dislikeCount: updatedComment.dislikeCount,
+                  liked: updatedComment.liked,
+                  disliked: updatedComment.disliked,
+                }
+              : comment
+          ),
+        }))
+      );
+      toast.success(
+        updatedComment.liked
+          ? "댓글을 좋아요 했습니다."
+          : "좋아요를 취소했습니다."
+      );
+    } catch (error) {
+      console.error("댓글 좋아요 실패:", error);
+      toast.error("댓글 좋아요에 실패했습니다.");
+    }
+  };
+
+  // 댓글 싫어요 처리
+  const handleCommentDislike = async (commentId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    try {
+      const updatedComment = await backendApi.dislikeComment(commentId);
+      // 게시글 목록에서 해당 댓글 업데이트
+      setPosts((prevPosts) =>
+        prevPosts.map((post) => ({
+          ...post,
+          comments: post.comments?.map((comment) =>
+            comment.id === commentId
+              ? {
+                  ...comment,
+                  likeCount: updatedComment.likeCount,
+                  dislikeCount: updatedComment.dislikeCount,
+                  liked: updatedComment.liked,
+                  disliked: updatedComment.disliked,
+                }
+              : comment
+          ),
+        }))
+      );
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) => ({
+          ...post,
+          comments: post.comments?.map((comment) =>
+            comment.id === commentId
+              ? {
+                  ...comment,
+                  likeCount: updatedComment.likeCount,
+                  dislikeCount: updatedComment.dislikeCount,
+                  liked: updatedComment.liked,
+                  disliked: updatedComment.disliked,
+                }
+              : comment
+          ),
+        }))
+      );
+      toast.success(
+        updatedComment.disliked
+          ? "댓글을 싫어요 했습니다."
+          : "싫어요를 취소했습니다."
+      );
+    } catch (error) {
+      console.error("댓글 싫어요 실패:", error);
+      toast.error("댓글 싫어요에 실패했습니다.");
+    }
   };
 
   // 검색 처리
@@ -562,123 +767,6 @@ const CommunityPage: React.FC = () => {
     setSearchCategory("title");
     setShowSearch(false);
     setShowSearchModal(false);
-  };
-
-  // 댓글 토글
-  const toggleComments = (postId: number) => {
-    setExpandedPostId(expandedPostId === postId ? null : postId);
-  };
-
-  // 테스트용 알림 생성 버튼 핸들러
-  const handleCreateTestNotification = () => {
-    addNotification({
-      type: "mention",
-      postId: 1,
-      createdAt: new Date(),
-      read: false,
-      fromUser: {
-        id: 2,
-        username: "테스트사용자",
-        profileImageUrl: null,
-      },
-    });
-    alert("테스트 알림이 생성되었습니다. 알림 아이콘을 확인해보세요.");
-  };
-
-  // 좋아요 처리
-  const handlePostLike = async (postId: number) => {
-    if (!isLoggedIn) {
-      toast.error("좋아요를 누르려면 로그인이 필요합니다.");
-      return;
-    }
-
-    try {
-      const updatedPost = await backendApi.likePost(postId);
-      // 게시글 목록 새로고침
-      const postsResponse = await backendApi.getPosts(0, postsPerPage);
-      setPosts(postsResponse.content);
-      setVisiblePosts(postsResponse.content);
-      toast.success(
-        updatedPost.liked
-          ? "게시글을 좋아요 했습니다."
-          : "좋아요를 취소했습니다."
-      );
-    } catch (error: any) {
-      console.error("게시글 좋아요 실패:", error);
-      if (error.response?.status === 401) {
-        toast.error("세션이 만료되었습니다. 다시 로그인해주세요.");
-        navigate("/login", { state: { from: location } });
-      } else {
-        toast.error("게시글 좋아요에 실패했습니다.");
-      }
-    }
-  };
-
-  // 싫어요 처리
-  const handlePostDislike = async (postId: number) => {
-    if (!isLoggedIn) {
-      toast.error("싫어요를 누르려면 로그인이 필요합니다.");
-      return;
-    }
-
-    try {
-      const updatedPost = await backendApi.dislikePost(postId);
-      // 게시글 목록 새로고침
-      const postsResponse = await backendApi.getPosts(0, postsPerPage);
-      setPosts(postsResponse.content);
-      setVisiblePosts(postsResponse.content);
-      toast.success(
-        updatedPost.disliked
-          ? "게시글을 싫어요 했습니다."
-          : "싫어요를 취소했습니다."
-      );
-    } catch (error: any) {
-      console.error("게시글 싫어요 실패:", error);
-      if (error.response?.status === 401) {
-        toast.error("세션이 만료되었습니다. 다시 로그인해주세요.");
-        navigate("/login", { state: { from: location } });
-      } else {
-        toast.error("게시글 싫어요에 실패했습니다.");
-      }
-    }
-  };
-
-  const handleCommentLike = async (commentId: number) => {
-    try {
-      await backendApi.likeComment(commentId);
-      setPosts((prevPosts) =>
-        prevPosts.map((post) => ({
-          ...post,
-          comments: post.comments.map((comment) =>
-            comment.id === commentId
-              ? { ...comment, likeCount: comment.likeCount + 1 }
-              : comment
-          ),
-        }))
-      );
-    } catch (error) {
-      console.error("댓글 좋아요 실패:", error);
-      toast.error("댓글 좋아요에 실패했습니다.");
-    }
-  };
-
-  const handleCommentDislike = async (commentId: number) => {
-    try {
-      await backendApi.dislikeComment(commentId);
-      setPosts((prevPosts) =>
-        prevPosts.map((post) => ({
-          ...post,
-          comments: post.comments.map((comment) =>
-            comment.id === commentId
-              ? { ...comment, dislikeCount: comment.dislikeCount + 1 }
-              : comment
-          ),
-        }))
-      );
-    } catch (error) {
-      console.error("댓글 싫어요 실패:", error);
-      toast.error("댓글 싫어요에 실패했습니다.");
-    }
   };
 
   // 스크롤 이벤트 핸들러
@@ -772,7 +860,22 @@ const CommunityPage: React.FC = () => {
               <button
                 className="rounded-full p-2 hover:bg-gray-100"
                 title="테스트 알림 생성"
-                onClick={handleCreateTestNotification}
+                onClick={() => {
+                  addNotification({
+                    type: "mention",
+                    postId: 1,
+                    createdAt: new Date(),
+                    read: false,
+                    fromUser: {
+                      id: 2,
+                      username: "테스트사용자",
+                      profileImageUrl: null,
+                    },
+                  });
+                  alert(
+                    "테스트 알림이 생성되었습니다. 알림 아이콘을 확인해보세요."
+                  );
+                }}
               >
                 테스트 알림
               </button>
@@ -1249,59 +1352,7 @@ const CommunityPage: React.FC = () => {
                             </div>
                           </div>
                         ))}
-
-                        {(!post.comments || post.comments.length === 0) && (
-                          <p className="text-sm text-gray-500 text-center py-2">
-                            아직 댓글이 없습니다. 첫 댓글을 작성해보세요!
-                          </p>
-                        )}
                       </div>
-
-                      {/* 댓글 작성 폼 */}
-                      {isLoggedIn ? (
-                        <div className="flex">
-                          <div className="mr-2 h-8 w-8 overflow-hidden rounded-full bg-gray-200">
-                            {user?.profileImageUrl ? (
-                              <img
-                                src={user.profileImageUrl}
-                                alt="내 프로필"
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center bg-gray-200">
-                                <FaUser className="text-gray-500" size={12} />
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex-1 flex">
-                            <input
-                              type="text"
-                              placeholder="댓글을 입력하세요..."
-                              className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
-                              value={newComment}
-                              onChange={(e) => setNewComment(e.target.value)}
-                            />
-                            <button
-                              className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
-                              onClick={() => handleCommentSubmit(post.id)}
-                            >
-                              <FaReply />
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-2">
-                          <p className="text-sm text-gray-500 mb-1">
-                            댓글을 작성하려면 로그인이 필요합니다.
-                          </p>
-                          <Link
-                            to="/login"
-                            className="text-sm text-blue-600 hover:underline"
-                          >
-                            로그인하기
-                          </Link>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>

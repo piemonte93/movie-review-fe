@@ -12,17 +12,37 @@
 export const getPostDateByPattern = (
   dateValue: string | Date | undefined
 ): string => {
-  // undefined인 경우 기본값 설정
+  // undefined인 경우 현재 시간 설정
   if (!dateValue) {
-    return "날짜 정보 없음";
+    return "방금 전";
   }
 
   // 문자열 또는 Date 객체를 Date 객체로 변환
-  const date = typeof dateValue === "string" ? new Date(dateValue) : dateValue;
+  let date: Date;
+
+  if (typeof dateValue === "string") {
+    // ISO 문자열 날짜 형식인지 확인
+    if (dateValue.includes("T") || dateValue.includes("Z")) {
+      date = new Date(dateValue);
+    } else {
+      // yyyy-MM-dd 형식일 수도 있는 경우 처리
+      const parts = dateValue.split(/[-/\s:]/);
+      if (parts.length >= 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        date = new Date(year, month, day);
+      } else {
+        date = new Date(dateValue);
+      }
+    }
+  } else {
+    date = dateValue;
+  }
 
   // 유효하지 않은 날짜인 경우
   if (isNaN(date.getTime())) {
-    return "유효하지 않은 날짜";
+    return "방금 전";
   }
 
   const now = new Date();
@@ -52,9 +72,9 @@ export const getPostDateByPattern = (
 /**
  * 레거시 포맷 함수 - 기존 코드와의 호환성을 위해 유지
  *
- * @param dateString 날짜 문자열
+ * @param dateString 날짜 문자열 또는 Date 객체
  * @returns 포맷팅된 날짜 문자열
  */
-export const formatDate = (dateString: string | undefined): string => {
+export const formatDate = (dateString: string | Date | undefined): string => {
   return getPostDateByPattern(dateString);
 };

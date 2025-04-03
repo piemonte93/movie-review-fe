@@ -65,8 +65,16 @@ interface CommentResponse {
   username: string;
   user_profile_image_url: string | null;
   created_at: string;
+  createdAt?: string; // 백엔드에서 camelCase로 반환될 수도 있음
   updated_at: string | null;
   user_id: number;
+  likeCount?: number; // 좋아요 수
+  dislikeCount?: number; // 싫어요 수
+  user?: {
+    id: number;
+    username: string;
+    profileImageUrl: string | null;
+  };
 }
 
 // 영화 리뷰 데이터 타입 정의
@@ -548,6 +556,7 @@ const MovieReviewsPage: React.FC = () => {
 
         toast.success("리뷰가 성공적으로 등록되었습니다.");
         resetForm();
+        setShowWriteForm(false);
         setPage(0);
         fetchReviews();
       }
@@ -790,16 +799,22 @@ const MovieReviewsPage: React.FC = () => {
 
       // 댓글 데이터 매핑
       const mappedComments: Comment[] = response.content.map(
-        (comment: CommentResponse) => ({
-          id: comment.id,
-          content: comment.content,
-          createdAt: comment.created_at,
-          username: comment.username,
-          profileImageUrl: comment.user_profile_image_url,
-          likeCount: 0,
-          dislikeCount: 0,
-          userId: comment.user_id,
-        })
+        (comment: CommentResponse) => {
+          // 날짜 필드 확인 및 로그 출력
+          const createdAtValue = comment.createdAt || comment.created_at;
+          console.log(`댓글 ID ${comment.id}의 생성 날짜:`, createdAtValue);
+
+          return {
+            id: comment.id,
+            content: comment.content,
+            createdAt: createdAtValue || new Date().toISOString(),
+            username: comment.username,
+            profileImageUrl: comment.user_profile_image_url,
+            likeCount: comment.likeCount || 0,
+            dislikeCount: comment.dislikeCount || 0,
+            userId: comment.user_id,
+          };
+        }
       );
 
       console.log(`리뷰 ID ${reviewId}의 변환된 댓글:`, mappedComments);
@@ -1000,19 +1015,34 @@ const MovieReviewsPage: React.FC = () => {
     try {
       console.log(`리뷰 ID ${reviewId}의 댓글 목록 요청 시작`);
       const response = await backendApi.getReviewComments(reviewId);
-      console.log(`리뷰 ID ${reviewId}의 댓글 데이터 매핑 시작:`, response);
+      console.log(`리뷰 ID ${reviewId}의 댓글 데이터 응답:`, response);
+
+      // 응답 형태 확인 및 디버깅
+      if (response.content && response.content.length > 0) {
+        console.log("첫 번째 댓글 데이터 샘플:", response.content[0]);
+        console.log("첫 번째 댓글 날짜 필드:", {
+          createdAt: response.content[0].createdAt,
+          created_at: response.content[0].created_at,
+        });
+      }
 
       const mappedComments: Comment[] = response.content.map(
-        (comment: CommentResponse) => ({
-          id: comment.id,
-          content: comment.content,
-          createdAt: comment.created_at,
-          username: comment.username,
-          profileImageUrl: comment.user_profile_image_url,
-          likeCount: 0,
-          dislikeCount: 0,
-          userId: comment.user_id,
-        })
+        (comment: CommentResponse) => {
+          // 날짜 필드 확인 및 로그 출력
+          const createdAtValue = comment.createdAt || comment.created_at;
+          console.log(`댓글 ID ${comment.id}의 생성 날짜:`, createdAtValue);
+
+          return {
+            id: comment.id,
+            content: comment.content,
+            createdAt: createdAtValue || new Date().toISOString(),
+            username: comment.username,
+            profileImageUrl: comment.user_profile_image_url,
+            likeCount: comment.likeCount || 0,
+            dislikeCount: comment.dislikeCount || 0,
+            userId: comment.user_id,
+          };
+        }
       );
 
       console.log(`리뷰 ID ${reviewId}의 변환된 댓글:`, mappedComments);
@@ -1124,10 +1154,63 @@ const MovieReviewsPage: React.FC = () => {
       // 성공 메시지 표시
       toast.success("댓글이 삭제되었습니다.");
 
-      // 서버에서 최신 데이터 가져오기 (백그라운드에서 처리)
-      fetchReviewComments(reviewId).catch((error) => {
-        console.error(`댓글 목록 새로고침 실패: ${error}`);
-      });
+      // 서버에서 리뷰 데이터 새로고침 (백그라운드에서 처리)
+      try {
+        console.log("리뷰 데이터 새로고침 시작");
+        const refreshReviewData = await backendApi.getReviews(
+          page,
+          reviewsPerPage
+        );
+
+        if (refreshReviewData && refreshReviewData.content) {
+          console.log("새로고침된 리뷰 데이터:", refreshReviewData);
+
+          // 기존 reviews 상태에서 새로운 데이터로 업데이트
+          setReviews((prevReviews) => {
+            return prevReviews.map((review) => {
+              // 해당 리뷰를 새 데이터에서 찾음
+              const refreshedReview = refreshReviewData.content.find(
+                (r: any) => r.id === review.id
+              );
+
+              // 찾은 경우 commentCount만 업데이트하고 나머지는 기존 상태 유지
+              if (refreshedReview) {
+                return {
+                  ...review,
+                  commentCount: refreshedReview.commentCount || 0,
+                };
+              }
+
+              return review;
+            });
+          });
+
+          // visibleReviews도 동일하게 업데이트
+          setVisibleReviews((prevVisible) => {
+            return prevVisible.map((review) => {
+              const refreshedReview = refreshReviewData.content.find(
+                (r: any) => r.id === review.id
+              );
+
+              if (refreshedReview) {
+                return {
+                  ...review,
+                  commentCount: refreshedReview.commentCount || 0,
+                };
+              }
+
+              return review;
+            });
+          });
+        }
+
+        // 해당 리뷰의 댓글 목록도 새로고침
+        await fetchReviewComments(reviewId);
+      } catch (refreshError) {
+        console.error("리뷰 데이터 새로고침 실패:", refreshError);
+        // 실패해도 댓글 목록만이라도 새로고침
+        await fetchReviewComments(reviewId);
+      }
     } catch (error) {
       console.error("댓글 삭제 실패:", error);
 
@@ -1151,11 +1234,14 @@ const MovieReviewsPage: React.FC = () => {
 
       toast.error(errorMessage);
 
-      // 오류 발생 시에도 댓글 목록 다시 가져오기
+      // 오류 발생 시에도 리뷰 목록과 댓글 목록 다시 가져오기
       try {
+        // 리뷰 목록 새로고침
+        fetchReviews();
+        // 댓글 목록 새로고침
         await fetchReviewComments(reviewId);
       } catch (refreshError) {
-        console.error("댓글 목록 새로고침 실패:", refreshError);
+        console.error("데이터 새로고침 실패:", refreshError);
       }
     }
   };
@@ -1421,7 +1507,7 @@ const MovieReviewsPage: React.FC = () => {
               {expandedCommentId === review.id && (
                 <div className="mt-4 pt-4 border-t">
                   <div className="text-sm font-bold mb-3">
-                    댓글 {review.comments?.length || 0}개
+                    댓글 {review.commentCount || 0}개
                   </div>
 
                   <div className="space-y-3 mb-4">

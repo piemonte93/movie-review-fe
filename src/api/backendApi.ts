@@ -694,6 +694,21 @@ export const backendApi = {
     }
   },
 
+  // 게시글 댓글 가져오기
+  getComments: async (postId: number): Promise<Comment[]> => {
+    try {
+      console.log(`게시글 ID ${postId}의 댓글 목록 가져오기 요청`);
+      const response = await apiClient.get(
+        `/api/community/posts/${postId}/comments`
+      );
+      console.log(`게시글 ID ${postId}의 댓글 목록 응답:`, response.data);
+      return response.data;
+    } catch (error) {
+      console.error(`게시글 ID ${postId}의 댓글 목록 가져오기 실패:`, error);
+      throw error;
+    }
+  },
+
   // 댓글 좋아요
   likeComment: async (commentId: number): Promise<void> => {
     try {
@@ -813,6 +828,7 @@ export const backendApi = {
         size,
       },
     });
+    console.log("리뷰 댓글 응답 데이터:", response.data);
     return response.data;
   },
 
@@ -820,6 +836,7 @@ export const backendApi = {
     const response = await apiClient.post(`/api/reviews/${reviewId}/comments`, {
       content,
     });
+    console.log("새 댓글 생성 응답 데이터:", response.data);
     return response.data;
   },
 
@@ -847,10 +864,19 @@ export const backendApi = {
       const token = localStorage.getItem("token");
       console.log("인증 토큰:", token ? "토큰 있음" : "토큰 없음");
 
+      // 요청 시작 시간 기록
+      const startTime = new Date().getTime();
+
+      // API 호출
       const response = await apiClient.delete(
         `/api/reviews/${reviewId}/comments/${commentId}`
       );
 
+      // 응답 시간 계산
+      const endTime = new Date().getTime();
+      const responseTime = endTime - startTime;
+
+      console.log(`댓글 삭제 응답 시간: ${responseTime}ms`);
       console.log("댓글 삭제 응답 상세:", {
         status: response.status,
         statusText: response.statusText,
@@ -858,7 +884,23 @@ export const backendApi = {
         data: response.data,
       });
 
-      return response.data;
+      // 백엔드로부터 업데이트된 리뷰 정보 가져오기
+      console.log(`해당 리뷰(ID: ${reviewId})의 최신 정보 가져오기 시도`);
+      try {
+        const reviewResponse = await apiClient.get(`/api/reviews/${reviewId}`);
+        console.log("리뷰 업데이트 정보:", reviewResponse.data);
+        return {
+          success: true,
+          message: "댓글이 성공적으로 삭제되었습니다.",
+          updatedReview: reviewResponse.data,
+        };
+      } catch (reviewError) {
+        console.log("리뷰 정보 가져오기 실패, 기본 성공 응답 반환");
+        return {
+          success: true,
+          message: "댓글이 삭제되었지만 리뷰 정보를 가져오지 못했습니다.",
+        };
+      }
     } catch (error) {
       console.error("댓글 삭제 API 호출 실패:", error);
       if (axios.isAxiosError(error)) {
@@ -868,6 +910,10 @@ export const backendApi = {
           data: error.response?.data,
           message: error.message,
         });
+
+        const errorMessage =
+          error.response?.data?.message || "댓글 삭제에 실패했습니다.";
+        throw new Error(errorMessage);
       }
       throw error;
     }
