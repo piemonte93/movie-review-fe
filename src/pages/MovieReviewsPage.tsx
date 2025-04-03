@@ -1587,9 +1587,15 @@ const MovieReviewsPage: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">리뷰 작성</h2>
+              <h2 className="text-2xl font-bold">
+                {editingReviewId ? "리뷰 수정" : "리뷰 작성"}
+              </h2>
               <button
-                onClick={() => setShowWriteForm(false)}
+                onClick={() => {
+                  setShowWriteForm(false);
+                  resetForm();
+                  setEditingReviewId(null);
+                }}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <FaTimes />
@@ -1768,7 +1774,11 @@ const MovieReviewsPage: React.FC = () => {
               <div className="flex justify-end space-x-4">
                 <button
                   type="button"
-                  onClick={() => setShowWriteForm(false)}
+                  onClick={() => {
+                    setShowWriteForm(false);
+                    resetForm();
+                    setEditingReviewId(null);
+                  }}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800"
                 >
                   취소
