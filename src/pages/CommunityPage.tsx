@@ -12,6 +12,7 @@ import {
   FaThumbsUp,
   FaThumbsDown,
   FaArrowUp,
+  FaEdit,
   FaTrash,
 } from "react-icons/fa";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -19,6 +20,7 @@ import InfiniteScroll from "react-infinite-scroll-component";
 import { backendApi } from "../api/backendApi";
 import { toast } from "react-toastify";
 import type { Post, Comment, UserItem } from "../api/backendApi";
+import { formatDate } from "../utils/dateUtils";
 
 // 알림 데이터 타입 정의
 interface Notification {
@@ -79,6 +81,9 @@ const CommunityPage: React.FC = () => {
   const [mentions, setMentions] = useState<UserItem[]>([]);
   const [newComment, setNewComment] = useState("");
 
+  // 게시글 수정 상태 추가
+  const [editingPostId, setEditingPostId] = useState<number | null>(null);
+
   // URL 쿼리 파라미터 확인하여 특정 게시글 표시
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -98,12 +103,16 @@ const CommunityPage: React.FC = () => {
       try {
         setLoading(true);
         const response = await backendApi.getPosts(0, postsPerPage);
-        console.log(
-          "게시글 목록 응답 상세:",
-          JSON.stringify(response.content, null, 2)
-        ); // 상세 로그 추가
-        setPosts(response.content);
-        setVisiblePosts(response.content);
+        console.log("게시글 및 댓글 날짜 형식 확인:", {
+          게시글작성일: response.content[0]?.createdAt,
+          댓글작성일:
+            response.content[0]?.comments &&
+            response.content[0].comments.length > 0
+              ? response.content[0].comments[0].createdAt
+              : "댓글 없음",
+        });
+        setPosts(response.content as any);
+        setVisiblePosts(response.content as any);
         setTotalPages(response.totalPages);
         setHasMore(response.totalPages > 1);
         setLoading(false);
@@ -115,6 +124,42 @@ const CommunityPage: React.FC = () => {
     };
 
     fetchPosts();
+  }, []);
+
+  // 여기서 백엔드 API 응답에서 날짜 객체 프로퍼티 이름 확인
+  useEffect(() => {
+    const checkPostProperties = async () => {
+      try {
+        // 게시글 데이터 가져오기
+        const response = await backendApi.getPosts(0, 5);
+        if (response.content && response.content.length > 0) {
+          const firstPost = response.content[0] as any;
+
+          // 객체의 모든 프로퍼티 확인
+          console.log("게시글 객체 프로퍼티 목록:", Object.keys(firstPost));
+
+          // 실제 날짜 데이터 확인
+          const dateValue =
+            firstPost.createdAt || firstPost.created_at || firstPost.createdat;
+          console.log("감지된 날짜 필드 값:", dateValue);
+
+          // 댓글 체크
+          if (firstPost.comments && firstPost.comments.length > 0) {
+            const firstComment = firstPost.comments[0] as any;
+            console.log("댓글 객체 프로퍼티 목록:", Object.keys(firstComment));
+            const commentDateValue =
+              firstComment.createdAt ||
+              firstComment.created_at ||
+              firstComment.createdat;
+            console.log("감지된 댓글 날짜 필드 값:", commentDateValue);
+          }
+        }
+      } catch (error) {
+        console.error("게시글 프로퍼티 확인 중 오류:", error);
+      }
+    };
+
+    checkPostProperties();
   }, []);
 
   // 사용자 검색 API 호출 함수
@@ -199,42 +244,8 @@ const CommunityPage: React.FC = () => {
 
   // 멘션 선택 핸들러
   const handleSelectMention = (selectedUser: UserItem) => {
-    if (!mentionedUsers.some((user) => user.id === selectedUser.id)) {
-      setMentionedUsers([...mentionedUsers, selectedUser]);
-    }
-
-    if (textareaRef.current) {
-      const value = textareaRef.current.value;
-      const cursorPos = cursorPosition;
-      const textBeforeCursor = value.substring(0, cursorPos);
-      const textAfterCursor = value.substring(cursorPos);
-
-      // 마지막 '@' 위치 찾기
-      const lastAtIndex = textBeforeCursor.lastIndexOf("@");
-
-      if (lastAtIndex !== -1) {
-        // '@query' 대신 '@username ' 넣기
-        const newText =
-          value.substring(0, lastAtIndex) +
-          `@${selectedUser.username} ` +
-          textAfterCursor;
-
-        setContent(newText);
-
-        setShowMentionList(false);
-
-        // 포커스 및 커서 위치 설정
-        setTimeout(() => {
-          if (textareaRef.current) {
-            textareaRef.current.focus();
-            const newCursorPos = lastAtIndex + selectedUser.username.length + 2; // '@username ' 길이
-            textareaRef.current.selectionStart = newCursorPos;
-            textareaRef.current.selectionEnd = newCursorPos;
-            setCursorPosition(newCursorPos);
-          }
-        }, 0);
-      }
-    }
+    setMentions([]);
+    setNewComment((prev: string) => prev + `@${selectedUser.username} `);
   };
 
   // 알림 생성 함수
@@ -273,12 +284,70 @@ const CommunityPage: React.FC = () => {
     }
   };
 
-  // 게시글 작성 처리
+  // 게시글 수정 처리
+  const handleEditPost = (post: Post) => {
+    setEditingPostId(post.id);
+    setTitle(post.title);
+    setContent(post.content);
+    setShowWriteForm(true);
+    setMentionedUsers(post.mentions || []);
+  };
+
+  // 게시글 삭제 처리
+  const handleDeletePost = async (postId: number) => {
+    if (!window.confirm("게시글을 삭제하시겠습니까?")) {
+      return;
+    }
+
+    try {
+      await backendApi.deletePost(postId);
+      // 성공 후 UI에서 제거
+      setPosts(posts.filter((post) => post.id !== postId));
+      setVisiblePosts(visiblePosts.filter((post) => post.id !== postId));
+      toast.success("게시글이 삭제되었습니다.");
+    } catch (error) {
+      console.error("게시글 삭제 실패:", error);
+      toast.error("게시글 삭제에 실패했습니다.");
+    }
+  };
+
+  // 댓글 삭제 처리
+  const handleDeleteComment = async (postId: number, commentId: number) => {
+    if (!window.confirm("댓글을 삭제하시겠습니까?")) {
+      return;
+    }
+
+    try {
+      await backendApi.deleteComment(commentId);
+
+      // 성공 후 UI 업데이트
+      const updatedPosts = posts.map((post) => {
+        if (post.id === postId) {
+          return {
+            ...post,
+            comments: post.comments.filter(
+              (comment) => comment.id !== commentId
+            ),
+            commentCount: Math.max(0, post.commentCount - 1),
+          };
+        }
+        return post;
+      });
+
+      setPosts(updatedPosts);
+      setVisiblePosts(updatedPosts);
+      toast.success("댓글이 삭제되었습니다.");
+    } catch (error) {
+      console.error("댓글 삭제 실패:", error);
+      toast.error("댓글 삭제에 실패했습니다.");
+    }
+  };
+
+  // 기존 handleSubmit 함수 수정 (게시글 수정 기능 추가)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!isLoggedIn) {
-      // 로그인이 필요한 경우 로그인 페이지로 리다이렉트
       navigate("/login", { state: { from: location } });
       return;
     }
@@ -289,31 +358,78 @@ const CommunityPage: React.FC = () => {
     }
 
     try {
-      const newPost = await backendApi.createPost({
-        title: title,
-        content: content,
-      });
+      // 수정 모드인 경우
+      if (editingPostId) {
+        const updatedPost = await backendApi.updatePost(editingPostId, {
+          title: title,
+          content: content,
+        });
 
-      // 멘션된 사용자에게 알림 생성
-      if (mentionedUsers.length > 0) {
-        createNotification(mentionedUsers, newPost.id);
+        // 게시글 목록 업데이트
+        const updatedPosts = posts.map((post) =>
+          post.id === editingPostId
+            ? {
+                ...post,
+                title: updatedPost.title,
+                content: updatedPost.content,
+                // mentions 속성이 있을 경우만 설정
+                ...(post.mentions && { mentions: post.mentions }),
+              }
+            : post
+        );
+
+        setPosts(updatedPosts);
+        setVisiblePosts(updatedPosts);
+        toast.success("게시글이 수정되었습니다.");
+      } else {
+        // 새 게시글 작성 모드
+        const newPost = await backendApi.createPost({
+          title: title,
+          content: content,
+        });
+
+        // Post 타입에 맞게 필드 추가
+        const completePost: Post = {
+          ...newPost,
+          comments: [],
+          likeCount: 0,
+          dislikeCount: 0,
+          commentCount: 0,
+          liked: false,
+          disliked: false,
+        };
+
+        // 멘션된 사용자에게 알림 생성
+        if (mentionedUsers.length > 0) {
+          createNotification(mentionedUsers, completePost.id);
+        }
+
+        // 새 게시글을 목록 최상단에 추가
+        setPosts((prevPosts) => [completePost, ...prevPosts]);
+        setVisiblePosts((prevPosts) => [completePost, ...prevPosts]);
+
+        toast.success("게시글이 등록되었습니다.");
       }
 
       // 폼 초기화 및 닫기
-      setTitle("");
-      setContent("");
-      setMentionedUsers([]);
+      resetForm();
       setShowWriteForm(false);
-
-      // 새 게시글을 목록 최상단에 추가
-      setPosts((prevPosts) => [newPost, ...prevPosts]);
-      setVisiblePosts((prevPosts) => [newPost, ...prevPosts]);
-
-      toast.success("게시글이 등록되었습니다.");
+      setEditingPostId(null);
     } catch (error) {
-      console.error("게시글 등록 실패:", error);
-      toast.error("게시글 등록에 실패했습니다.");
+      console.error("게시글 처리 실패:", error);
+      toast.error(
+        editingPostId
+          ? "게시글 수정에 실패했습니다."
+          : "게시글 등록에 실패했습니다."
+      );
     }
+  };
+
+  const resetForm = () => {
+    setTitle("");
+    setContent("");
+    setMentionedUsers([]);
+    setEditingPostId(null);
   };
 
   const handleMentionSearch = async (query: string): Promise<void> => {
@@ -342,26 +458,22 @@ const CommunityPage: React.FC = () => {
 
   // 댓글 작성 처리
   const handleCommentSubmit = async (postId: number) => {
-    if (!isLoggedIn) {
-      navigate("/login", { state: { from: location } });
-      return;
-    }
-
-    if (!newComment.trim()) {
-      toast.error("댓글 내용을 입력해주세요.");
-      return;
-    }
+    if (!newComment.trim()) return;
 
     try {
       const response = await backendApi.addComment(postId, newComment);
-      console.log("댓글 작성 서버 응답:", response);
+      console.log("새 댓글 응답:", response);
+      console.log("댓글 날짜 형식:", response.createdAt);
 
-      // 게시글 목록 새로고침
-      const postsResponse = await backendApi.getPosts(page, postsPerPage);
-      setPosts(postsResponse.content);
-      setVisiblePosts(postsResponse.content);
-      
-      // 댓글 입력창 초기화
+      // 성공적으로 댓글을 추가한 후 현재 게시글 목록을 업데이트
+      setPosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId
+            ? { ...post, comments: [...post.comments, response] }
+            : post
+        )
+      );
+
       setNewComment("");
       toast.success("댓글이 등록되었습니다.");
     } catch (error) {
@@ -384,16 +496,12 @@ const CommunityPage: React.FC = () => {
       // 게시글 목록에서 해당 게시글의 댓글 목록 업데이트
       setPosts((prevPosts) =>
         prevPosts.map((post) =>
-          post.id === postId
-            ? { ...post, comments }
-            : post
+          post.id === postId ? { ...post, comments } : post
         )
       );
       setVisiblePosts((prevPosts) =>
         prevPosts.map((post) =>
-          post.id === postId
-            ? { ...post, comments }
-            : post
+          post.id === postId ? { ...post, comments } : post
         )
       );
       setExpandedPostId(postId);
@@ -414,33 +522,37 @@ const CommunityPage: React.FC = () => {
       const updatedPost = await backendApi.likePost(postId);
       console.log("좋아요 응답 데이터:", updatedPost);
       // 게시글 목록 업데이트
-      setPosts(prevPosts =>
-        prevPosts.map(post =>
+      setPosts((prevPosts) =>
+        prevPosts.map((post) =>
           post.id === postId
             ? {
                 ...post,
                 likeCount: updatedPost.likeCount,
                 dislikeCount: updatedPost.dislikeCount,
                 liked: updatedPost.liked,
-                disliked: updatedPost.disliked
+                disliked: updatedPost.disliked,
               }
             : post
         )
       );
-      setVisiblePosts(prevPosts =>
-        prevPosts.map(post =>
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) =>
           post.id === postId
             ? {
                 ...post,
                 likeCount: updatedPost.likeCount,
                 dislikeCount: updatedPost.dislikeCount,
                 liked: updatedPost.liked,
-                disliked: updatedPost.disliked
+                disliked: updatedPost.disliked,
               }
             : post
         )
       );
-      toast.success(updatedPost.liked ? "게시글을 좋아요 했습니다." : "좋아요를 취소했습니다.");
+      toast.success(
+        updatedPost.liked
+          ? "게시글을 좋아요 했습니다."
+          : "좋아요를 취소했습니다."
+      );
     } catch (error) {
       console.error("게시글 좋아요 실패:", error);
       toast.error("게시글 좋아요에 실패했습니다.");
@@ -457,33 +569,37 @@ const CommunityPage: React.FC = () => {
     try {
       const updatedPost = await backendApi.dislikePost(postId);
       // 게시글 목록 업데이트
-      setPosts(prevPosts =>
-        prevPosts.map(post =>
+      setPosts((prevPosts) =>
+        prevPosts.map((post) =>
           post.id === postId
             ? {
                 ...post,
                 likeCount: updatedPost.likeCount,
                 dislikeCount: updatedPost.dislikeCount,
                 liked: updatedPost.liked,
-                disliked: updatedPost.disliked
+                disliked: updatedPost.disliked,
               }
             : post
         )
       );
-      setVisiblePosts(prevPosts =>
-        prevPosts.map(post =>
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) =>
           post.id === postId
             ? {
                 ...post,
                 likeCount: updatedPost.likeCount,
                 dislikeCount: updatedPost.dislikeCount,
                 liked: updatedPost.liked,
-                disliked: updatedPost.disliked
+                disliked: updatedPost.disliked,
               }
             : post
         )
       );
-      toast.success(updatedPost.disliked ? "게시글을 싫어요 했습니다." : "싫어요를 취소했습니다.");
+      toast.success(
+        updatedPost.disliked
+          ? "게시글을 싫어요 했습니다."
+          : "싫어요를 취소했습니다."
+      );
     } catch (error) {
       console.error("게시글 싫어요 실패:", error);
       toast.error("게시글 싫어요에 실패했습니다.");
@@ -500,39 +616,43 @@ const CommunityPage: React.FC = () => {
     try {
       const updatedComment = await backendApi.likeComment(commentId);
       // 게시글 목록에서 해당 댓글 업데이트
-      setPosts(prevPosts =>
-        prevPosts.map(post => ({
+      setPosts((prevPosts) =>
+        prevPosts.map((post) => ({
           ...post,
-          comments: post.comments?.map(comment =>
+          comments: post.comments?.map((comment) =>
             comment.id === commentId
               ? {
                   ...comment,
                   likeCount: updatedComment.likeCount,
                   dislikeCount: updatedComment.dislikeCount,
                   liked: updatedComment.liked,
-                  disliked: updatedComment.disliked
+                  disliked: updatedComment.disliked,
                 }
               : comment
-          )
+          ),
         }))
       );
-      setVisiblePosts(prevPosts =>
-        prevPosts.map(post => ({
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) => ({
           ...post,
-          comments: post.comments?.map(comment =>
+          comments: post.comments?.map((comment) =>
             comment.id === commentId
               ? {
                   ...comment,
                   likeCount: updatedComment.likeCount,
                   dislikeCount: updatedComment.dislikeCount,
                   liked: updatedComment.liked,
-                  disliked: updatedComment.disliked
+                  disliked: updatedComment.disliked,
                 }
               : comment
-          )
+          ),
         }))
       );
-      toast.success(updatedComment.liked ? "댓글을 좋아요 했습니다." : "좋아요를 취소했습니다.");
+      toast.success(
+        updatedComment.liked
+          ? "댓글을 좋아요 했습니다."
+          : "좋아요를 취소했습니다."
+      );
     } catch (error) {
       console.error("댓글 좋아요 실패:", error);
       toast.error("댓글 좋아요에 실패했습니다.");
@@ -549,60 +669,47 @@ const CommunityPage: React.FC = () => {
     try {
       const updatedComment = await backendApi.dislikeComment(commentId);
       // 게시글 목록에서 해당 댓글 업데이트
-      setPosts(prevPosts =>
-        prevPosts.map(post => ({
+      setPosts((prevPosts) =>
+        prevPosts.map((post) => ({
           ...post,
-          comments: post.comments?.map(comment =>
+          comments: post.comments?.map((comment) =>
             comment.id === commentId
               ? {
                   ...comment,
                   likeCount: updatedComment.likeCount,
                   dislikeCount: updatedComment.dislikeCount,
                   liked: updatedComment.liked,
-                  disliked: updatedComment.disliked
+                  disliked: updatedComment.disliked,
                 }
               : comment
-          )
+          ),
         }))
       );
-      setVisiblePosts(prevPosts =>
-        prevPosts.map(post => ({
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) => ({
           ...post,
-          comments: post.comments?.map(comment =>
+          comments: post.comments?.map((comment) =>
             comment.id === commentId
               ? {
                   ...comment,
                   likeCount: updatedComment.likeCount,
                   dislikeCount: updatedComment.dislikeCount,
                   liked: updatedComment.liked,
-                  disliked: updatedComment.disliked
+                  disliked: updatedComment.disliked,
                 }
               : comment
-          )
+          ),
         }))
       );
-      toast.success(updatedComment.disliked ? "댓글을 싫어요 했습니다." : "싫어요를 취소했습니다.");
+      toast.success(
+        updatedComment.disliked
+          ? "댓글을 싫어요 했습니다."
+          : "싫어요를 취소했습니다."
+      );
     } catch (error) {
       console.error("댓글 싫어요 실패:", error);
       toast.error("댓글 싫어요에 실패했습니다.");
     }
-  };
-
-  // 날짜 포맷팅 함수
-  const formatDate = (dateString: string | Date) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (days > 0) return `${days}일 전`;
-    if (hours > 0) return `${hours}시간 전`;
-    if (minutes > 0) return `${minutes}분 전`;
-    return "방금 전";
   };
 
   // 검색 처리
@@ -701,39 +808,6 @@ const CommunityPage: React.FC = () => {
     }
   };
 
-  // 댓글 삭제 처리 함수
-  const handleCommentDelete = async (commentId: number) => {
-    if (!isLoggedIn) {
-      navigate("/login", { state: { from: location } });
-      return;
-    }
-
-    if (!window.confirm("댓글을 삭제하시겠습니까?")) {
-      return;
-    }
-
-    try {
-      await backendApi.deleteComment(commentId);
-      // 게시글 목록에서 해당 댓글 삭제
-      setPosts(prevPosts =>
-        prevPosts.map(post => ({
-          ...post,
-          comments: post.comments?.filter(comment => comment.id !== commentId)
-        }))
-      );
-      setVisiblePosts(prevPosts =>
-        prevPosts.map(post => ({
-          ...post,
-          comments: post.comments?.filter(comment => comment.id !== commentId)
-        }))
-      );
-      toast.success("댓글이 삭제되었습니다.");
-    } catch (error) {
-      console.error("댓글 삭제 실패:", error);
-      toast.error("댓글 삭제에 실패했습니다.");
-    }
-  };
-
   return (
     <div className="container mx-auto px-4 py-2">
       {/* 상단 검색 및 버튼 영역 - 고정 헤더로 변경 */}
@@ -779,7 +853,9 @@ const CommunityPage: React.FC = () => {
                       profileImageUrl: null,
                     },
                   });
-                  alert("테스트 알림이 생성되었습니다. 알림 아이콘을 확인해보세요.");
+                  alert(
+                    "테스트 알림이 생성되었습니다. 알림 아이콘을 확인해보세요."
+                  );
                 }}
               >
                 테스트 알림
@@ -895,9 +971,14 @@ const CommunityPage: React.FC = () => {
       {showWriteForm && (
         <div className="mb-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">새 게시글 작성</h2>
+            <h2 className="text-xl font-semibold">
+              {editingPostId ? "게시글 수정" : "새 게시글 작성"}
+            </h2>
             <button
-              onClick={() => setShowWriteForm(false)}
+              onClick={() => {
+                setShowWriteForm(false);
+                resetForm();
+              }}
               className="text-gray-500 hover:text-gray-700"
             >
               닫기
@@ -1082,7 +1163,27 @@ const CommunityPage: React.FC = () => {
 
                     {/* 게시글 내용 영역 */}
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold">{post.title}</h3>
+                      <div className="flex justify-between items-center mb-2">
+                        <h3 className="text-lg font-semibold">{post.title}</h3>
+                        {isLoggedIn && user?.id === post.user.id && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditPost(post)}
+                              className="text-gray-600 hover:text-blue-600"
+                              title="수정"
+                            >
+                              <FaEdit />
+                            </button>
+                            <button
+                              onClick={() => handleDeletePost(post.id)}
+                              className="text-gray-600 hover:text-red-600"
+                              title="삭제"
+                            >
+                              <FaTrash />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       <p
                         className="mt-2 text-gray-700"
                         dangerouslySetInnerHTML={{
@@ -1160,10 +1261,10 @@ const CommunityPage: React.FC = () => {
                               className="mr-2"
                             >
                               <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-200 cursor-pointer">
-                                {comment.profileImageUrl ? (
+                                {comment.user.profileImageUrl ? (
                                   <img
-                                    src={comment.profileImageUrl}
-                                    alt={comment.username}
+                                    src={comment.user.profileImageUrl}
+                                    alt={comment.user.username}
                                     className="h-8 w-8 rounded-full"
                                   />
                                 ) : (
@@ -1177,13 +1278,30 @@ const CommunityPage: React.FC = () => {
                               </div>
                             </Link>
                             <div className="flex-1">
-                              <div className="flex items-center">
+                              <div className="flex items-center justify-between">
                                 <span className="font-medium text-gray-900">
-                                  {comment.username}
+                                  {comment.user.username}
                                 </span>
-                                <span className="ml-2 text-sm text-gray-500">
-                                  {formatDate(comment.createdAt)}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-gray-500">
+                                    {formatDate(comment.createdAt)}
+                                  </span>
+                                  {isLoggedIn &&
+                                    user?.id === comment.user.id && (
+                                      <button
+                                        onClick={() =>
+                                          handleDeleteComment(
+                                            post.id,
+                                            comment.id
+                                          )
+                                        }
+                                        className="text-gray-500 hover:text-red-500"
+                                        title="댓글 삭제"
+                                      >
+                                        <FaTrash size={12} />
+                                      </button>
+                                    )}
+                                </div>
                               </div>
                               <p className="text-sm mt-1">{comment.content}</p>
                               <div className="mt-2 flex items-center space-x-4">
@@ -1211,16 +1329,6 @@ const CommunityPage: React.FC = () => {
                                   <FaThumbsDown className="mr-1" />
                                   {comment.dislikeCount}
                                 </button>
-                                {isLoggedIn && user?.id === comment.user.id && (
-                                  <button
-                                    onClick={() => handleCommentDelete(comment.id)}
-                                    className="flex items-center text-sm text-red-500 hover:text-red-700"
-                                    title="댓글 삭제"
-                                  >
-                                    <FaTrash className="mr-1" />
-                                    삭제
-                                  </button>
-                                )}
                               </div>
                             </div>
                           </div>
@@ -1293,7 +1401,27 @@ const CommunityPage: React.FC = () => {
 
                   {/* 게시글 내용 영역 */}
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold">{post.title}</h3>
+                    <div className="flex justify-between items-center mb-2">
+                      <h3 className="text-lg font-semibold">{post.title}</h3>
+                      {isLoggedIn && user?.id === post.user.id && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEditPost(post)}
+                            className="text-gray-600 hover:text-blue-600"
+                            title="수정"
+                          >
+                            <FaEdit />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePost(post.id)}
+                            className="text-gray-600 hover:text-red-600"
+                            title="삭제"
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     <p
                       className="mt-2 text-gray-700"
                       dangerouslySetInnerHTML={{
@@ -1327,9 +1455,7 @@ const CommunityPage: React.FC = () => {
                           >
                             <FaThumbsUp size={14} />
                           </button>
-                          <span className="text-sm">
-                            {post.likeCount || 0}
-                          </span>
+                          <span className="text-sm">{post.likeCount || 0}</span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <button
@@ -1371,30 +1497,40 @@ const CommunityPage: React.FC = () => {
                             className="mr-2"
                           >
                             <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-200 cursor-pointer">
-                              {comment.profileImageUrl ? (
+                              {comment.user.profileImageUrl ? (
                                 <img
-                                  src={comment.profileImageUrl}
-                                  alt={comment.username}
+                                  src={comment.user.profileImageUrl}
+                                  alt={comment.user.username}
                                   className="h-8 w-8 rounded-full"
                                 />
                               ) : (
                                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200">
-                                  <FaUser
-                                    className="text-gray-500"
-                                    size={12}
-                                  />
+                                  <FaUser className="text-gray-500" size={12} />
                                 </div>
                               )}
                             </div>
                           </Link>
                           <div className="flex-1">
-                            <div className="flex items-center">
+                            <div className="flex items-center justify-between">
                               <span className="font-medium text-gray-900">
-                                {comment.username}
+                                {comment.user.username}
                               </span>
-                              <span className="ml-2 text-sm text-gray-500">
-                                {formatDate(comment.createdAt)}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-500">
+                                  {formatDate(comment.createdAt)}
+                                </span>
+                                {isLoggedIn && user?.id === comment.user.id && (
+                                  <button
+                                    onClick={() =>
+                                      handleDeleteComment(post.id, comment.id)
+                                    }
+                                    className="text-gray-500 hover:text-red-500"
+                                    title="댓글 삭제"
+                                  >
+                                    <FaTrash size={12} />
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             <p className="text-sm mt-1">{comment.content}</p>
                             <div className="mt-2 flex items-center space-x-4">
@@ -1410,9 +1546,7 @@ const CommunityPage: React.FC = () => {
                                 {comment.likeCount}
                               </button>
                               <button
-                                onClick={() =>
-                                  handleCommentDislike(comment.id)
-                                }
+                                onClick={() => handleCommentDislike(comment.id)}
                                 className={`flex items-center text-sm ${
                                   comment.dislikeCount > 0
                                     ? "text-red-600"
@@ -1422,16 +1556,6 @@ const CommunityPage: React.FC = () => {
                                 <FaThumbsDown className="mr-1" />
                                 {comment.dislikeCount}
                               </button>
-                              {isLoggedIn && user?.id === comment.user.id && (
-                                <button
-                                  onClick={() => handleCommentDelete(comment.id)}
-                                  className="flex items-center text-sm text-red-500 hover:text-red-700"
-                                  title="댓글 삭제"
-                                >
-                                  <FaTrash className="mr-1" />
-                                  삭제
-                                </button>
-                              )}
                             </div>
                           </div>
                         </div>

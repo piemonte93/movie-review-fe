@@ -37,11 +37,17 @@ function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
-                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route
+                  path="/forgot-password"
+                  element={<ForgotPasswordPage />}
+                />
                 <Route path="/verify-code" element={<VerifyCodePage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/movie/:id" element={<ContentDetailPage />} />
-                <Route path="/movie/:id/videos" element={<ContentVideosPage />} />
+                <Route
+                  path="/movie/:id/videos"
+                  element={<ContentVideosPage />}
+                />
                 <Route path="/tv/:id" element={<ContentDetailPage />} />
                 <Route path="/tv/:id/videos" element={<ContentVideosPage />} />
                 <Route
@@ -63,14 +69,16 @@ function App() {
           </div>
           <ToastContainer
             position="top-right"
-            autoClose={3000}
+            autoClose={10000}
             hideProgressBar={false}
-            newestOnTop
+            newestOnTop={true}
             closeOnClick
             rtl={false}
             pauseOnFocusLoss
             draggable
             pauseOnHover
+            theme="light"
+            style={{ zIndex: 9999 }}
           />
         </NotificationProvider>
       </AuthProvider>

@@ -12,6 +12,8 @@ import {
   FaThumbsUp,
   FaThumbsDown,
   FaArrowUp,
+  FaEdit,
+  FaTrash,
 } from "react-icons/fa";
 import { FaStarHalfStroke, FaFilm } from "react-icons/fa6";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -20,6 +22,7 @@ import { backendApi } from "../api/backendApi";
 import { toast } from "react-toastify";
 import { Content } from "../types/content";
 import axios from "axios";
+import { formatDate } from "../utils/dateUtils";
 
 // Content 타입을 Movie 타입으로 매핑하는 함수
 const mapContentToMovie = (content: Content): Movie => {
@@ -150,11 +153,11 @@ const MovieReviewsPage: React.FC = () => {
   const [movieSearchResults, setMovieSearchResults] = useState<Movie[]>([]);
   const [isSearchingMovie, setIsSearchingMovie] = useState(false);
   const [rating, setRating] = useState<number>(0);
-  const [isSpoiler, setIsSpoiler] = useState(false);
+  const [isSpoiler, setIsSpoiler] = useState<boolean>(false);
   const [reviews, setReviews] = useState<MovieReview[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
   const [showWriteForm, setShowWriteForm] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -172,9 +175,9 @@ const MovieReviewsPage: React.FC = () => {
 
   // 무한 스크롤 관련 상태 추가
   const [visibleReviews, setVisibleReviews] = useState<MovieReview[]>([]);
-  const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
+  const [page, setPage] = useState<number>(0);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [totalPages, setTotalPages] = useState<number>(0);
   const reviewsPerPage = 5; // 한 번에 보여줄 리뷰 수
 
   // 최상단으로 이동 버튼의 표시 여부 상태
@@ -361,10 +364,10 @@ const MovieReviewsPage: React.FC = () => {
   }, [page, navigate, location]);
 
   // 리뷰 작성 처리
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isLoggedIn) {
-      toast.error("리뷰를 작성하려면 로그인이 필요합니다.");
+      toast.error("로그인이 필요합니다.");
       return;
     }
 
@@ -373,52 +376,246 @@ const MovieReviewsPage: React.FC = () => {
       return;
     }
 
-    if (!content.trim()) {
-      toast.error("리뷰 내용을 입력해주세요.");
-      return;
-    }
-
-    if (rating === 0) {
-      toast.error("별점을 선택해주세요.");
+    if (!title.trim() || !content.trim()) {
+      toast.error("제목과 내용을 모두 입력해주세요.");
       return;
     }
 
     setSubmitting(true);
     try {
-      const reviewData = {
-        movie_id: selectedMovie.id,
-        movie_title: selectedMovie.title,
-        movie_poster_path: selectedMovie.poster_path,
-        title: title.trim(),
-        content: content.trim(),
-        rating: rating,
-        is_spoiler: isSpoiler,
-      };
+      if (editingReviewId) {
+        // 리뷰 수정 로직
+        // 현재 수정 중인 리뷰 찾기
+        const currentReview = reviews.find(
+          (review) => review.id === editingReviewId
+        );
 
-      console.log("리뷰 작성 시도 - 데이터:", reviewData);
-      console.log("스포일러 여부:", isSpoiler);
+        // 영화가 변경되었는지 확인
+        if (currentReview && selectedMovie.id !== currentReview.movieId) {
+          // 해당 영화에 대한 리뷰가 이미 존재하는지 확인
+          try {
+            const hasExistingReview = await backendApi.checkUserReviewForMovie(
+              selectedMovie.id
+            );
 
-      await backendApi.createMovieReview(reviewData);
-      toast.success("리뷰가 성공적으로 등록되었습니다.");
-      resetForm();
-      setPage(0); // 페이지를 0으로 리셋
-      fetchReviews(); // 리뷰 목록 새로고침
-    } catch (error) {
-      console.error("리뷰 등록 오류:", error);
-      if (error instanceof Error) {
-        if (
-          error.message.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다")
-        ) {
-          const shouldEdit = window.confirm(error.message);
-          if (shouldEdit) {
-            // TODO: 기존 리뷰 수정 페이지로 이동하는 로직 추가
-            toast.info("리뷰 수정 페이지로 이동합니다.");
+            if (hasExistingReview) {
+              toast.error("이미 선택한 영화에 대한 리뷰를 작성하셨습니다.");
+              setSubmitting(false);
+              return;
+            }
+          } catch (checkError) {
+            console.error("리뷰 존재 여부 확인 실패:", checkError);
+
+            // API 호출이 실패한 경우 클라이언트 측에서 확인
+            const existingReview = reviews.find(
+              (review) =>
+                review.id !== editingReviewId &&
+                review.movieId === selectedMovie.id
+            );
+
+            if (existingReview) {
+              toast.error("이미 선택한 영화에 대한 리뷰를 작성하셨습니다.");
+              setSubmitting(false);
+              return;
+            }
           }
-        } else {
-          toast.error(error.message);
         }
+
+        const reviewData = {
+          title: title.trim(),
+          content: content.trim(),
+          rating: rating,
+          is_spoiler: isSpoiler,
+          movie_id: selectedMovie.id,
+          movie_title: selectedMovie.title,
+          movie_poster_path: selectedMovie.poster_path || "",
+        };
+
+        console.log(`리뷰 ID ${editingReviewId} 수정 요청:`, reviewData);
+
+        // 백엔드 API 호출
+        await backendApi.updateMovieReview(editingReviewId, reviewData);
+
+        // 현재 리뷰 목록에서 수정된 리뷰를 찾아 업데이트
+        const updatedReviews = reviews.map((review) =>
+          review.id === editingReviewId
+            ? {
+                ...review,
+                title: title.trim(),
+                content: content.trim(),
+                rating: rating,
+                isSpoiler: isSpoiler,
+                movieId: selectedMovie.id,
+                movieTitle: selectedMovie.title,
+                moviePoster: selectedMovie.poster_path || "",
+              }
+            : review
+        );
+
+        // 상태 업데이트
+        setReviews(updatedReviews);
+        setVisibleReviews(updatedReviews);
+
+        // 폼 초기화
+        resetForm();
+        setShowWriteForm(false);
+        setEditingReviewId(null);
+
+        toast.success("리뷰가 성공적으로 수정되었습니다.");
       } else {
-        toast.error("리뷰 작성에 실패했습니다.");
+        // 새 리뷰 작성
+        // 해당 영화에 대한 리뷰가 이미 존재하는지 사전 확인
+        try {
+          const hasExistingReview = await backendApi.checkUserReviewForMovie(
+            selectedMovie.id
+          );
+
+          if (hasExistingReview) {
+            toast.error("이미 선택한 영화에 대한 리뷰를 작성하셨습니다.", {
+              autoClose: 5000,
+              onClose: () => {
+                setTimeout(() => {
+                  const shouldEdit = window.confirm(
+                    "이미 작성된 리뷰를 수정하시겠습니까?"
+                  );
+                  if (shouldEdit) {
+                    // 기존 리뷰 찾기
+                    const existingReview = reviews.find(
+                      (review) => review.movieId === selectedMovie?.id
+                    );
+                    if (existingReview) {
+                      handleEditReview(existingReview);
+                    } else {
+                      toast.error(
+                        "기존 리뷰를 찾을 수 없습니다. 리뷰 목록을 새로고침합니다."
+                      );
+                      fetchReviews();
+                    }
+                  }
+                }, 500);
+              },
+            });
+            setSubmitting(false);
+            return;
+          }
+        } catch (checkError) {
+          console.error("리뷰 존재 여부 확인 실패:", checkError);
+
+          // API 호출이 실패한 경우 클라이언트 측에서 확인
+          const existingReview = reviews.find(
+            (review) => review.movieId === selectedMovie.id
+          );
+
+          if (existingReview) {
+            toast.error("이미 선택한 영화에 대한 리뷰를 작성하셨습니다.", {
+              autoClose: 5000,
+              onClose: () => {
+                setTimeout(() => {
+                  const shouldEdit = window.confirm(
+                    "이미 작성된 리뷰를 수정하시겠습니까?"
+                  );
+                  if (shouldEdit) {
+                    handleEditReview(existingReview);
+                  }
+                }, 500);
+              },
+            });
+            setSubmitting(false);
+            return;
+          }
+        }
+
+        const reviewData = {
+          movie_id: selectedMovie.id,
+          movie_title: selectedMovie.title,
+          movie_poster_path: selectedMovie.poster_path,
+          title: title.trim(),
+          content: content.trim(),
+          rating: rating,
+          is_spoiler: isSpoiler,
+        };
+
+        console.log("리뷰 작성 요청 데이터:", reviewData);
+        const response = await backendApi.createMovieReview(reviewData);
+        console.log("리뷰 생성 성공:", response);
+
+        toast.success("리뷰가 성공적으로 등록되었습니다.");
+        resetForm();
+        setPage(0);
+        fetchReviews();
+      }
+    } catch (error) {
+      console.error("리뷰 제출 실패:", error);
+      console.log("리뷰 제출 오류 타입:", typeof error);
+
+      // 에러 객체 자세히 로깅
+      if (error instanceof Error) {
+        console.log("에러 객체 이름:", error.name);
+        console.log("에러 메시지:", error.message);
+        console.log("에러 스택:", error.stack);
+
+        // 에러 메시지가 비어있거나 undefined인 경우 기본 메시지 설정
+        const errorMessage = error.message || "알 수 없는 오류가 발생했습니다.";
+        console.log("최종 표시할 에러 메시지:", errorMessage);
+
+        // 중복 리뷰 에러 메시지 처리
+        if (
+          errorMessage.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다") ||
+          errorMessage.includes("기존 리뷰를 수정하시겠습니까")
+        ) {
+          // 중복 리뷰 메시지 표시 및 수정 확인 다이얼로그
+          toast.error(errorMessage, {
+            autoClose: 5000,
+            onClose: () => {
+              setTimeout(() => {
+                const shouldEdit = window.confirm(
+                  "이미 작성된 리뷰를 수정하시겠습니까?"
+                );
+                if (shouldEdit) {
+                  // 기존 리뷰 찾기
+                  const existingReview = reviews.find(
+                    (review) => review.movieId === selectedMovie?.id
+                  );
+                  if (existingReview) {
+                    handleEditReview(existingReview);
+                  } else {
+                    toast.error(
+                      "기존 리뷰를 찾을 수 없습니다. 리뷰 목록을 새로고침합니다."
+                    );
+                    fetchReviews();
+                  }
+                }
+              }, 500);
+            },
+          });
+        } else {
+          // 기타 오류 메시지 표시
+          toast.error(errorMessage, {
+            autoClose: 7000,
+          });
+        }
+      } else if (axios.isAxiosError(error) && error.response) {
+        // Axios 에러인 경우 응답 데이터에서 메시지 추출
+        const errorResponse = error.response.data;
+        let errorMessage = "리뷰 작성에 실패했습니다.";
+
+        if (typeof errorResponse === "string") {
+          errorMessage = errorResponse;
+        } else if (errorResponse && typeof errorResponse === "object") {
+          errorMessage =
+            errorResponse.message ||
+            errorResponse.error ||
+            JSON.stringify(errorResponse);
+        }
+
+        console.log("Axios 에러에서 추출한 메시지:", errorMessage);
+        toast.error(errorMessage, {
+          autoClose: 7000,
+        });
+      } else {
+        toast.error("리뷰 작성에 실패했습니다. 서버 연결을 확인해주세요.", {
+          autoClose: 7000,
+        });
       }
     } finally {
       setSubmitting(false);
@@ -476,22 +673,6 @@ const MovieReviewsPage: React.FC = () => {
       console.error("댓글 작성 실패:", error);
       toast.error("댓글 작성에 실패했습니다.");
     }
-  };
-
-  // 날짜 포맷팅 함수
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (days > 0) return `${days}일 전`;
-    if (hours > 0) return `${hours}시간 전`;
-    if (minutes > 0) return `${minutes}분 전`;
-    return "방금 전";
   };
 
   // 별점 렌더링 함수
@@ -796,6 +977,138 @@ const MovieReviewsPage: React.FC = () => {
     }
   };
 
+  // 리뷰 수정 핸들러
+  const handleEditReview = (review: MovieReview) => {
+    setEditingReviewId(review.id);
+    setTitle(review.title);
+    setContent(review.content);
+    setRating(review.rating);
+    setIsSpoiler(review.isSpoiler);
+    setSelectedMovie({
+      id: review.movieId,
+      title: review.movieTitle,
+      poster_path: review.moviePoster || "",
+      release_date: "", // 영화 개봉일 정보를 빈 문자열로 설정하면 기본 영화 정보로 초기화
+      vote_average: 0,
+    });
+    setShowWriteForm(true);
+
+    // 영화 정보 API로 가져오기
+    const fetchMovieDetails = async () => {
+      try {
+        const movieDetails = await backendApi.getMovieDetails(review.movieId);
+        if (movieDetails) {
+          setSelectedMovie({
+            id: review.movieId,
+            title: review.movieTitle,
+            poster_path: review.moviePoster || "",
+            release_date: movieDetails.release_date || "",
+            vote_average: movieDetails.vote_average || 0,
+          });
+        }
+      } catch (error) {
+        console.error("영화 정보 가져오기 실패:", error);
+      }
+    };
+
+    fetchMovieDetails();
+  };
+
+  // 리뷰 삭제 핸들러
+  const handleDeleteReview = async (reviewId: number) => {
+    // 삭제 확인
+    if (!window.confirm("리뷰를 삭제하시겠습니까?")) {
+      return;
+    }
+
+    try {
+      await backendApi.deleteMovieReview(reviewId);
+      // 성공적으로 삭제된 후 리뷰 목록 새로고침
+      fetchReviews();
+      toast.success("리뷰가 삭제되었습니다.");
+    } catch (error) {
+      console.error("리뷰 삭제 실패:", error);
+      toast.error("리뷰 삭제에 실패했습니다.");
+    }
+  };
+
+  // 댓글 삭제 핸들러 추가 (handleDeleteComment 함수)
+  const handleDeleteComment = async (reviewId: number, commentId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    if (!window.confirm("댓글을 삭제하시겠습니까?")) {
+      return;
+    }
+
+    try {
+      console.log(
+        `댓글 삭제 시도: reviewId=${reviewId}, commentId=${commentId}`
+      );
+      await backendApi.deleteReviewComment(reviewId, commentId);
+      console.log(`댓글 삭제 API 호출 성공`);
+
+      // 성공 후 UI에서 해당 댓글 제거
+      const updatedReviews = reviews.map((review) => {
+        if (review.id === reviewId) {
+          return {
+            ...review,
+            comments: review.comments.filter(
+              (comment) => comment.id !== commentId
+            ),
+            commentCount: Math.max(0, (review.commentCount || 0) - 1),
+          };
+        }
+        return review;
+      });
+
+      // 상태 업데이트
+      setReviews(updatedReviews);
+      setVisibleReviews(updatedReviews);
+
+      // 성공 메시지 표시
+      toast.success("댓글이 삭제되었습니다.");
+
+      // 서버에서 최신 데이터 가져오기 (백그라운드에서 처리)
+      fetchReviewComments(reviewId).catch((error) => {
+        console.error(`댓글 목록 새로고침 실패: ${error}`);
+      });
+    } catch (error) {
+      console.error("댓글 삭제 실패:", error);
+
+      let errorMessage = "댓글 삭제에 실패했습니다.";
+
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const data = error.response?.data;
+
+        console.error(`댓글 삭제 오류 상태 코드: ${status}`);
+        console.error(`댓글 삭제 오류 응답 데이터:`, data);
+
+        if (status === 403) {
+          errorMessage = "댓글 삭제 권한이 없습니다.";
+        } else if (status === 404) {
+          errorMessage = "댓글을 찾을 수 없습니다.";
+        } else if (status === 500) {
+          errorMessage = "서버 오류가 발생했습니다. 나중에 다시 시도해주세요.";
+        }
+      }
+
+      toast.error(errorMessage);
+
+      // 오류 발생 시에도 댓글 목록 다시 가져오기
+      try {
+        await fetchReviewComments(reviewId);
+      } catch (refreshError) {
+        console.error("댓글 목록 새로고침 실패:", refreshError);
+      }
+    }
+  };
+
+  const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* 리뷰 작성 버튼 */}
@@ -897,7 +1210,10 @@ const MovieReviewsPage: React.FC = () => {
       >
         <div className="space-y-8">
           {visibleReviews.map((review) => (
-            <div key={review.id} className="bg-white rounded-lg shadow p-6 border border-gray-300">
+            <div
+              key={review.id}
+              className="bg-white rounded-lg shadow p-6 border border-gray-300"
+            >
               {/* 리뷰 헤더 - 작성자 정보 */}
               <div className="flex items-center mb-4">
                 <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center">
@@ -914,18 +1230,38 @@ const MovieReviewsPage: React.FC = () => {
 
               {/* 리뷰 제목 */}
               <div className="mb-4">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`inline-block transition-all duration-300 ${
-                      review.isSpoiler ? "blur-sm hover:blur-none" : ""
-                    }`}
-                  >
-                    <h3 className="text-xl font-bold">{review.title}</h3>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`inline-block transition-all duration-300 ${
+                        review.isSpoiler ? "blur-sm hover:blur-none" : ""
+                      }`}
+                    >
+                      <h3 className="text-xl font-bold">{review.title}</h3>
+                    </div>
+                    {review.isSpoiler && (
+                      <span className="text-xs bg-red-500 text-white px-2 py-1 rounded">
+                        스포일러
+                      </span>
+                    )}
                   </div>
-                  {review.isSpoiler && (
-                    <span className="text-xs bg-red-500 text-white px-2 py-1 rounded">
-                      스포일러
-                    </span>
+                  {isLoggedIn && user?.username === review.user.username && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEditReview(review)}
+                        className="text-gray-600 hover:text-blue-600"
+                        title="수정"
+                      >
+                        <FaEdit />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteReview(review.id)}
+                        className="text-gray-600 hover:text-red-600"
+                        title="삭제"
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -951,7 +1287,9 @@ const MovieReviewsPage: React.FC = () => {
                       review.isSpoiler ? "blur-sm hover:blur-none" : ""
                     }`}
                   >
-                    <p className="text-gray-700 break-words whitespace-pre-wrap">{review.content}</p>
+                    <p className="text-gray-700 break-words whitespace-pre-wrap">
+                      {review.content}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -959,7 +1297,11 @@ const MovieReviewsPage: React.FC = () => {
               {/* 리뷰 액션 버튼 */}
               <div className="flex items-center justify-between border-t pt-3">
                 <div className="text-xs text-gray-500">
-                  {formatDate(review.createdAt)}
+                  {formatDate(
+                    typeof review.createdAt === "object"
+                      ? review.createdAt.toISOString()
+                      : review.createdAt
+                  )}
                 </div>
                 <div className="flex items-center space-x-4">
                   <button
@@ -1022,9 +1364,26 @@ const MovieReviewsPage: React.FC = () => {
                               <span className="font-medium">
                                 {comment.username || "알 수 없는 사용자"}
                               </span>
-                              <span className="text-xs text-gray-500">
-                                {formatDate(new Date(comment.createdAt))}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-500">
+                                  {formatDate(comment.createdAt)}
+                                </span>
+                                {isLoggedIn &&
+                                  user?.username === comment.username && (
+                                    <button
+                                      onClick={() =>
+                                        handleDeleteComment(
+                                          review.id,
+                                          comment.id
+                                        )
+                                      }
+                                      className="text-xs text-red-500 hover:text-red-700"
+                                      title="삭제"
+                                    >
+                                      <FaTrash />
+                                    </button>
+                                  )}
+                              </div>
                             </div>
                             <p className="text-sm">{comment.content}</p>
                           </div>
@@ -1076,7 +1435,7 @@ const MovieReviewsPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmitReview} className="space-y-4">
               {/* 영화 검색 */}
               <div className="mb-4">
                 <label className="block text-gray-700 font-medium mb-2">
