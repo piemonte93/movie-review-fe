@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   FaCamera,
@@ -12,6 +12,10 @@ import {
   FaVideo,
   FaStar,
   FaPencilAlt,
+  FaEdit,
+  FaTrash,
+  FaThumbsUp,
+  FaThumbsDown,
 } from "react-icons/fa";
 import {
   getUserProfile,
@@ -27,11 +31,26 @@ import {
 import { UserProfile, UserActivity } from "../types/user";
 import ContentCard from "../components/ContentCard";
 import FollowModal from "../components/FollowModal";
+import InfiniteScroll from "react-infinite-scroll-component";
+import { formatDate } from "../utils/dateUtils";
+import { backendApi, Post, MovieReview } from "../api/backendApi";
+import { toast } from "react-hot-toast";
 
 // 프로필 페이지 컴포넌트
 const ProfilePage: React.FC = () => {
   const { user, isLoggedIn, updateUserInfo } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [reviews, setReviews] = useState<MovieReview[]>([]);
+  const [totalPages, setTotalPages] = useState(0);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [showWriteForm, setShowWriteForm] = useState(false);
+  const [editingPostId, setEditingPostId] = useState<number | null>(null);
 
   // 각 섹션 데이터 상태
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
@@ -257,104 +276,287 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  // 더미 포스트 데이터
-  const dummyPosts = [
-    {
-      id: 1,
-      imageUrl: "https://via.placeholder.com/300",
-      likeCount: 24,
-      commentCount: 5,
-    },
-    {
-      id: 2,
-      imageUrl: "https://via.placeholder.com/300",
-      likeCount: 18,
-      commentCount: 3,
-    },
-    {
-      id: 3,
-      imageUrl: "https://via.placeholder.com/300",
-      likeCount: 32,
-      commentCount: 7,
-    },
-    {
-      id: 4,
-      imageUrl: "https://via.placeholder.com/300",
-      likeCount: 15,
-      commentCount: 2,
-    },
-    {
-      id: 5,
-      imageUrl: "https://via.placeholder.com/300",
-      likeCount: 27,
-      commentCount: 4,
-    },
-    {
-      id: 6,
-      imageUrl: "https://via.placeholder.com/300",
-      likeCount: 42,
-      commentCount: 9,
-    },
-  ];
+  // 게시물 로딩
+  useEffect(() => {
+    const fetchPosts = async () => {
+      try {
+        if (!user) return;
+        setIsLoading(true);
+        const response = await backendApi.getUserPosts(user.id, page);
+        
+        // 페이지가 0일 때는 기존 게시물을 초기화하고, 그 외에는 추가
+        if (page === 0) {
+          setPosts(response.content);
+        } else {
+          setPosts(prev => [...prev, ...response.content]);
+        }
+        
+        setHasMore(page < response.totalPages - 1);
+      } catch (error) {
+        console.error("게시물 로딩 실패:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  // 더미 리뷰 데이터
-  const dummyReviews = [
-    {
-      id: 1,
-      movieTitle: "인셉션",
-      rating: 4.5,
-      content: "꿈속의 꿈을 탐험하는 놀라운 영화였습니다.",
-      date: "2023-05-15",
-    },
-    {
-      id: 2,
-      movieTitle: "기생충",
-      rating: 5.0,
-      content: "사회 계층에 대한 날카로운 비판을 담은 걸작입니다.",
-      date: "2023-06-20",
-    },
-    {
-      id: 3,
-      movieTitle: "다크나이트",
-      rating: 4.8,
-      content: "히어로 영화의 한계를 뛰어넘은 명작입니다.",
-      date: "2023-07-08",
-    },
-  ];
+    fetchPosts();
+  }, [user, page]);
 
-  // 더미 좋아요 데이터
-  const dummyLikes = [
-    {
-      id: 1,
-      type: "movie",
-      title: "어벤져스: 엔드게임",
-      imageUrl: "https://via.placeholder.com/150",
-      date: "2023-08-12",
-    },
-    {
-      id: 2,
-      type: "review",
-      author: "영화광123",
-      title: "기생충 리뷰",
-      content: "사회 계층에 대한 날카로운 비판을 담은 걸작입니다.",
-      date: "2023-07-18",
-    },
-    {
-      id: 3,
-      type: "movie",
-      title: "라라랜드",
-      imageUrl: "https://via.placeholder.com/150",
-      date: "2023-06-05",
-    },
-    {
-      id: 4,
-      type: "review",
-      author: "시네필",
-      title: "인셉션 리뷰",
-      content: "꿈속의 꿈을 탐험하는 놀라운 영화였습니다.",
-      date: "2023-05-22",
-    },
-  ];
+  // 게시물 수정 처리
+  const handleEditPost = (post: Post) => {
+    setEditingPostId(post.id);
+    setTitle(post.title);
+    setContent(post.content);
+    setShowWriteForm(true);
+  };
+
+  // 게시물 수정 폼 제출
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!title.trim() || !content.trim()) {
+      toast.error("제목과 내용을 모두 입력해주세요.");
+      return;
+    }
+
+    try {
+      if (editingPostId) {
+        const updatedPost = await backendApi.updatePost(editingPostId, {
+          title: title,
+          content: content,
+        });
+
+        // 게시물 목록 업데이트
+        setPosts(posts.map((post) =>
+          post.id === editingPostId
+            ? {
+                ...post,
+                title: updatedPost.title,
+                content: updatedPost.content,
+              }
+            : post
+        ));
+
+        toast.success("게시글이 수정되었습니다.");
+        setShowWriteForm(false);
+        setEditingPostId(null);
+        setTitle("");
+        setContent("");
+      }
+    } catch (error) {
+      console.error("게시글 수정 실패:", error);
+      toast.error("게시글 수정에 실패했습니다.");
+    }
+  };
+
+  // 리뷰 데이터 로드
+  const fetchReviews = async (page: number) => {
+    if (!user) return;
+    try {
+      setLoading(true);
+      const response = await backendApi.getUserReviews(user.username, page);
+      setReviews(response.content);
+      setTotalPages(response.totalPages);
+    } catch (error) {
+      console.error("리뷰 로딩 실패:", error);
+      toast.error("리뷰를 불러오는데 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "reviews" && user) {
+      fetchReviews(0);
+    }
+  }, [activeTab, user]);
+
+  const handleLoadMore = () => {
+    if (activeTab === "posts") {
+      setPage(prev => prev + 1);
+    } else if (activeTab === "reviews" && page < totalPages - 1) {
+      setPage(prev => prev + 1);
+      fetchReviews(page + 1);
+    }
+  };
+
+  // 게시물 탭 렌더링
+  const renderPostsTab = () => {
+    const loadMore = () => {
+      setPage(prev => prev + 1);
+    };
+
+    if (isLoading && posts.length === 0) {
+      return (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
+        </div>
+      );
+    }
+
+    if (posts.length === 0) {
+      return (
+        <div className="text-center py-8">
+          <p className="text-gray-500">작성한 게시물이 없습니다.</p>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {showWriteForm && (
+          <div className="mb-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">게시글 수정</h2>
+              <button
+                onClick={() => {
+                  setShowWriteForm(false);
+                  setTitle("");
+                  setContent("");
+                  setEditingPostId(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                닫기
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit}>
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder="제목을 입력하세요."
+                  className="w-full rounded-md border border-gray-300 p-2 focus:border-blue-500 focus:outline-none"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <textarea
+                  placeholder="내용을 입력하세요."
+                  className="w-full rounded-md border border-gray-300 p-2 focus:border-blue-500 focus:outline-none"
+                  rows={5}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                >
+                  수정하기
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        <InfiniteScroll
+          dataLength={posts.length}
+          next={loadMore}
+          hasMore={hasMore}
+          loader={
+            <div className="flex justify-center py-4">
+              <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
+            </div>
+          }
+          endMessage={
+            <p className="text-center text-gray-500 py-4">
+              모든 게시물을 불러왔습니다.
+            </p>
+          }
+        >
+          <div className="space-y-6">
+            {posts.map((post) => (
+              <div
+                key={post.id}
+                className="border border-gray-200 rounded-lg bg-white p-4 shadow-sm"
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-lg font-semibold">{post.title}</h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEditPost(post)}
+                      className="text-gray-600 hover:text-blue-600"
+                      title="수정"
+                    >
+                      <FaEdit />
+                    </button>
+                    <button
+                      onClick={() => handleDeletePost(post.id)}
+                      className="text-gray-600 hover:text-red-600"
+                      title="삭제"
+                    >
+                      <FaTrash />
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-2 text-gray-700">{post.content}</p>
+                <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
+                  <span>{formatDate(post.createdAt)}</span>
+                  <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-1">
+                      <FaThumbsUp className={post.liked ? "text-blue-600" : "text-gray-400"} />
+                      <span>{post.likeCount}</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <FaThumbsDown className={post.disliked ? "text-red-600" : "text-gray-400"} />
+                      <span>{post.dislikeCount}</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <FaComment className="text-gray-400" />
+                      <span>{post.commentCount}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </InfiniteScroll>
+      </>
+    );
+  };
+
+  // 리뷰 탭 렌더링
+  const renderReviewsTab = () => {
+    if (loading) {
+      return <div className="text-center py-8">로딩 중...</div>;
+    }
+
+    if (!reviews || reviews.length === 0) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          작성한 리뷰가 없습니다.
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-4">
+        <div className="space-y-4">
+          {reviews.map((review) => (
+            <div
+              key={review.id}
+              className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="font-bold text-lg">{review.movieTitle}</h3>
+                <div className="flex items-center">
+                  <span className="text-yellow-400 mr-1">★</span>
+                  <span className="font-medium">{review.rating}</span>
+                </div>
+              </div>
+              <p className="text-gray-700 mb-3">{review.content}</p>
+              <div className="text-sm text-gray-500">{formatDate(review.createdAt)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   // 스크랩 탭 렌더링
   const renderScrapsTab = () => {
@@ -383,136 +585,31 @@ const ProfilePage: React.FC = () => {
     );
   };
 
-  // 포스트 탭 렌더링
-  const renderPostsTab = () => {
-    if (loading) {
-      return <div className="text-center py-8">로딩 중...</div>;
-    }
-
-    if (!dummyPosts || dummyPosts.length === 0) {
-      return (
-        <div className="text-center py-8 text-gray-500">
-          게시물이 없습니다.
-        </div>
-      );
-    }
-
-    return (
-      <div className="grid grid-cols-3 gap-1 md:gap-4 mt-2">
-        {dummyPosts.map((post) => (
-          <div key={post.id} className="relative group aspect-square">
-            <img
-              src={post.imageUrl}
-              alt={`게시물 ${post.id}`}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200">
-              <div className="flex items-center space-x-4 text-white">
-                <div className="flex items-center">
-                  <FaHeart className="mr-1" /> {post.likeCount}
-                </div>
-                <div className="flex items-center">
-                  <FaComment className="mr-1" /> {post.commentCount}
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  // 리뷰 탭 렌더링
-  const renderReviewsTab = () => {
-    if (loading) {
-      return <div className="text-center py-8">로딩 중...</div>;
-    }
-
-    if (!dummyReviews || dummyReviews.length === 0) {
-      return (
-        <div className="text-center py-8 text-gray-500">
-          작성한 리뷰가 없습니다.
-        </div>
-      );
-    }
-
-    return (
-      <div className="mt-4">
-        <div className="space-y-4">
-          {dummyReviews.map((review) => (
-            <div
-              key={review.id}
-              className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="font-bold text-lg">{review.movieTitle}</h3>
-                <div className="flex items-center">
-                  <FaStar className="text-yellow-400 mr-1" />
-                  <span className="font-medium">{review.rating}</span>
-                </div>
-              </div>
-              <p className="text-gray-700 mb-3">{review.content}</p>
-              <div className="text-sm text-gray-500">{review.date}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
   // 좋아요 탭 렌더링
   const renderLikesTab = () => {
     if (loading) {
-      return <div className="text-center py-8">로딩 중...</div>;
+      return <div>로딩 중...</div>;
     }
 
-    if (!dummyLikes || dummyLikes.length === 0) {
-      return (
-        <div className="text-center py-8 text-gray-500">
-          좋아요한 항목이 없습니다.
-        </div>
-      );
+    if (!reviews || reviews.length === 0) {
+      return <div>좋아요한 리뷰가 없습니다.</div>;
     }
 
     return (
-      <div className="mt-4">
-        <div className="space-y-4">
-          {dummyLikes.map((like) => (
-            <div
-              key={like.id}
-              className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
-            >
-              {like.type === "movie" ? (
-                <div className="flex">
-                  <img
-                    src={like.imageUrl}
-                    alt={like.title}
-                    className="w-16 h-24 object-cover rounded mr-4"
-                  />
-                  <div>
-                    <h3 className="font-bold">{like.title}</h3>
-                    <p className="text-sm text-gray-500 mt-1">영화</p>
-                    <p className="text-xs text-gray-400 mt-2">
-                      {like.date}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <div className="flex items-center mb-2">
-                    <span className="font-medium mr-2">{like.author}</span>
-                    <span className="text-sm text-gray-500">의 리뷰</span>
-                  </div>
-                  <h3 className="font-bold mb-1">{like.title}</h3>
-                  <p className="text-gray-700 text-sm mb-2">
-                    {like.content}
-                  </p>
-                  <p className="text-xs text-gray-400">{like.date}</p>
-                </div>
-              )}
+      <div className="grid grid-cols-1 gap-4">
+        {reviews.map((review) => (
+          <div key={review.id} className="bg-white p-4 rounded-lg shadow">
+            <h3 className="text-lg font-semibold">{review.movieTitle}</h3>
+            <div className="flex items-center mt-2">
+              <span className="text-yellow-500">★</span>
+              <span className="ml-1">{review.rating}</span>
             </div>
-          ))}
-        </div>
+            <p className="mt-2">{review.content}</p>
+            <div className="mt-2 text-sm text-gray-500">
+              {new Date(review.createdAt).toLocaleDateString()}
+            </div>
+          </div>
+        ))}
       </div>
     );
   };
@@ -530,6 +627,23 @@ const ProfilePage: React.FC = () => {
         return renderScrapsTab();
       default:
         return null;
+    }
+  };
+
+  // 게시물 삭제 처리
+  const handleDeletePost = async (postId: number) => {
+    if (!window.confirm("게시물을 삭제하시겠습니까?")) {
+      return;
+    }
+
+    try {
+      await backendApi.deletePost(postId);
+      // 게시물 목록에서 삭제된 게시물 제거
+      setPosts(posts.filter((post: Post) => post.id !== postId));
+      toast.success("게시물이 삭제되었습니다.");
+    } catch (error) {
+      console.error("게시물 삭제 실패:", error);
+      toast.error("게시물 삭제에 실패했습니다.");
     }
   };
 
