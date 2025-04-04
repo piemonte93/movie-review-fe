@@ -141,6 +141,33 @@ export interface UserItem {
   profileImageUrl: string | null;
 }
 
+// 영화 리뷰 데이터 타입 정의
+export interface MovieReview {
+  id: number;
+  title: string;
+  content: string;
+  rating: number;
+  movieTitle: string;
+  movieId: number;
+  moviePoster?: string;
+  createdAt: string;
+  comments: Comment[];
+  likes: { userId: number }[];
+  dislikes: { userId: number }[];
+  isSpoiler: boolean;
+  isLiked?: boolean;
+  isDisliked?: boolean;
+  likeCount?: number;
+  dislikeCount?: number;
+  commentCount?: number;
+  user: {
+    id: number;
+    username: string;
+    profileImageUrl: string | null;
+    reviewCount: number;
+  };
+}
+
 export const backendApi = {
   // Movie endpoints
   getTrendingMovies: async (): Promise<ContentResponse> => {
@@ -833,10 +860,6 @@ export const backendApi = {
       // 응답 데이터 구조 로깅
       const responseData = response.data;
       console.log("리뷰 응답 데이터 키:", Object.keys(responseData));
-      console.log(
-        "리뷰 전체 응답 데이터:",
-        JSON.stringify(responseData, null, 2)
-      );
 
       if (responseData.content) {
         console.log(`리뷰 데이터 ${responseData.content.length}개 수신 성공`);
@@ -846,9 +869,6 @@ export const backendApi = {
             id: responseData.content[0].id,
             title: responseData.content[0].title,
             username: responseData.content[0].username,
-            // 백엔드 응답 구조 확인
-            allKeys: Object.keys(responseData.content[0]),
-            allValues: JSON.stringify(responseData.content[0]),
           });
         }
       } else {
@@ -1157,6 +1177,69 @@ export const backendApi = {
       await apiClient.put(`/api/reviews/${reviewId}/title`, { title });
     } catch (error) {
       console.error("리뷰 제목 수정 실패:", error);
+      throw error;
+    }
+  },
+
+  getUserPosts: async (userId: number, page: number = 0, size: number = 10): Promise<{
+    content: Post[];
+    totalPages: number;
+    totalElements: number;
+  }> => {
+    try {
+      const response = await apiClient.get(`/api/community/posts/user/${userId}`, {
+        params: { page, size }
+      });
+      return response.data;
+    } catch (error) {
+      console.error("사용자 게시물 조회 실패:", error);
+      throw new Error("사용자 게시물을 불러오는데 실패했습니다.");
+    }
+  },
+
+  // 사용자의 리뷰 목록을 가져오는 함수
+  getUserReviews: async (username: string, page = 0, size = 10) => {
+    try {
+      console.log(`사용자 리뷰 데이터 요청: username=${username}, page=${page}, size=${size}`);
+      const response = await apiClient.get(`/api/reviews/user/${username}`, {
+        params: {
+          page,
+          size,
+        },
+      });
+
+      console.log("사용자 리뷰 API 응답 코드:", response.status);
+      console.log("사용자 리뷰 API 응답 헤더:", response.headers);
+
+      // 응답 데이터 구조 로깅
+      const responseData = response.data;
+      console.log("사용자 리뷰 응답 데이터 키:", Object.keys(responseData));
+
+      if (responseData.content) {
+        console.log(`사용자 리뷰 데이터 ${responseData.content.length}개 수신 성공`);
+        // 첫 번째 리뷰의 데이터 구조 샘플로 확인
+        if (responseData.content.length > 0) {
+          console.log("첫 번째 리뷰 샘플:", {
+            id: responseData.content[0].id,
+            title: responseData.content[0].title,
+            username: responseData.content[0].username,
+          });
+        }
+      } else {
+        console.log("사용자 리뷰 데이터가 없거나 content 배열이 없습니다");
+      }
+
+      return responseData;
+    } catch (error) {
+      console.error("사용자 리뷰 목록 가져오기 실패:", error);
+      if (axios.isAxiosError(error)) {
+        console.error("API 호출 오류 상세:", {
+          status: error.response?.status,
+          data: error.response?.data,
+          url: error.config?.url,
+          method: error.config?.method,
+        });
+      }
       throw error;
     }
   },
