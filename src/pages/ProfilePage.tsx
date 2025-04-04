@@ -34,7 +34,7 @@ import FollowModal from "../components/FollowModal";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { formatDate } from "../utils/dateUtils";
 import { backendApi, Post, MovieReview } from "../api/backendApi";
-import { toast } from "react-hot-toast";
+import { toast } from "react-toastify";
 
 // 프로필 페이지 컴포넌트
 const ProfilePage: React.FC = () => {
@@ -60,7 +60,7 @@ const ProfilePage: React.FC = () => {
   const [uploadingImage, setUploadingImage] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>("posts");
   const [scrappedMovies, setScrappedMovies] = useState<any[]>([]);
-  
+
   // 모달 상태
   const [showFollowersModal, setShowFollowersModal] = useState<boolean>(false);
   const [showFollowingModal, setShowFollowingModal] = useState<boolean>(false);
@@ -126,54 +126,57 @@ const ProfilePage: React.FC = () => {
   };
 
   // 모달 내에서 팔로우 상태 변경 시 처리
-  const handleModalToggleFollow = async (userId: number, newStatus: boolean) => {
+  const handleModalToggleFollow = async (
+    userId: number,
+    newStatus: boolean
+  ) => {
     try {
       console.log(`모달 내 사용자 ${userId} 팔로우 상태 변경: ${newStatus}`);
-      
+
       // API 호출
       const result = await toggleFollow(userId.toString());
       console.log("팔로우 토글 API 응답:", result);
-      
+
       if (!result) {
         throw new Error("팔로우 상태 변경 실패");
       }
 
       // 팔로워 목록 업데이트
-      setFollowersData(prevData => 
+      setFollowersData((prevData) =>
         prevData.map((user) => {
           if (user.id === userId) {
-            return { 
-              ...user, 
+            return {
+              ...user,
               isFollowing: result.isFollowing,
-              mutualFollow: result.isFollowing && user.followsMe
+              mutualFollow: result.isFollowing && user.followsMe,
             };
           }
           return user;
         })
       );
-      
+
       // 팔로잉 목록 업데이트
-      setFollowingData(prevData => 
+      setFollowingData((prevData) =>
         prevData.map((user) => {
           if (user.id === userId) {
-            return { 
-              ...user, 
+            return {
+              ...user,
               isFollowing: result.isFollowing,
-              mutualFollow: result.isFollowing && user.followsMe
+              mutualFollow: result.isFollowing && user.followsMe,
             };
           }
           return user;
         })
       );
-      
+
       // 프로필 데이터 업데이트
       if (profileData) {
-        setProfileData(prev => {
+        setProfileData((prev) => {
           if (!prev) return prev;
           return {
             ...prev,
             followerCount: result.followerCount || prev.followerCount,
-            followingCount: result.followingCount || prev.followingCount
+            followingCount: result.followingCount || prev.followingCount,
           };
         });
       }
@@ -187,19 +190,19 @@ const ProfilePage: React.FC = () => {
     try {
       // API 호출
       const result = await toggleFollow(userId.toString());
-      
+
       if (!result) {
         throw new Error("팔로우 상태 변경 실패");
       }
 
       // 프로필 데이터 업데이트
       if (profileData) {
-        setProfileData(prev => {
+        setProfileData((prev) => {
           if (!prev) return prev;
           return {
             ...prev,
             followerCount: result.followerCount || prev.followerCount,
-            followingCount: result.followingCount || prev.followingCount
+            followingCount: result.followingCount || prev.followingCount,
           };
         });
       }
@@ -247,14 +250,19 @@ const ProfilePage: React.FC = () => {
 
         // 로컬 스토리지의 캐시된 프로필 데이터 업데이트
         try {
-          const cachedProfileDataStr = localStorage.getItem('cached_profile_data');
+          const cachedProfileDataStr = localStorage.getItem(
+            "cached_profile_data"
+          );
           if (cachedProfileDataStr) {
             const cachedProfileData = JSON.parse(cachedProfileDataStr);
             const updatedCachedProfile = {
               ...cachedProfileData,
-              profileImageUrl: result.profileImageUrl
+              profileImageUrl: result.profileImageUrl,
             };
-            localStorage.setItem('cached_profile_data', JSON.stringify(updatedCachedProfile));
+            localStorage.setItem(
+              "cached_profile_data",
+              JSON.stringify(updatedCachedProfile)
+            );
             console.log("캐시된 프로필 데이터 업데이트 완료");
           }
         } catch (cacheError) {
@@ -283,14 +291,14 @@ const ProfilePage: React.FC = () => {
         if (!user) return;
         setIsLoading(true);
         const response = await backendApi.getUserPosts(user.id, page);
-        
+
         // 페이지가 0일 때는 기존 게시물을 초기화하고, 그 외에는 추가
         if (page === 0) {
           setPosts(response.content);
         } else {
-          setPosts(prev => [...prev, ...response.content]);
+          setPosts((prev) => [...prev, ...response.content]);
         }
-        
+
         setHasMore(page < response.totalPages - 1);
       } catch (error) {
         console.error("게시물 로딩 실패:", error);
@@ -327,15 +335,17 @@ const ProfilePage: React.FC = () => {
         });
 
         // 게시물 목록 업데이트
-        setPosts(posts.map((post) =>
-          post.id === editingPostId
-            ? {
-                ...post,
-                title: updatedPost.title,
-                content: updatedPost.content,
-              }
-            : post
-        ));
+        setPosts(
+          posts.map((post) =>
+            post.id === editingPostId
+              ? {
+                  ...post,
+                  title: updatedPost.title,
+                  content: updatedPost.content,
+                }
+              : post
+          )
+        );
 
         toast.success("게시글이 수정되었습니다.");
         setShowWriteForm(false);
@@ -373,9 +383,9 @@ const ProfilePage: React.FC = () => {
 
   const handleLoadMore = () => {
     if (activeTab === "posts") {
-      setPage(prev => prev + 1);
+      setPage((prev) => prev + 1);
     } else if (activeTab === "reviews" && page < totalPages - 1) {
-      setPage(prev => prev + 1);
+      setPage((prev) => prev + 1);
       fetchReviews(page + 1);
     }
   };
@@ -383,7 +393,7 @@ const ProfilePage: React.FC = () => {
   // 게시물 탭 렌더링
   const renderPostsTab = () => {
     const loadMore = () => {
-      setPage(prev => prev + 1);
+      setPage((prev) => prev + 1);
     };
 
     if (isLoading && posts.length === 0) {
@@ -499,11 +509,19 @@ const ProfilePage: React.FC = () => {
                   <span>{formatDate(post.createdAt)}</span>
                   <div className="flex items-center space-x-3">
                     <div className="flex items-center space-x-1">
-                      <FaThumbsUp className={post.liked ? "text-blue-600" : "text-gray-400"} />
+                      <FaThumbsUp
+                        className={
+                          post.liked ? "text-blue-600" : "text-gray-400"
+                        }
+                      />
                       <span>{post.likeCount}</span>
                     </div>
                     <div className="flex items-center space-x-1">
-                      <FaThumbsDown className={post.disliked ? "text-red-600" : "text-gray-400"} />
+                      <FaThumbsDown
+                        className={
+                          post.disliked ? "text-red-600" : "text-gray-400"
+                        }
+                      />
                       <span>{post.dislikeCount}</span>
                     </div>
                     <div className="flex items-center space-x-1">
@@ -550,7 +568,9 @@ const ProfilePage: React.FC = () => {
                 </div>
               </div>
               <p className="text-gray-700 mb-3">{review.content}</p>
-              <div className="text-sm text-gray-500">{formatDate(review.createdAt)}</div>
+              <div className="text-sm text-gray-500">
+                {formatDate(review.createdAt)}
+              </div>
             </div>
           ))}
         </div>
@@ -575,11 +595,7 @@ const ProfilePage: React.FC = () => {
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
         {scrappedMovies.map((movie) => (
-          <ContentCard
-            key={movie.id}
-            content={movie}
-            className="w-full"
-          />
+          <ContentCard key={movie.id} content={movie} className="w-full" />
         ))}
       </div>
     );
@@ -752,7 +768,9 @@ const ProfilePage: React.FC = () => {
 
             {/* 프로필 소개 */}
             <div>
-              <p className="text-sm">{user?.bio || "영화와 리뷰를 공유하는 공간"}</p>
+              <p className="text-sm">
+                {user?.bio || "영화와 리뷰를 공유하는 공간"}
+              </p>
               <p className="text-sm text-gray-500 mt-1">{user?.email}</p>
             </div>
           </div>
@@ -791,7 +809,7 @@ const ProfilePage: React.FC = () => {
 
       {/* 게시물 그리드 */}
       {renderTabContent()}
-      
+
       {/* 팔로워 모달 */}
       <FollowModal
         isOpen={showFollowersModal}
