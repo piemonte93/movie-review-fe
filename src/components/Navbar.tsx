@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaSearch, FaBell, FaUser, FaSignOutAlt, FaCog, FaChevronDown } from "react-icons/fa";
+import {
+  FaSearch,
+  FaBell,
+  FaUser,
+  FaSignOutAlt,
+  FaCog,
+  FaChevronDown,
+} from "react-icons/fa";
 import NotificationModal from "./NotificationModal";
 import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
@@ -77,10 +84,16 @@ const Navbar: React.FC = () => {
       if (!target.closest(".search-container")) {
         setIsSearchExpanded(false);
       }
-      if (!target.closest(".community-menu") && !target.closest(".community-button")) {
+      if (
+        !target.closest(".community-menu") &&
+        !target.closest(".community-button")
+      ) {
         setIsCommunityMenuOpen(false);
       }
-      if (!target.closest(".notification-dropdown") && !target.closest(".notification-bell")) {
+      if (
+        !target.closest(".notification-dropdown") &&
+        !target.closest(".notification-bell")
+      ) {
         setIsNotificationModalOpen(false);
       }
     };
@@ -117,7 +130,7 @@ const Navbar: React.FC = () => {
                 </Link>
               </li>
               <li className="relative community-menu">
-                <button 
+                <button
                   className="community-button flex items-center hover:text-blue-600"
                   onMouseEnter={() => setIsCommunityMenuOpen(true)}
                   onClick={() => setIsCommunityMenuOpen(!isCommunityMenuOpen)}
@@ -125,26 +138,37 @@ const Navbar: React.FC = () => {
                   Community
                   <FaChevronDown className="ml-1 h-3 w-3" />
                 </button>
-                
+
                 {isCommunityMenuOpen && (
-                  <div 
+                  <div
                     className="absolute left-0 mt-2 w-48 rounded-md bg-white py-2 shadow-lg ring-1 ring-black ring-opacity-5 z-50"
                     onMouseLeave={() => setIsCommunityMenuOpen(false)}
                   >
-                    <Link
-                      to="/movie-reviews"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={() => setIsCommunityMenuOpen(false)}
-                    >
-                      영화 리뷰
-                    </Link>
-                    <Link
-                      to="/community"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={() => setIsCommunityMenuOpen(false)}
-                    >
-                      커뮤니티
-                    </Link>
+                    {isLoggedIn && (
+                      <>
+                        <Link
+                          to="/movie-reviews"
+                          className="block px-4 py-2 text-gray-800 hover:bg-gray-200"
+                          onClick={() => setIsCommunityMenuOpen(false)}
+                        >
+                          영화 리뷰
+                        </Link>
+                        <Link
+                          to="/tv-reviews"
+                          className="block px-4 py-2 text-gray-800 hover:bg-gray-200"
+                          onClick={() => setIsCommunityMenuOpen(false)}
+                        >
+                          TV쇼 리뷰
+                        </Link>
+                        <Link
+                          to="/community"
+                          className="block px-4 py-2 text-gray-800 hover:bg-gray-200"
+                          onClick={() => setIsCommunityMenuOpen(false)}
+                        >
+                          커뮤니티
+                        </Link>
+                      </>
+                    )}
                   </div>
                 )}
               </li>
@@ -186,7 +210,9 @@ const Navbar: React.FC = () => {
             <div className="relative notification-bell">
               <button
                 className="relative rounded-full p-2 hover:bg-gray-100"
-                onClick={() => setIsNotificationModalOpen(!isNotificationModalOpen)}
+                onClick={() =>
+                  setIsNotificationModalOpen(!isNotificationModalOpen)
+                }
                 aria-label="알림"
               >
                 <FaBell className="text-gray-600" />

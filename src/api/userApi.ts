@@ -1,5 +1,6 @@
-import { apiClient } from "./backendApi";
 import { UserActivity, UserProfile } from "../types/user";
+import { MovieReview, TvShowReview } from "../api/backendApi";
+import { apiClient } from "./backendApi";
 
 // 사용자 프로필 정보 가져오기
 export const getUserProfile = async (): Promise<UserProfile> => {
@@ -244,39 +245,39 @@ export const getUserScraps = async () => {
     // 실제 API 연결 코드 활성화
     const response = await apiClient.get("/api/scraps");
     console.log("스크랩 API 응답:", response.status, response.data);
-    
+
     // 응답이 빈 배열이면 빈 배열 반환
     if (Array.isArray(response.data) && response.data.length === 0) {
       console.log("스크랩 데이터가 없습니다. 빈 배열 반환");
       return [];
     }
-    
+
     // TV 프로그램의 경우 ContentCard 컴포넌트에서 사용할 필드 추가 처리
-    const processedScraps = response.data.map(scrap => {
+    const processedScraps = response.data.map((scrap) => {
       // 기존 스크랩 데이터 복사
       const processedScrap = { ...scrap };
-      
+
       // TV 프로그램인 경우 title 필드가 없을 수 있으므로 name 필드로 대체
-      if (scrap.media_type === 'tv') {
+      if (scrap.media_type === "tv") {
         // name 필드를 title에도 설정 (ContentCard에서 사용)
         if (!processedScrap.title) {
           processedScrap.title = scrap.name || "제목 없음";
         }
-        
+
         // first_air_date 필드를 release_date에도 설정 (ContentCard에서 사용)
         if (!processedScrap.release_date) {
           processedScrap.release_date = scrap.first_air_date || "";
         }
-        
+
         // name 필드 설정 (ContentCard에서 사용)
         if (!processedScrap.name) {
           processedScrap.name = scrap.title || "제목 없음";
         }
       }
-      
+
       return processedScrap;
     });
-    
+
     console.log("처리된 스크랩 데이터:", processedScraps);
     return processedScraps;
   } catch (error) {
@@ -286,51 +287,170 @@ export const getUserScraps = async () => {
   }
 };
 
+// 로컬 스토리지에서 사용자 ID에 해당하는 유저명 가져오기
+const getLocalUsername = async (userId: string): Promise<string | null> => {
+  try {
+    // 1. 본인 ID인지 확인 (로컬 스토리지)
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      const localUser = JSON.parse(userStr);
+      if (localUser.id === parseInt(userId)) {
+        console.log(
+          "현재 로그인한 사용자의 ID. 로컬 유저명 사용:",
+          localUser.username
+        );
+        return localUser.username;
+      }
+    }
+
+    // 2. 캐싱된 사용자 매핑 확인
+    const userMappingStr = localStorage.getItem("user_id_mapping");
+    if (userMappingStr) {
+      const userMapping: Record<string, string> = JSON.parse(userMappingStr);
+      if (userMapping[userId]) {
+        console.log(
+          `캐싱된 매핑에서 사용자 ID ${userId}의 유저명 찾음:`,
+          userMapping[userId]
+        );
+        return userMapping[userId];
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error("로컬 유저명 조회 실패:", error);
+    return null;
+  }
+};
+
+// 프로필 API를 통해 사용자 ID로 사용자명 가져오기
+export const getUsernameFromUserId = async (
+  userId: string
+): Promise<string> => {
+  try {
+    // 로컬에서 먼저 시도
+    const localUsername = await getLocalUsername(userId);
+    if (localUsername) {
+      return localUsername;
+    }
+
+    // 프로필 API로 사용자 정보 요청
+    console.log(`사용자 ID ${userId}의 프로필 정보 요청`);
+    const profileResponse = await apiClient.get(`/api/profile/id/${userId}`);
+
+    if (profileResponse.data && profileResponse.data.username) {
+      const username = profileResponse.data.username;
+      console.log(`사용자 ID ${userId}의 유저명 찾음:`, username);
+
+      // 캐시에 사용자 ID-유저명 매핑 저장
+      try {
+        const userMappingStr = localStorage.getItem("user_id_mapping") || "{}";
+        const userMapping: Record<string, string> = JSON.parse(userMappingStr);
+        userMapping[userId] = username;
+        localStorage.setItem("user_id_mapping", JSON.stringify(userMapping));
+      } catch (e) {
+        console.error("사용자 매핑 캐시 업데이트 실패:", e);
+      }
+
+      return username;
+    }
+
+    // 기본값 반환
+    return `user${userId}`;
+  } catch (error) {
+    console.error(`사용자 ID ${userId}의 유저명 조회 실패:`, error);
+    return `user${userId}`;
+  }
+};
+
 // 다른 사용자의 프로필 정보 가져오기
 export const getOtherUserProfile = async (
   userId: string
 ): Promise<UserProfile> => {
   try {
-    // 실제 API 연결 코드 활성화
-    const response = await apiClient.get(`/api/users/${userId}/profile`);
-    return response.data;
+    console.log(`사용자 ID: ${userId}의 프로필 데이터 요청 시작`);
 
-    // 백엔드 연결이 되지 않는 경우를 위한 폴백 처리
-    /*
+    // ID로 유저명 가져오기 (업데이트된 함수 사용)
+    const username = await getUsernameFromUserId(userId);
+    console.log(`사용자 ID ${userId}의 변환된 유저명: ${username}`);
+
+    // 유저명으로 프로필 정보 요청
+    const response = await apiClient.get(`/api/profile/${username}`);
+    console.log("사용자 프로필 데이터 응답:", response.data);
+
+    // 응답 데이터를 UserProfile 형식에 맞게 변환
+    const responseData = response.data;
+
     return {
       user: {
         id: parseInt(userId),
-        username: "영화광123",
-        email: "moviebuff@example.com",
-        roles: ["USER"],
-        createdAt: "2023-01-01",
-        updatedAt: "2023-01-01",
-        profileImageUrl: "https://via.placeholder.com/150",
+        username: responseData.username || `사용자${userId}`,
+        email: responseData.email || "user@example.com",
+        bio: responseData.bio || "",
+        roles: responseData.roles || ["USER"],
+        profileImageUrl: responseData.profileImageUrl,
+        createdAt: responseData.createdAt || "2023-01-01",
+        updatedAt: responseData.updatedAt || "2023-01-01",
       },
-      followingCount: 234,
-      followerCount: 567,
-      watchedMoviesCount: 89,
-      reviewedMoviesCount: 45,
-      isFollowing: false,
+      followingCount: responseData.followingCount || 0,
+      followerCount: responseData.followerCount || 0,
+      watchedMoviesCount: responseData.reviewCount || 0,
+      reviewedMoviesCount: responseData.reviewCount || 0,
+      isFollowing: responseData.isFollowing || false,
+      mutualFollow: responseData.mutualFollow || false,
+      followsMe: responseData.followsMe || false,
     };
-    */
   } catch (error) {
-    console.error("Failed to fetch other user profile", error);
-    // 폴백 데이터 (API 실패 시)
+    console.error("사용자 프로필 데이터 가져오기 실패:", error);
+
+    // API 요청 실패 시 현재 로그인한 사용자 정보 확인
+    const currentUser = localStorage.getItem("user");
+    if (currentUser) {
+      try {
+        const userData = JSON.parse(currentUser);
+
+        // 요청한 사용자 ID와 현재 로그인한 사용자 ID가 같은 경우
+        if (userData.id === parseInt(userId)) {
+          console.log("현재 로그인한 사용자의 프로필 데이터 사용:", userData);
+          return {
+            user: {
+              id: userData.id,
+              username: userData.username,
+              email: userData.email || "user@example.com",
+              bio: userData.bio || "",
+              roles: userData.roles || ["USER"],
+              profileImageUrl: userData.profileImageUrl,
+              createdAt: userData.createdAt || "2023-01-01",
+              updatedAt: userData.updatedAt || "2023-01-01",
+            },
+            followingCount: userData.followingCount || 0,
+            followerCount: userData.followerCount || 0,
+            watchedMoviesCount: userData.watchedMoviesCount || 0,
+            reviewedMoviesCount: userData.reviewedMoviesCount || 0,
+            isFollowing: false,
+          };
+        }
+      } catch (parseError) {
+        console.error("로컬 스토리지 사용자 정보 파싱 오류:", parseError);
+      }
+    }
+
+    // 폴백 데이터 (모든 API 실패 시)
     return {
       user: {
         id: parseInt(userId),
-        username: "영화광123",
-        email: "moviebuff@example.com",
+        username: "사용자" + userId,
+        email: `user${userId}@example.com`,
+        bio: "사용자 정보를 불러올 수 없습니다.",
         roles: ["USER"],
         createdAt: "2023-01-01",
         updatedAt: "2023-01-01",
-        profileImageUrl: "https://via.placeholder.com/150",
+        profileImageUrl: null,
       },
-      followingCount: 234,
-      followerCount: 567,
-      watchedMoviesCount: 89,
-      reviewedMoviesCount: 45,
+      followingCount: 0,
+      followerCount: 0,
+      watchedMoviesCount: 0,
+      reviewedMoviesCount: 0,
       isFollowing: false,
     };
   }
@@ -341,21 +461,28 @@ export const getOtherUserActivity = async (
   userId: string
 ): Promise<UserActivity> => {
   try {
-    // 실제 API 연결 코드 활성화
-    const response = await apiClient.get(`/api/users/${userId}/activity`);
-    return response.data;
+    console.log(`사용자 ID: ${userId}의 활동 데이터 요청 시작`);
 
-    // 백엔드 연결이 되지 않는 경우를 위한 폴백 처리
-    /*
+    // ID로 유저명 가져오기 (업데이트된 함수 사용)
+    const username = await getUsernameFromUserId(userId);
+    console.log(`사용자 ID ${userId}의 변환된 유저명: ${username}`);
+
+    // 유저명으로 활동 정보 요청
+    const activityResponse = await apiClient.get(
+      `/api/profile/${username}/activity`
+    );
+    console.log("사용자 활동 데이터 응답:", activityResponse.data);
+
+    // 응답이 없거나 형식이 다를 경우를 대비한 기본값 설정
     return {
-      favoriteMovies: [],
-      favoriteReviews: [],
-      favoritePosts: [],
+      favoriteMovies: activityResponse.data.favoriteMovies || [],
+      favoriteReviews: activityResponse.data.favoriteReviews || [],
+      favoritePosts: activityResponse.data.favoritePosts || [],
     };
-    */
   } catch (error) {
-    console.error("Failed to fetch other user activity", error);
-    // 폴백 데이터 (API 실패 시)
+    console.error("다른 사용자의 활동 정보 가져오기 실패:", error);
+
+    // 폴백 데이터 (모든 API 실패 시)
     return {
       favoriteMovies: [],
       favoriteReviews: [],
@@ -367,64 +494,64 @@ export const getOtherUserActivity = async (
 // 다른 사용자의 스크랩 목록 가져오기
 export const getOtherUserScraps = async (userId: string) => {
   try {
-    // 실제 API 연결 코드 활성화
-    const response = await apiClient.get(`/api/users/${userId}/scraps`);
-    return response.data;
+    console.log(`사용자 ID: ${userId}의 스크랩 데이터 요청 시작`);
 
-    // 백엔드 연결이 되지 않는 경우를 위한 폴백 처리
-    /*
-    return [
-      {
-        id: 1,
-        title: "인셉션",
-        poster_path: "/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg",
-        vote_average: 8.4,
-        vote_count: 20345,
-        release_date: "2010-07-16",
-        media_type: "movie",
-        overview: "꿈을 공유할 수 있는 기술을 가진 도둑들의 이야기",
-        backdrop_path: "/s3TBrRGB1iav7gFOCNx3H31MoES.jpg",
-      },
-      {
-        id: 2,
-        title: "기생충",
-        poster_path: "/jjHccoFjbqlfr4VGLVLT7yek0Xn.jpg",
-        vote_average: 8.5,
-        vote_count: 14362,
-        release_date: "2019-05-30",
-        media_type: "movie",
-        overview: "전원백수로 살 길 막막하지만 사이는 좋은 기택 가족.",
-        backdrop_path: "/ApiBzeaa95TNYliSbQ8pJv4Fje7.jpg",
-      },
-    ];
-    */
+    // ID로 유저명 가져오기 (업데이트된 함수 사용)
+    const username = await getUsernameFromUserId(userId);
+    console.log(`사용자 ID ${userId}의 변환된 유저명: ${username}`);
+
+    // 유저명으로 스크랩 요청
+    const scrapsResponse = await apiClient.get(
+      `/api/profile/${username}/scraps`
+    );
+    console.log("사용자 스크랩 데이터 응답:", scrapsResponse.data);
+
+    // 형식이 다를 경우를 대비해 가공
+    const scraps = scrapsResponse.data;
+
+    // 응답이 없거나 빈 배열인 경우 폴백 데이터 없이 그대로 반환
+    if (!scraps || scraps.length === 0) {
+      return [];
+    }
+
+    return scraps.map((item: any) => {
+      const mediaType = item.mediaType || item.media_type || "movie";
+
+      // TV 쇼와 영화 구분에 따른 데이터 가공
+      const processedItem = {
+        id: item.id || item.contentId,
+        title: item.title || item.name || "제목 없음",
+        name: item.name || item.title, // TV 쇼인 경우 name 필드 추가
+        poster_path: item.posterPath || item.poster_path,
+        vote_average: item.voteAverage || item.vote_average || 0,
+        vote_count: item.voteCount || item.vote_count || 0,
+        media_type: mediaType,
+        overview: item.overview || "",
+        backdrop_path: item.backdropPath || item.backdrop_path,
+      };
+
+      // TV 쇼인 경우 first_air_date 필드 추가
+      if (mediaType === "tv") {
+        processedItem.first_air_date =
+          item.firstAirDate ||
+          item.first_air_date ||
+          item.releaseDate ||
+          item.release_date;
+      } else {
+        processedItem.release_date =
+          item.releaseDate ||
+          item.release_date ||
+          item.firstAirDate ||
+          item.first_air_date;
+      }
+
+      return processedItem;
+    });
   } catch (error) {
-    console.error("Failed to fetch other user scraps", error);
-    // 폴백 데이터 (API 실패 시)
-    return [
-      {
-        id: 1,
-        title: "인셉션",
-        poster_path: "/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg",
-        vote_average: 8.4,
-        vote_count: 20345,
-        release_date: "2010-07-16",
-        media_type: "movie",
-        overview: "꿈을 공유할 수 있는 기술을 가진 도둑들의 이야기",
-        backdrop_path: "/s3TBrRGB1iav7gFOCNx3H31MoES.jpg",
-      },
-      {
-        id: 2,
-        title: "기생충",
-        poster_path: "/jjHccoFjbqlfr4VGLVLT7yek0Xn.jpg",
-        vote_average: 8.5,
-        vote_count: 14362,
-        release_date: "2019-05-30",
-        media_type: "movie",
-        overview: "전원백수로 살 길 막막하지만 사이는 좋은 기택 가족.",
-        backdrop_path: "/ApiBzeaa95TNYliSbQ8pJv4Fje7.jpg",
-      },
-    ];
+    console.error("다른 사용자의 스크랩 목록 가져오기 실패:", error);
+
+    // 폴백 데이터 (모든 API 실패 시)
+    return [];
   }
 };
 

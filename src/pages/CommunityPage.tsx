@@ -14,6 +14,7 @@ import {
   FaArrowUp,
   FaEdit,
   FaTrash,
+  FaAt,
 } from "react-icons/fa";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
@@ -1167,30 +1168,40 @@ const CommunityPage: React.FC = () => {
                     {/* 사용자 프로필 영역 */}
                     <div className="mr-4 flex flex-col items-center">
                       <Link
-                        to={`/profile/${post.user.id}`}
-                        className="flex flex-col items-center"
+                        to={
+                          post.user.id === user?.id
+                            ? "/profile"
+                            : `/user-profile/${post.user.id}`
+                        }
+                        className="flex-shrink-0"
                       >
-                        <div className="h-12 w-12 overflow-hidden rounded-full bg-gray-300 cursor-pointer">
+                        <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden cursor-pointer flex items-center justify-center">
                           {post.user.profileImageUrl ? (
                             <img
                               src={post.user.profileImageUrl}
-                              alt={`${post.user.username}의 프로필`}
-                              className="h-full w-full object-cover"
+                              alt={post.user.username}
+                              className="w-full h-full object-cover"
                             />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-gray-300">
-                              <FaUser className="text-gray-600" />
-                            </div>
+                            <FaUser className="text-gray-400 text-xl" />
                           )}
                         </div>
-                        <p className="mt-1 text-center text-xs text-gray-700 hover:text-blue-500">
-                          {post.user.username}
-                        </p>
                       </Link>
-                      <p className="flex items-center text-xs text-gray-500">
-                        <FaComment className="mr-1" size={10} />
-                        {post.user.reviewCount}
-                      </p>
+                      <div className="text-center mt-1">
+                        <Link
+                          to={
+                            post.user.id === user?.id
+                              ? "/profile"
+                              : `/user-profile/${post.user.id}`
+                          }
+                          className="font-bold text-sm hover:underline"
+                        >
+                          {post.user.username}
+                        </Link>
+                        <div className="text-xs text-gray-500">
+                          {new Date(post.createdAt).toLocaleString()}
+                        </div>
+                      </div>
                     </div>
 
                     {/* 게시글 내용 영역 */}
@@ -1201,14 +1212,14 @@ const CommunityPage: React.FC = () => {
                           <div className="flex gap-2">
                             <button
                               onClick={() => handleEditPost(post)}
-                              className="text-gray-600 hover:text-blue-600"
+                              className="text-gray-500 hover:text-blue-500"
                               title="수정"
                             >
                               <FaEdit />
                             </button>
                             <button
                               onClick={() => handleDeletePost(post.id)}
-                              className="text-gray-600 hover:text-red-600"
+                              className="text-gray-500 hover:text-red-500"
                               title="삭제"
                             >
                               <FaTrash />
@@ -1288,84 +1299,137 @@ const CommunityPage: React.FC = () => {
                       <div className="space-y-3 mb-4">
                         {post.comments?.map((comment) => (
                           <div key={comment.id} className="flex">
-                            <Link
-                              to={`/profile/${comment.user.id}`}
-                              className="mr-2"
-                            >
-                              <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-200 cursor-pointer">
-                                {comment.user.profileImageUrl ? (
-                                  <img
-                                    src={comment.user.profileImageUrl}
-                                    alt={comment.user.username}
-                                    className="h-8 w-8 rounded-full"
-                                  />
-                                ) : (
-                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200">
-                                    <FaUser
-                                      className="text-gray-500"
-                                      size={12}
+                            <div className="flex flex-col items-center mr-2">
+                              <Link
+                                to={`/user-profile/${comment.user.id}`}
+                                className="flex-shrink-0"
+                              >
+                                <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden cursor-pointer flex items-center justify-center">
+                                  {comment.user.profileImageUrl ? (
+                                    <img
+                                      src={comment.user.profileImageUrl}
+                                      alt={comment.user.username}
+                                      className="w-full h-full object-cover"
                                     />
-                                  </div>
+                                  ) : (
+                                    <FaUser className="text-gray-400 text-sm" />
+                                  )}
+                                </div>
+                              </Link>
+                              <Link
+                                to={`/user-profile/${comment.user.id}`}
+                                className="text-xs font-medium hover:underline text-center mt-1"
+                              >
+                                {comment.user.username}
+                              </Link>
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-xs text-gray-500">
+                                  {new Date(comment.createdAt).toLocaleString()}
+                                </span>
+                                {isLoggedIn && user?.id === comment.user.id && (
+                                  <button
+                                    onClick={() =>
+                                      handleDeleteComment(post.id, comment.id)
+                                    }
+                                    className="text-xs text-gray-500 hover:text-red-500"
+                                    title="삭제"
+                                  >
+                                    <FaTrash />
+                                  </button>
                                 )}
                               </div>
-                            </Link>
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium text-gray-900">
-                                  {comment.user.username}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm text-gray-500">
-                                    {formatDate(comment.createdAt)}
-                                  </span>
-                                  {isLoggedIn &&
-                                    user?.id === comment.user.id && (
-                                      <button
-                                        onClick={() =>
-                                          handleDeleteComment(
-                                            post.id,
-                                            comment.id
-                                          )
-                                        }
-                                        className="text-gray-500 hover:text-red-500"
-                                        title="댓글 삭제"
-                                      >
-                                        <FaTrash size={12} />
-                                      </button>
-                                    )}
-                                </div>
-                              </div>
-                              <p className="text-sm mt-1">{comment.content}</p>
-                              <div className="mt-2 flex items-center space-x-4">
+                              <div
+                                className="text-sm"
+                                dangerouslySetInnerHTML={{
+                                  __html: formatContentWithMentions(
+                                    comment.content
+                                  ),
+                                }}
+                              />
+                              <div className="mt-1 flex items-center space-x-4">
                                 <button
                                   onClick={() => handleCommentLike(comment.id)}
-                                  className={`flex items-center text-sm ${
-                                    comment.likeCount > 0
-                                      ? "text-blue-600"
+                                  className={`flex items-center text-xs space-x-1 ${
+                                    comment.liked
+                                      ? "text-blue-500"
                                       : "text-gray-500"
                                   }`}
                                 >
-                                  <FaThumbsUp className="mr-1" />
-                                  {comment.likeCount}
+                                  <FaThumbsUp />
+                                  <span>{comment.likeCount || 0}</span>
                                 </button>
                                 <button
                                   onClick={() =>
                                     handleCommentDislike(comment.id)
                                   }
-                                  className={`flex items-center text-sm ${
-                                    comment.dislikeCount > 0
-                                      ? "text-red-600"
+                                  className={`flex items-center text-xs space-x-1 ${
+                                    comment.disliked
+                                      ? "text-red-500"
                                       : "text-gray-500"
                                   }`}
                                 >
-                                  <FaThumbsDown className="mr-1" />
-                                  {comment.dislikeCount}
+                                  <FaThumbsDown />
+                                  <span>{comment.dislikeCount || 0}</span>
                                 </button>
                               </div>
                             </div>
                           </div>
                         ))}
+
+                        {(!post.comments || post.comments.length === 0) && (
+                          <p className="text-sm text-gray-500 text-center py-2">
+                            아직 댓글이 없습니다. 첫 댓글을 작성해보세요!
+                          </p>
+                        )}
                       </div>
+
+                      {/* 댓글 작성 폼 */}
+                      {isLoggedIn ? (
+                        <div className="flex">
+                          <div className="mr-2 h-8 w-8 overflow-hidden rounded-full bg-gray-200">
+                            {user?.profileImageUrl ? (
+                              <img
+                                src={user.profileImageUrl}
+                                alt="내 프로필"
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center bg-gray-200">
+                                <FaUser className="text-gray-500" size={12} />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 flex">
+                            <input
+                              type="text"
+                              placeholder="댓글을 입력하세요..."
+                              className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
+                              value={newComment}
+                              onChange={(e) => setNewComment(e.target.value)}
+                            />
+                            <button
+                              className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
+                              onClick={() => handleCommentSubmit(post.id)}
+                            >
+                              <FaReply />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-2">
+                          <p className="text-sm text-gray-500 mb-1">
+                            댓글을 작성하려면 로그인이 필요합니다.
+                          </p>
+                          <Link
+                            to="/login"
+                            className="text-sm text-blue-600 hover:underline"
+                          >
+                            로그인하기
+                          </Link>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1405,30 +1469,40 @@ const CommunityPage: React.FC = () => {
                   {/* 사용자 프로필 영역 */}
                   <div className="mr-4 flex flex-col items-center">
                     <Link
-                      to={`/profile/${post.user.id}`}
-                      className="flex flex-col items-center"
+                      to={
+                        post.user.id === user?.id
+                          ? "/profile"
+                          : `/user-profile/${post.user.id}`
+                      }
+                      className="flex-shrink-0"
                     >
-                      <div className="h-12 w-12 overflow-hidden rounded-full bg-gray-300 cursor-pointer">
+                      <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden cursor-pointer flex items-center justify-center">
                         {post.user.profileImageUrl ? (
                           <img
                             src={post.user.profileImageUrl}
-                            alt={`${post.user.username}의 프로필`}
-                            className="h-full w-full object-cover"
+                            alt={post.user.username}
+                            className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-gray-300">
-                            <FaUser className="text-gray-600" />
-                          </div>
+                          <FaUser className="text-gray-400 text-xl" />
                         )}
                       </div>
-                      <p className="mt-1 text-center text-xs text-gray-700 hover:text-blue-500">
-                        {post.user.username}
-                      </p>
                     </Link>
-                    <p className="flex items-center text-xs text-gray-500">
-                      <FaComment className="mr-1" size={10} />
-                      {post.user.reviewCount}
-                    </p>
+                    <div className="text-center mt-1">
+                      <Link
+                        to={
+                          post.user.id === user?.id
+                            ? "/profile"
+                            : `/user-profile/${post.user.id}`
+                        }
+                        className="font-bold text-sm hover:underline"
+                      >
+                        {post.user.username}
+                      </Link>
+                      <div className="text-xs text-gray-500">
+                        {new Date(post.createdAt).toLocaleString()}
+                      </div>
+                    </div>
                   </div>
 
                   {/* 게시글 내용 영역 */}
@@ -1439,14 +1513,14 @@ const CommunityPage: React.FC = () => {
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleEditPost(post)}
-                            className="text-gray-600 hover:text-blue-600"
+                            className="text-gray-500 hover:text-blue-500"
                             title="수정"
                           >
                             <FaEdit />
                           </button>
                           <button
                             onClick={() => handleDeletePost(post.id)}
-                            className="text-gray-600 hover:text-red-600"
+                            className="text-gray-500 hover:text-red-500"
                             title="삭제"
                           >
                             <FaTrash />
@@ -1524,69 +1598,77 @@ const CommunityPage: React.FC = () => {
                     <div className="space-y-3 mb-4">
                       {post.comments?.map((comment) => (
                         <div key={comment.id} className="flex">
-                          <Link
-                            to={`/profile/${comment.user.id}`}
-                            className="mr-2"
-                          >
-                            <div className="h-8 w-8 overflow-hidden rounded-full bg-gray-200 cursor-pointer">
-                              {comment.user.profileImageUrl ? (
-                                <img
-                                  src={comment.user.profileImageUrl}
-                                  alt={comment.user.username}
-                                  className="h-8 w-8 rounded-full"
-                                />
-                              ) : (
-                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200">
-                                  <FaUser className="text-gray-500" size={12} />
-                                </div>
-                              )}
-                            </div>
-                          </Link>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium text-gray-900">
-                                {comment.user.username}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-500">
-                                  {formatDate(comment.createdAt)}
-                                </span>
-                                {isLoggedIn && user?.id === comment.user.id && (
-                                  <button
-                                    onClick={() =>
-                                      handleDeleteComment(post.id, comment.id)
-                                    }
-                                    className="text-gray-500 hover:text-red-500"
-                                    title="댓글 삭제"
-                                  >
-                                    <FaTrash size={12} />
-                                  </button>
+                          <div className="flex flex-col items-center mr-2">
+                            <Link
+                              to={`/user-profile/${comment.user.id}`}
+                              className="flex-shrink-0"
+                            >
+                              <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden cursor-pointer flex items-center justify-center">
+                                {comment.user.profileImageUrl ? (
+                                  <img
+                                    src={comment.user.profileImageUrl}
+                                    alt={comment.user.username}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <FaUser className="text-gray-400 text-sm" />
                                 )}
                               </div>
+                            </Link>
+                            <Link
+                              to={`/user-profile/${comment.user.id}`}
+                              className="text-xs font-medium hover:underline text-center mt-1"
+                            >
+                              {comment.user.username}
+                            </Link>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-xs text-gray-500">
+                                {new Date(comment.createdAt).toLocaleString()}
+                              </span>
+                              {isLoggedIn && user?.id === comment.user.id && (
+                                <button
+                                  onClick={() =>
+                                    handleDeleteComment(post.id, comment.id)
+                                  }
+                                  className="text-xs text-gray-500 hover:text-red-500"
+                                  title="삭제"
+                                >
+                                  <FaTrash />
+                                </button>
+                              )}
                             </div>
-                            <p className="text-sm mt-1">{comment.content}</p>
-                            <div className="mt-2 flex items-center space-x-4">
+                            <div
+                              className="text-sm"
+                              dangerouslySetInnerHTML={{
+                                __html: formatContentWithMentions(
+                                  comment.content
+                                ),
+                              }}
+                            />
+                            <div className="mt-1 flex items-center space-x-4">
                               <button
                                 onClick={() => handleCommentLike(comment.id)}
-                                className={`flex items-center text-sm ${
-                                  comment.likeCount > 0
-                                    ? "text-blue-600"
+                                className={`flex items-center text-xs space-x-1 ${
+                                  comment.liked
+                                    ? "text-blue-500"
                                     : "text-gray-500"
                                 }`}
                               >
-                                <FaThumbsUp className="mr-1" />
-                                {comment.likeCount}
+                                <FaThumbsUp />
+                                <span>{comment.likeCount || 0}</span>
                               </button>
                               <button
                                 onClick={() => handleCommentDislike(comment.id)}
-                                className={`flex items-center text-sm ${
-                                  comment.dislikeCount > 0
-                                    ? "text-red-600"
+                                className={`flex items-center text-xs space-x-1 ${
+                                  comment.disliked
+                                    ? "text-red-500"
                                     : "text-gray-500"
                                 }`}
                               >
-                                <FaThumbsDown className="mr-1" />
-                                {comment.dislikeCount}
+                                <FaThumbsDown />
+                                <span>{comment.dislikeCount || 0}</span>
                               </button>
                             </div>
                           </div>

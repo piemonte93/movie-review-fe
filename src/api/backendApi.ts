@@ -1,10 +1,12 @@
 import axios from "axios";
 import {
-  ContentResponse,
+  Content,
   ContentDetail,
+  ContentResponse,
   ReviewResponse,
   VideoResponse,
 } from "../types/content";
+import { TvShow } from "../types/content";
 
 // This will point to our Spring Boot backend
 const BASE_URL = "http://localhost:8080";
@@ -167,6 +169,157 @@ export interface MovieReview {
     reviewCount: number;
   };
 }
+
+// 페이징 인터페이스 정의
+export interface Page<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+  first: boolean;
+  last: boolean;
+  empty: boolean;
+}
+
+// TV 쇼 리뷰 데이터 타입 정의
+export interface TvShowReview {
+  id: number;
+  title: string;
+  content: string;
+  rating: number;
+  movieTitle: string;
+  movieId: number;
+  moviePoster?: string;
+  createdAt: string;
+  comments: Comment[];
+  likes: { userId: number }[];
+  dislikes: { userId: number }[];
+  isSpoiler: boolean;
+  isLiked?: boolean;
+  isDisliked?: boolean;
+  likeCount?: number;
+  dislikeCount?: number;
+  commentCount?: number;
+  contentType: string;
+  user: {
+    id: number;
+    username: string;
+    profileImageUrl: string | null;
+    reviewCount: number;
+  };
+}
+
+// 사용자 ID로 사용자명(username) 가져오기
+export const getUsernameById = async (
+  userId: number | string
+): Promise<string> => {
+  if (!userId) return "알 수 없는 사용자";
+
+  try {
+    console.log(`사용자 ID ${userId}의 사용자명 조회 시작`);
+    const response = await apiClient.get(`/api/profile/id/${userId}`);
+
+    if (response.data && response.data.username) {
+      console.log(
+        `사용자 ID ${userId}의 사용자명 조회 성공:`,
+        response.data.username
+      );
+      return response.data.username;
+    }
+
+    console.log(`사용자 ID ${userId}의 사용자명 정보 없음, 기본값 사용`);
+    return `user${userId}`;
+  } catch (error) {
+    console.error(`사용자 ID ${userId}의 사용자명 조회 실패:`, error);
+    return `user${userId}`;
+  }
+};
+
+// 사용자 ID를 유저명으로 변환하는 유틸리티 함수
+const getUsernameByIdInternal = async (userId: string): Promise<string> => {
+  try {
+    // 1. 본인 ID인지 확인 (로컬 스토리지)
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      const localUser = JSON.parse(userStr);
+      if (localUser.id === parseInt(userId)) {
+        console.log(
+          "현재 로그인한 사용자의 ID. 로컬 유저명 사용:",
+          localUser.username
+        );
+        return localUser.username;
+      }
+    }
+
+    // 2. 캐싱된 사용자 매핑 확인
+    const userMappingStr = localStorage.getItem("user_id_mapping");
+    if (userMappingStr) {
+      const userMapping = JSON.parse(userMappingStr);
+      if (userMapping[userId]) {
+        console.log(
+          `캐싱된 매핑에서 사용자 ID ${userId}의 유저명 찾음:`,
+          userMapping[userId]
+        );
+        return userMapping[userId];
+      }
+    }
+
+    // 3. 다양한 API 시도
+    // 3.1. 첫 번째 시도: 커뮤니티 API
+    try {
+      const communityResponse = await apiClient.get(
+        `/api/community/users/${userId}/username`
+      );
+      if (communityResponse.data && communityResponse.data.username) {
+        // 캐싱
+        cacheUserIdMapping(userId, communityResponse.data.username);
+        return communityResponse.data.username;
+      }
+    } catch (e) {
+      console.error("커뮤니티 API에서 유저명 조회 실패:", e);
+    }
+
+    // 3.2. 두 번째 시도: 프로필 API
+    try {
+      const profileResponse = await apiClient.get(`/api/profile/id/${userId}`);
+      if (profileResponse.data && profileResponse.data.username) {
+        // 캐싱
+        cacheUserIdMapping(userId, profileResponse.data.username);
+        return profileResponse.data.username;
+      }
+    } catch (e) {
+      console.error("프로필 API에서 유저명 조회 실패:", e);
+    }
+
+    // 4. 임시 폴백: ID 자체를 유저명으로 사용
+    console.warn(
+      `사용자 ID ${userId}에 대한 유저명을 찾을 수 없어 ID를 사용합니다.`
+    );
+    return `user${userId}`;
+  } catch (error) {
+    console.error(`사용자 ID ${userId}를 유저명으로 변환 실패:`, error);
+    return `user${userId}`;
+  }
+};
+
+// 사용자 ID - 유저명 매핑 캐싱
+const cacheUserIdMapping = (userId: string, username: string) => {
+  try {
+    let userMapping: Record<string, string> = {};
+    const userMappingStr = localStorage.getItem("user_id_mapping");
+
+    if (userMappingStr) {
+      userMapping = JSON.parse(userMappingStr);
+    }
+
+    userMapping[userId] = username;
+    localStorage.setItem("user_id_mapping", JSON.stringify(userMapping));
+    console.log(`사용자 ID ${userId} - 유저명 ${username} 매핑 캐싱 완료`);
+  } catch (e) {
+    console.error("ID-유저명 매핑 캐싱 실패:", e);
+  }
+};
 
 export const backendApi = {
   // Movie endpoints
@@ -353,7 +506,7 @@ export const backendApi = {
   },
 
   // TMDB 포스터 URL 생성 함수
-  getPosterUrl: (posterPath: string | null, size = "w154"): string => {
+  getPosterUrl: (posterPath: string | null, size = "original"): string => {
     if (!posterPath) return "";
     return `https://image.tmdb.org/t/p/${size}${posterPath}`;
   },
@@ -361,12 +514,24 @@ export const backendApi = {
   // 영화 제목으로 검색하는 함수
   searchMoviesByTitle: async (query: string): Promise<ContentResponse> => {
     try {
+      console.log("영화 검색 요청:", query);
       const response = await apiClient.get("/api/contents/search", {
         params: {
           query,
           page: 1,
+          mediaType: "movie", // 영화만 검색하도록 mediaType 파라미터 추가
+          includeAdult: false, // 성인 콘텐츠 제외
         },
       });
+      console.log("영화 검색 결과:", response.data);
+
+      // 혹시 API에서 영화 이외의 결과가 포함될 경우를 대비해 추가 필터링
+      if (response.data && response.data.results) {
+        response.data.results = response.data.results.filter(
+          (item: Content) => item.media_type === "movie" || !item.media_type
+        );
+      }
+
       return response.data;
     } catch (error) {
       console.error("영화 검색 API 요청 실패:", error);
@@ -851,6 +1016,7 @@ export const backendApi = {
           page,
           size,
           sort,
+          contentType: "movie",
         },
       });
 
@@ -909,40 +1075,17 @@ export const backendApi = {
       // 응답 데이터 로깅
       console.log(`리뷰 ID ${reviewId}의 댓글 응답 데이터:`, response.data);
 
-      // 날짜 형식 디버깅
-      if (response.data.content && response.data.content.length > 0) {
-        const firstComment = response.data.content[0];
-        console.log(
-          `첫 번째 댓글(ID: ${firstComment.id}) 날짜 형식:`,
-          firstComment.created_at
-        );
-        console.log(
-          "첫 번째 댓글 전체 데이터:",
-          JSON.stringify(firstComment, null, 2)
-        );
-
-        // 서버에서 받은 날짜의 타입 확인
-        console.log("날짜 데이터 타입:", typeof firstComment.created_at);
-
-        if (firstComment.created_at) {
-          // Date 객체로 변환 테스트
-          try {
-            const testDate = new Date(firstComment.created_at);
-            console.log("변환된 날짜:", testDate.toISOString());
-            console.log("유효한 날짜인지:", !isNaN(testDate.getTime()));
-          } catch (e) {
-            console.error("날짜 변환 오류:", e);
-          }
-        }
-      } else {
-        console.log("리뷰에 댓글이 없습니다.");
-      }
-
       // 댓글 날짜 처리
       if (response.data.content) {
         response.data.content = response.data.content.map((comment: any) => {
+          // 날짜 필드 확인 (createdAt 또는 created_at)
+          const dateField = comment.createdAt || comment.created_at;
+
           // created_at 필드 처리
-          if (!comment.created_at || comment.created_at.trim() === "") {
+          if (
+            !dateField ||
+            (typeof dateField === "string" && dateField.trim() === "")
+          ) {
             console.warn(
               `댓글 ID ${comment.id}의 날짜가 비어있습니다. 현재 시간으로 설정합니다.`
             );
@@ -950,25 +1093,30 @@ export const backendApi = {
           } else {
             try {
               // 서버로부터 온 LocalDateTime 문자열 처리 (2023-04-03T15:30:45)
-              const localDateTimeRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
-              if (localDateTimeRegex.test(comment.created_at)) {
-                // 서버측 날짜가 타임존 정보가 없는 경우 ISO 형식으로 변환
-                comment.created_at = new Date(comment.created_at + 'Z').toISOString();
-                console.log(`날짜 형식 변환 완료 (댓글 ID: ${comment.id}):`, comment.created_at);
+              const localDateTimeRegex =
+                /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
+              if (
+                typeof dateField === "string" &&
+                localDateTimeRegex.test(dateField)
+              ) {
+                // 중요: 서버에서 보낸 시간은 이미 KST(한국시간)이지만 타임존 정보가 없음
+                // 올바른 방식: 한국 타임존(+09:00)을 추가
+                const isoDate = new Date(dateField + "+09:00").toISOString();
+                comment.created_at = isoDate;
+                console.log(
+                  `날짜 형식 변환 완료 (댓글 ID: ${comment.id}):`,
+                  comment.created_at
+                );
+              } else if (typeof dateField === "string") {
+                // 다른 형식의 날짜는 그대로 사용
+                comment.created_at = dateField;
               }
-              
-              // 날짜 형식 검증
+
+              // 날짜 형식 검증만 수행 (미래 날짜 검증 제거)
               const testDate = new Date(comment.created_at);
               if (isNaN(testDate.getTime())) {
                 console.warn(
                   `댓글 ID ${comment.id}의 날짜 형식이 잘못되었습니다:`,
-                  comment.created_at
-                );
-                comment.created_at = new Date().toISOString();
-              } else if (testDate.getTime() > Date.now()) {
-                // 미래 날짜인 경우 (타임존 문제일 가능성)
-                console.warn(
-                  `댓글 ID ${comment.id}의 날짜가 미래입니다. 현재 시간으로 조정합니다.`,
                   comment.created_at
                 );
                 comment.created_at = new Date().toISOString();
@@ -995,6 +1143,8 @@ export const backendApi = {
 
   addReviewComment: async (reviewId: number, content: string) => {
     try {
+      console.log(`리뷰 ID ${reviewId}에 댓글 작성: "${content}"`);
+
       const response = await apiClient.post(
         `/api/reviews/${reviewId}/comments`,
         {
@@ -1004,14 +1154,46 @@ export const backendApi = {
 
       console.log("새 댓글 생성 응답 데이터:", response.data);
 
-      // 날짜 필드 확인 및 처리
+      // 반환된 댓글 데이터 처리
       const commentData = response.data;
-      if (!commentData.createdAt || commentData.createdAt === "") {
-        console.warn(
-          "리뷰 댓글 생성 응답에 createdAt 필드가 없거나 비어 있습니다."
-        );
+
+      // 날짜 필드 확인 (createdAt 또는 created_at)
+      const dateField = commentData.createdAt || commentData.created_at;
+
+      if (
+        !dateField ||
+        (typeof dateField === "string" && dateField.trim() === "")
+      ) {
+        console.warn("리뷰 댓글 생성 응답에 날짜 필드가 없거나 비어 있습니다.");
         // 현재 시간으로 기본값 설정
         commentData.createdAt = new Date().toISOString();
+      } else if (typeof dateField === "string") {
+        // 날짜 문자열 처리
+        try {
+          // 서버로부터 온 LocalDateTime 문자열 처리 (2023-04-03T15:30:45)
+          const localDateTimeRegex =
+            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
+          if (localDateTimeRegex.test(dateField)) {
+            // 중요: 서버에서 보낸 시간은 이미 KST(한국시간)이지만 타임존 정보가 없음
+            // 올바른 방식: 한국 타임존(+09:00)을 추가
+            commentData.createdAt = new Date(
+              dateField + "+09:00"
+            ).toISOString();
+            console.log("날짜 형식 변환 완료:", commentData.createdAt);
+          } else {
+            // 그 외 형식은 그대로 사용
+            commentData.createdAt = dateField;
+          }
+
+          // 날짜 유효성 검사
+          const testDate = new Date(commentData.createdAt);
+          if (isNaN(testDate.getTime())) {
+            throw new Error("유효하지 않은 날짜 형식");
+          }
+        } catch (error) {
+          console.warn("날짜 변환 오류, 현재 시간으로 설정:", error);
+          commentData.createdAt = new Date().toISOString();
+        }
       }
 
       return commentData;
@@ -1181,15 +1363,22 @@ export const backendApi = {
     }
   },
 
-  getUserPosts: async (userId: number, page: number = 0, size: number = 10): Promise<{
+  getUserPosts: async (
+    userId: number,
+    page = 0,
+    size = 10
+  ): Promise<{
     content: Post[];
     totalPages: number;
     totalElements: number;
   }> => {
     try {
-      const response = await apiClient.get(`/api/community/posts/user/${userId}`, {
-        params: { page, size }
-      });
+      const response = await apiClient.get(
+        `/api/community/posts/user/${userId}`,
+        {
+          params: { page, size },
+        }
+      );
       return response.data;
     } catch (error) {
       console.error("사용자 게시물 조회 실패:", error);
@@ -1200,11 +1389,16 @@ export const backendApi = {
   // 사용자의 리뷰 목록을 가져오는 함수
   getUserReviews: async (username: string, page = 0, size = 10) => {
     try {
-      console.log(`사용자 리뷰 데이터 요청: username=${username}, page=${page}, size=${size}`);
-      const response = await apiClient.get(`/api/reviews/user/${username}`, {
+      console.log(
+        `사용자 리뷰 데이터 요청: username=${username}, page=${page}, size=${size}`
+      );
+
+      // contentType 파라미터 추가하여 movie 타입의 리뷰만 가져오도록 수정
+      const response = await apiClient.get(`/api/profile/${username}/reviews`, {
         params: {
           page,
           size,
+          contentType: "movie", // 영화 리뷰만 가져오기
         },
       });
 
@@ -1216,15 +1410,33 @@ export const backendApi = {
       console.log("사용자 리뷰 응답 데이터 키:", Object.keys(responseData));
 
       if (responseData.content) {
-        console.log(`사용자 리뷰 데이터 ${responseData.content.length}개 수신 성공`);
+        console.log(
+          `사용자 리뷰 데이터 ${responseData.content.length}개 수신 성공`
+        );
         // 첫 번째 리뷰의 데이터 구조 샘플로 확인
         if (responseData.content.length > 0) {
           console.log("첫 번째 리뷰 샘플:", {
             id: responseData.content[0].id,
             title: responseData.content[0].title,
             username: responseData.content[0].username,
+            contentType: responseData.content[0].contentType || "movie",
           });
         }
+
+        // 추가 검증으로 데이터 필터링
+        const filteredContent = responseData.content.filter(
+          (review: any) => review.contentType === "movie"
+        );
+
+        // 필터링 결과 로깅
+        if (filteredContent.length !== responseData.content.length) {
+          console.log(
+            `필터링: ${responseData.content.length}개 → ${filteredContent.length}개 영화 리뷰`
+          );
+        }
+
+        // 필터링된 결과로 교체
+        responseData.content = filteredContent;
       } else {
         console.log("사용자 리뷰 데이터가 없거나 content 배열이 없습니다");
       }
@@ -1241,6 +1453,500 @@ export const backendApi = {
         });
       }
       throw error;
+    }
+  },
+
+  // TV 쇼 리뷰 생성 함수
+  createTvReview: async (reviewData: {
+    movie_id: number;
+    movie_title: string;
+    movie_poster_path: string | null;
+    title: string;
+    content: string;
+    rating: number;
+    is_spoiler: boolean;
+  }) => {
+    try {
+      console.log("TV 쇼 리뷰 작성 요청 데이터:", {
+        ...reviewData,
+        url: "/api/tvreviews",
+      });
+
+      const token = localStorage.getItem("token");
+
+      // JWT 토큰 디버깅
+      if (token) {
+        try {
+          const base64Url = token.split(".")[1];
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          const payload = JSON.parse(atob(base64));
+          console.log("토큰 페이로드:", payload);
+          console.log(
+            "토큰 만료 시간:",
+            new Date(payload.exp * 1000).toLocaleString()
+          );
+        } catch (e) {
+          console.error("토큰 파싱 실패:", e);
+        }
+      }
+
+      // Axios 요청 사전 확인
+      console.log("API 요청 설정:", {
+        url: "/api/tvreviews",
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        data: reviewData,
+      });
+
+      const response = await apiClient.post("/api/tvreviews", reviewData);
+      console.log("TV 쇼 리뷰 생성 성공 응답:", response.data);
+      return response.data;
+    } catch (error) {
+      console.log("===== TV 쇼 리뷰 생성 API 요청 실패 =====");
+
+      // Axios 오류인 경우
+      if (axios.isAxiosError(error)) {
+        console.log("요청 URL:", error.config?.url);
+        console.log("요청 메소드:", error.config?.method);
+        console.log(
+          "요청 데이터:",
+          typeof error.config?.data === "string"
+            ? JSON.parse(error.config?.data)
+            : error.config?.data
+        );
+        console.log("Axios 오류 상태 코드:", error.response?.status);
+        console.log("Axios 오류 상태 텍스트:", error.response?.statusText);
+
+        // 응답이 없는 경우 (네트워크 오류 등)
+        if (!error.response) {
+          console.log("서버 응답 없음 (네트워크 오류)");
+          throw new Error(
+            "서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요."
+          );
+        }
+
+        // 응답 데이터 추출 (문자열 또는 객체)
+        let errorMessage: string;
+        const responseData = error.response.data;
+
+        if (typeof responseData === "string") {
+          errorMessage = responseData;
+          console.log("문자열 오류 응답:", errorMessage);
+
+          // 백엔드에서 보내는 "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?" 메시지 처리
+          if (
+            responseData.includes(
+              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다"
+            )
+          ) {
+            throw new Error(
+              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
+            );
+          }
+        } else if (responseData && typeof responseData === "object") {
+          errorMessage =
+            responseData.message ||
+            responseData.error ||
+            JSON.stringify(responseData);
+          console.log("객체 오류 응답:", responseData);
+
+          // 객체 형태의 오류 메시지에서도 중복 리뷰 확인
+          if (
+            errorMessage.includes(
+              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다"
+            )
+          ) {
+            throw new Error(
+              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
+            );
+          }
+        } else {
+          errorMessage = "알 수 없는 오류가 발생했습니다.";
+          console.log("예상치 못한 응답 형식:", responseData);
+        }
+
+        // 빈 오류 메시지 처리
+        if (!errorMessage || errorMessage.trim() === "") {
+          errorMessage = "서버에서 자세한 오류 메시지를 제공하지 않았습니다.";
+        }
+
+        console.log("최종 오류 메시지:", errorMessage);
+
+        // HTTP 상태 코드별 처리
+        if (error.response.status === 401) {
+          throw new Error("인증이 필요합니다. 다시 로그인해주세요.");
+        } else if (error.response.status === 403) {
+          // 403 권한 오류일 때 명확한 메시지 전달
+          if (errorMessage.includes("리뷰 작성 권한이 없습니다")) {
+            throw new Error("리뷰 작성 권한이 없습니다.");
+          } else if (
+            errorMessage.includes(
+              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다"
+            )
+          ) {
+            throw new Error(
+              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
+            );
+          } else {
+            throw new Error("접근 권한이 없습니다.");
+          }
+        } else if (error.response.status === 400) {
+          throw new Error(`입력 데이터가 올바르지 않습니다: ${errorMessage}`);
+        } else if (error.response.status === 500) {
+          throw new Error(
+            "서버 오류가 발생했습니다. 나중에 다시 시도해주세요."
+          );
+        }
+
+        // 기본 오류 메시지 반환
+        throw new Error(errorMessage);
+      }
+
+      // Axios 오류가 아닌 경우
+      console.log("일반 오류:", error);
+      if (error instanceof Error) {
+        // 이미 Error 객체인 경우 그대로 전달
+        // 중복 리뷰 문구가 포함된 경우 확인
+        if (
+          error.message.includes(
+            "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다"
+          )
+        ) {
+          throw new Error(
+            "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
+          );
+        }
+        throw error;
+      } else {
+        throw new Error("리뷰 작성에 실패했습니다. 다시 시도해주세요.");
+      }
+    }
+  },
+
+  // TV 쇼 리뷰 수정
+  updateTvReview: async (
+    reviewId: number,
+    reviewData: {
+      title: string;
+      content: string;
+      rating: number;
+      is_spoiler: boolean;
+      movie_id?: number;
+      movie_title?: string;
+      movie_poster_path?: string;
+    }
+  ): Promise<void> => {
+    try {
+      console.log("===== TV 쇼 리뷰 수정 요청 시작 =====");
+      console.log(`리뷰 ID ${reviewId} 수정 데이터:`, reviewData);
+
+      // 토큰 및 인증 정보 확인
+      const token = localStorage.getItem("token");
+      if (token) {
+        console.log("인증 토큰 존재함");
+        try {
+          const base64Url = token.split(".")[1];
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          const payload = JSON.parse(atob(base64));
+          console.log("토큰 페이로드:", payload);
+          console.log(
+            "토큰 만료 시간:",
+            new Date(payload.exp * 1000).toLocaleString()
+          );
+        } catch (e) {
+          console.error("토큰 파싱 실패:", e);
+        }
+      } else {
+        console.warn("인증 토큰이 없습니다!");
+      }
+
+      // API 요청 상세 로깅
+      console.log(`API 요청 URL: /api/tvreviews/${reviewId}`);
+      console.log("API 요청 메소드: PUT");
+      console.log("API 요청 헤더:", {
+        Authorization: token ? `Bearer ${token}` : "없음",
+        "Content-Type": "application/json",
+      });
+
+      const response = await apiClient.put(
+        `/api/tvreviews/${reviewId}`,
+        reviewData
+      );
+      console.log(
+        "TV 쇼 리뷰 수정 성공 응답:",
+        response.status,
+        response.statusText
+      );
+      console.log("응답 데이터:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("===== TV 쇼 리뷰 수정 실패 =====");
+
+      if (axios.isAxiosError(error)) {
+        console.error("요청 URL:", error.config?.url);
+        console.error("요청 메소드:", error.config?.method);
+        console.error(
+          "요청 데이터:",
+          error.config?.data ? JSON.parse(error.config?.data) : {}
+        );
+        console.error("응답 상태:", error.response?.status);
+        console.error("응답 메시지:", error.response?.statusText);
+
+        if (error.response?.status === 403) {
+          throw new Error("권한이 없거나 로그인이 필요합니다.");
+        } else if (error.response?.status === 404) {
+          throw new Error("수정할 리뷰를 찾을 수 없습니다.");
+        }
+      }
+
+      console.error("TV 쇼 리뷰 수정 실패:", error);
+      throw error;
+    }
+  },
+
+  // 사용자가 특정 TV 쇼에 대해 작성한 리뷰가 있는지 확인
+  checkUserReviewForTv: async (tvId: number): Promise<boolean> => {
+    try {
+      const response = await apiClient.get(`/api/tvreviews/check`, {
+        params: { tv_id: tvId },
+      });
+      return response.data.exists;
+    } catch (error) {
+      console.error("TV 쇼 리뷰 확인 실패:", error);
+      return false;
+    }
+  },
+
+  // TV 쇼 리뷰 목록 가져오기
+  getAllTvReviews: async (
+    page = 0,
+    size = 10
+  ): Promise<{
+    content: TvShowReview[];
+    totalElements: number;
+    totalPages: number;
+    currentPage: number;
+    size: number;
+  }> => {
+    try {
+      console.log(`TV 쇼 리뷰 데이터 요청: page=${page}, size=${size}`);
+      const response = await apiClient.get("/api/tvreviews", {
+        params: {
+          page,
+          size,
+          sort: "created_at,desc",
+          contentType: "tv",
+        },
+      });
+
+      console.log("TV 쇼 리뷰 API 응답 코드:", response.status);
+      console.log("TV 쇼 리뷰 API 응답 헤더:", response.headers);
+
+      // 응답 데이터 구조 로깅
+      const responseData = response.data;
+      console.log("TV 쇼 리뷰 응답 데이터 키:", Object.keys(responseData));
+
+      if (responseData.content) {
+        console.log(
+          `TV 쇼 리뷰 데이터 ${responseData.content.length}개 수신 성공`
+        );
+        // 첫 번째 리뷰의 데이터 구조 샘플로 확인
+        if (responseData.content.length > 0) {
+          console.log("첫 번째 TV 쇼 리뷰 샘플:", {
+            id: responseData.content[0].id,
+            title: responseData.content[0].title,
+            username: responseData.content[0].username,
+            contentType: responseData.content[0].contentType || "tv",
+          });
+        }
+      } else {
+        console.log("TV 쇼 리뷰 데이터가 없거나 content 배열이 없습니다");
+      }
+
+      return responseData;
+    } catch (error) {
+      console.error("TV 쇼 리뷰 목록 가져오기 실패:", error);
+      if (axios.isAxiosError(error)) {
+        console.error("API 호출 오류 상세:", {
+          status: error.response?.status,
+          data: error.response?.data,
+          url: error.config?.url,
+          method: error.config?.method,
+        });
+      }
+      throw error;
+    }
+  },
+
+  // TV 쇼 ID로 리뷰 조회
+  getReviewsByTvId: async (
+    tvId: number,
+    page = 0,
+    size = 10
+  ): Promise<Page<TvShowReview>> => {
+    try {
+      const response = await apiClient.get(`/api/tvreviews/tv/${tvId}`, {
+        params: { page, size },
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`TV 쇼 ID ${tvId}의 리뷰 조회 실패:`, error);
+      throw error;
+    }
+  },
+
+  // 사용자의 TV 쇼 리뷰 목록 조회
+  getUserTvReviews: async (
+    username: string,
+    page = 0,
+    size = 10
+  ): Promise<Page<TvShowReview>> => {
+    try {
+      const response = await apiClient.get(`/api/tvreviews/user/${username}`, {
+        params: { page, size },
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`사용자 ${username}의 TV 쇼 리뷰 조회 실패:`, error);
+      throw error;
+    }
+  },
+
+  // TV 쇼 리뷰 삭제
+  deleteTvReview: async (reviewId: number): Promise<void> => {
+    try {
+      const response = await apiClient.delete(`/api/tvreviews/${reviewId}`);
+      console.log("TV 쇼 리뷰 삭제 성공:", response.status);
+    } catch (error) {
+      console.error("TV 쇼 리뷰 삭제 실패:", error);
+      throw error;
+    }
+  },
+
+  // 사용자 ID로 리뷰 가져오기
+  getUserReviewsById: async (
+    userId: number,
+    page = 0,
+    size = 10
+  ): Promise<Page<MovieReview>> => {
+    try {
+      console.log(
+        `사용자 ID ${userId}의 영화 리뷰 요청 - 페이지: ${page}, 사이즈: ${size}`
+      );
+
+      // ID로 유저명 가져오기
+      const username = await getUsernameByIdInternal(userId.toString());
+      console.log(`사용자 ID ${userId}의 변환된 유저명: ${username}`);
+
+      // 유저명으로 리뷰 조회
+      const response = await apiClient.get(`/api/profile/${username}/reviews`, {
+        params: {
+          page,
+          size,
+          contentType: "movie", // 명시적으로 영화 리뷰만 요청
+        },
+      });
+
+      console.log(`사용자 ${username}의 영화 리뷰 응답:`, response.data);
+
+      // 추가 검증으로 데이터 필터링
+      if (response.data && response.data.content) {
+        // contentType이 movie인 리뷰만 필터링
+        const filteredContent = response.data.content.filter(
+          (review: any) => review.contentType === "movie"
+        );
+
+        // 필터링 결과 로깅
+        if (filteredContent.length !== response.data.content.length) {
+          console.log(
+            `필터링: ${response.data.content.length}개 → ${filteredContent.length}개 영화 리뷰`
+          );
+        }
+
+        // 필터링된 결과로 교체
+        response.data.content = filteredContent;
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error(`사용자 ID ${userId}의 영화 리뷰 조회 실패:`, error);
+
+      // 기본 빈 응답 반환
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        size: size,
+        number: page,
+        first: true,
+        last: true,
+        empty: true,
+      };
+    }
+  },
+
+  // 사용자 ID로 TV 쇼 리뷰 가져오기
+  getUserTvReviewsById: async (
+    userId: number,
+    page = 0,
+    size = 10
+  ): Promise<Page<TvShowReview>> => {
+    try {
+      console.log(
+        `사용자 ID ${userId}의 TV 쇼 리뷰 요청 - 페이지: ${page}, 사이즈: ${size}`
+      );
+
+      // ID로 유저명 가져오기
+      const username = await getUsernameByIdInternal(userId.toString());
+      console.log(`사용자 ID ${userId}의 변환된 유저명: ${username}`);
+
+      // 유저명으로 리뷰 조회
+      const response = await apiClient.get(`/api/profile/${username}/reviews`, {
+        params: {
+          page,
+          size,
+          contentType: "tv", // 명시적으로 TV 쇼 리뷰만 요청
+        },
+      });
+
+      console.log(`사용자 ${username}의 TV 쇼 리뷰 응답:`, response.data);
+
+      // 추가 검증으로 데이터 필터링
+      if (response.data && response.data.content) {
+        // contentType이 tv인 리뷰만 필터링
+        const filteredContent = response.data.content.filter(
+          (review: any) => review.contentType === "tv"
+        );
+
+        // 필터링 결과 로깅
+        if (filteredContent.length !== response.data.content.length) {
+          console.log(
+            `필터링: ${response.data.content.length}개 → ${filteredContent.length}개 TV 쇼 리뷰`
+          );
+        }
+
+        // 필터링된 결과로 교체
+        response.data.content = filteredContent;
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error(`사용자 ID ${userId}의 TV 쇼 리뷰 조회 실패:`, error);
+
+      // 기본 빈 응답 반환
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        size: size,
+        number: page,
+        first: true,
+        last: true,
+        empty: true,
+      };
     }
   },
 };
