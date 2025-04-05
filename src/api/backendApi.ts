@@ -1469,7 +1469,7 @@ export const backendApi = {
     try {
       console.log("TV 쇼 리뷰 작성 요청 데이터:", {
         ...reviewData,
-        url: "/api/tvreviews",
+        url: "/api/tvreview", // '/api/tvreviews'에서 '/api/tvreview'로 변경
       });
 
       const token = localStorage.getItem("token");
@@ -1492,7 +1492,7 @@ export const backendApi = {
 
       // Axios 요청 사전 확인
       console.log("API 요청 설정:", {
-        url: "/api/tvreviews",
+        url: "/api/tvreview", // '/api/tvreviews'에서 '/api/tvreview'로 변경
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -1501,7 +1501,7 @@ export const backendApi = {
         data: reviewData,
       });
 
-      const response = await apiClient.post("/api/tvreviews", reviewData);
+      const response = await apiClient.post("/api/tvreview", reviewData); // '/api/tvreviews'에서 '/api/tvreview'로 변경
       console.log("TV 쇼 리뷰 생성 성공 응답:", response.data);
       return response.data;
     } catch (error) {
