@@ -9,7 +9,6 @@ const apiClient = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  withCredentials: false, // CORS 문제 해결을 위해 credentials 비활성화
 });
 
 // 요청 인터셉터 - 토큰 추가
@@ -165,7 +164,6 @@ export const authApi = {
       };
 
       console.log("변환된 사용자 정보:", userData);
-      console.log("사용자 역할:", userData.roles);
 
       // 토큰 저장
       localStorage.setItem("token", response.data.token);
@@ -499,7 +497,7 @@ export const authApi = {
   checkEmail: async (email: string): Promise<boolean> => {
     try {
       const response = await apiClient.get<{ available: boolean }>(
-        `/api/auth/public/check-email?email=${encodeURIComponent(email)}`
+        `/api/auth/check-email?email=${encodeURIComponent(email)}`
       );
       return response.data.available;
     } catch (error) {

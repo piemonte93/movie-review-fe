@@ -14,8 +14,6 @@ import {
   FaArrowUp,
   FaEdit,
   FaTrash,
-  FaBell,
-  FaExclamationTriangle,
 } from "react-icons/fa";
 import { FaStarHalfStroke, FaFilm } from "react-icons/fa6";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -63,11 +61,6 @@ interface Comment {
   likeCount: number;
   dislikeCount: number;
   userId: number;
-  user?: {
-    id: number;
-    username: string;
-    profileImageUrl?: string | null;
-  };
 }
 
 // 백엔드에서 반환하는 댓글 형식
@@ -763,11 +756,6 @@ const MovieReviewsPage: React.FC = () => {
         userId: user?.id || 0,
         likeCount: 0,
         dislikeCount: 0,
-        user: {
-          id: user?.id || 0,
-          username: user?.username || "",
-          profileImageUrl: user?.profileImageUrl || null,
-        },
       };
 
       // 리뷰 업데이트
@@ -1006,11 +994,6 @@ const MovieReviewsPage: React.FC = () => {
             likeCount: 0,
             dislikeCount: 0,
             userId: userId,
-            user: {
-              id: comment.user?.userId || 0,
-              username: comment.user?.username || comment.username || "",
-              profileImageUrl: comment.user?.profileUrl || comment.user_profile_image_url || null,
-            },
           };
         }
       );
@@ -1091,11 +1074,6 @@ const MovieReviewsPage: React.FC = () => {
             likeCount: 0,
             dislikeCount: 0,
             userId: userId,
-            user: {
-              id: comment.user?.userId || 0,
-              username: comment.user?.username || comment.username || "",
-              profileImageUrl: comment.user?.profileUrl || comment.user_profile_image_url || null,
-            },
           };
         }
       );
@@ -1421,79 +1399,6 @@ const MovieReviewsPage: React.FC = () => {
     navigate(`/movie/${movieId}`);
   };
 
-  // 신고 관련 상태 추가
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [reportContent, setReportContent] = useState("");
-  const [reportTargetId, setReportTargetId] = useState<number | null>(null);
-  const [reportTargetType, setReportTargetType] = useState<"comment" | "review" | null>(null);
-
-  // 신고 모달 열기 함수
-  const openReportModal = (id: number, type: "comment" | "review") => {
-    setReportTargetId(id);
-    setReportTargetType(type);
-    setReportContent("");
-    setShowReportModal(true);
-  };
-
-  // 신고 제출 처리 함수
-  const handleReportSubmit = async () => {
-    if (!reportContent.trim()) {
-      toast.error("신고 내용을 입력해주세요.");
-      return;
-    }
-
-    try {
-      let targetUserId = 0;
-      
-      if (reportTargetType === "review") {
-        // 리뷰 신고인 경우
-        const targetReview = reviews.find(r => r.id === reportTargetId);
-        targetUserId = targetReview?.user?.id || 0;
-      } else if (reportTargetType === "comment") {
-        // 댓글 신고인 경우 - 모든 리뷰의 모든 댓글을 확인
-        for (const review of reviews) {
-          if (review.comments) {
-            const targetComment = review.comments.find(c => c.id === reportTargetId);
-            if (targetComment) {
-              // userId 필드를 우선적으로 사용하고, 없으면 user.id를 시도
-              targetUserId = targetComment.userId || targetComment.user?.id || 0;
-              console.log(`댓글 ID ${reportTargetId}에 대한 사용자 ID를 찾았습니다: ${targetUserId}`);
-              break;
-            }
-          }
-        }
-      }
-      
-      // 대상 사용자 ID가 없는 경우 로그
-      if (targetUserId === 0) {
-        console.warn(`신고 대상의 사용자 ID를 찾을 수 없습니다. 타입: ${reportTargetType}, 대상 ID: ${reportTargetId}`);
-      }
-      
-      console.log(`신고 요청 데이터:`, {
-        targetId: reportTargetId,
-        targetUserId: targetUserId,
-        reportType: reportTargetType === "review" ? "review" : "comment",
-        content: reportContent,
-      });
-      
-      await backendApi.createReport({
-        targetId: reportTargetId!,
-        targetUserId: targetUserId,
-        reportType: reportTargetType === "review" ? "review" : "comment",
-        content: reportContent,
-      });
-      
-      toast.success("신고가 접수되었습니다.");
-      setShowReportModal(false);
-      setReportContent("");
-      setReportTargetId(null);
-      setReportTargetType(null);
-    } catch (error) {
-      console.error("신고 접수 실패:", error);
-      toast.error("신고 접수에 실패했습니다. 다시 시도해주세요.");
-    }
-  };
-
   return (
     <div className="container mx-auto px-4 py-8">
       {/* 리뷰 작성 버튼 */}
@@ -1739,29 +1644,13 @@ const MovieReviewsPage: React.FC = () => {
               {/* 리뷰 액션 버튼 */}
               <div className="flex items-center justify-between border-t pt-3">
                 <div className="text-xs text-gray-500">
-                  {(() => {
-                    console.log(
-                      `리뷰 ID ${review.id}의 날짜 표시 전 값:`,
-                      review.createdAt
-                    );
-                    const formattedDate = formatDate(review.createdAt);
-                    console.log(
-                      `리뷰 ID ${review.id}의 날짜 표시 후 값:`,
-                      formattedDate
-                    );
-                    return formattedDate;
-                  })()}
+                  {formatDate(
+                    typeof review.createdAt === "object"
+                      ? review.createdAt.toISOString()
+                      : review.createdAt
+                  )}
                 </div>
                 <div className="flex items-center space-x-4">
-                  {isLoggedIn && user?.id !== review.user.id && (
-                    <button
-                      className="flex items-center space-x-1"
-                      title="리뷰 신고하기"
-                      onClick={() => openReportModal(review.id, "review")}
-                    >
-                      <FaBell className="text-red-500" />
-                    </button>
-                  )}
                   <button
                     onClick={() => handleReviewLike(review.id)}
                     className="flex items-center space-x-1"
@@ -1847,32 +1736,25 @@ const MovieReviewsPage: React.FC = () => {
                                 {comment.username || "알 수 없는 사용자"}
                               </Link>
                               <div className="flex items-center gap-2">
-                                {/* 댓글 작성 날짜와 신고 버튼 */}
-                                <div className="flex justify-between items-center mb-1">
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs text-gray-500">
-                                      {formatDate(comment.createdAt)}
-                                    </span>
-                                    {isLoggedIn && user?.id !== comment.userId && (
-                                      <button 
-                                        className="p-1 hover:bg-gray-100 rounded-full"
-                                        title="댓글 신고하기"
-                                        onClick={() => openReportModal(comment.id, "comment")}
-                                      >
-                                        <FaBell className="text-red-500 text-xs" />
-                                      </button>
-                                    )}
-                                  </div>
-                                  {isLoggedIn && user?.id === comment.userId && (
+                                <span className="text-sm text-gray-500">
+                                  {formatDate(comment.createdAt)}
+                                </span>
+                                {isLoggedIn &&
+                                  (isCommentAuthor(comment.userId) ||
+                                    isAdmin()) && (
                                     <button
-                                      onClick={() => handleDeleteComment(review.id, comment.id)}
-                                      className="text-xs text-gray-500 hover:text-red-500"
+                                      onClick={() =>
+                                        handleDeleteComment(
+                                          review.id,
+                                          comment.id
+                                        )
+                                      }
+                                      className="text-xs text-red-500 hover:text-red-700"
                                       title="삭제"
                                     >
                                       <FaTrash />
                                     </button>
                                   )}
-                                </div>
                               </div>
                             </div>
                             <p className="text-sm">{comment.content}</p>
@@ -2162,48 +2044,6 @@ const MovieReviewsPage: React.FC = () => {
           }
         `}
       </style>
-
-      {/* 신고 모달 */}
-      {showReportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="relative w-full max-w-md bg-white rounded-lg shadow-lg p-6">
-            <div className="flex items-center mb-4">
-              <FaExclamationTriangle className="text-red-500 mr-2" />
-              <h2 className="text-xl font-bold">
-                {reportTargetType === "comment" ? "댓글 신고" : "리뷰 신고"}
-              </h2>
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="absolute right-4 top-4 text-gray-500 hover:text-gray-700"
-              >
-                <FaTimes />
-              </button>
-            </div>
-
-            <textarea
-              value={reportContent}
-              onChange={(e) => setReportContent(e.target.value)}
-              placeholder="신고 내용을 자세히 입력해주세요..."
-              className="w-full h-32 p-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
-            ></textarea>
-
-            <div className="mt-4 flex justify-end space-x-2">
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleReportSubmit}
-                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
-              >
-                신고
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

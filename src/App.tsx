@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -20,6 +20,7 @@ import UserProfilePage from "./pages/UserProfilePage";
 import CommunityPage from "./pages/CommunityPage";
 import MovieReviewsPage from "./pages/MovieReviewsPage";
 import AdminPage from "./pages/AdminPage";
+import RequireAdmin from "./components/RequireAdmin";
 import { ToastContainer } from "react-toastify";
 import TvShowsPage from "./pages/TvShowsPage";
 import Footer from "./components/Footer";
@@ -68,7 +69,14 @@ function App() {
                 <Route path="/community" element={<CommunityPage />} />
                 <Route path="/movie-reviews" element={<MovieReviewsPage />} />
                 <Route path="/tv-reviews" element={<TvReviewsPage />} />
-                <Route path="/admin" element={<AdminPage />} />
+                <Route 
+                  path="/admin" 
+                  element={
+                    <RequireAdmin>
+                      <AdminPage />
+                    </RequireAdmin>
+                  } 
+                />
               </Routes>
             </main>
             <Footer />

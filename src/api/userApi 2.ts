@@ -328,101 +328,38 @@ export const getUsernameFromUserId = async (
   userId: string
 ): Promise<string> => {
   try {
-    console.log(`[디버그] 사용자 ID ${userId}의 유저명 조회 시작`);
-    
-    // 1. 본인 ID인지 확인 (로컬 스토리지)
-    const userStr = localStorage.getItem("user");
-    if (userStr) {
+    // 로컬에서 먼저 시도
+    const localUsername = await getLocalUsername(userId);
+    if (localUsername) {
+      return localUsername;
+    }
+
+    // 프로필 API로 사용자 정보 요청
+    console.log(`사용자 ID ${userId}의 프로필 정보 요청`);
+    const profileResponse = await apiClient.get(`/api/profile/id/${userId}`);
+
+    if (profileResponse.data && profileResponse.data.username) {
+      const username = profileResponse.data.username;
+      console.log(`사용자 ID ${userId}의 유저명 찾음:`, username);
+
+      // 캐시에 사용자 ID-유저명 매핑 저장
       try {
-        const localUser = JSON.parse(userStr);
-        if (localUser.id === parseInt(userId)) {
-          console.log(`[디버그] 현재 로그인한 사용자의 ID(${userId}). 로컬 유저명 사용:`, localUser.username);
-          return localUser.username;
-        }
+        const userMappingStr = localStorage.getItem("user_id_mapping") || "{}";
+        const userMapping: Record<string, string> = JSON.parse(userMappingStr);
+        userMapping[userId] = username;
+        localStorage.setItem("user_id_mapping", JSON.stringify(userMapping));
       } catch (e) {
-        console.error("[디버그] 로컬 스토리지 사용자 정보 파싱 오류:", e);
+        console.error("사용자 매핑 캐시 업데이트 실패:", e);
       }
+
+      return username;
     }
 
-    // 2. 캐싱된 사용자 매핑 확인
-    const userMappingStr = localStorage.getItem("user_id_mapping");
-    if (userMappingStr) {
-      try {
-        const userMapping = JSON.parse(userMappingStr);
-        if (userMapping[userId]) {
-          console.log(`[디버그] 캐싱된 매핑에서 사용자 ID ${userId}의 유저명 찾음:`, userMapping[userId]);
-          return userMapping[userId];
-        }
-      } catch (e) {
-        console.error("[디버그] 사용자 매핑 캐시 파싱 실패:", e);
-      }
-    }
-
-    // 3. 직접 API 호출로 프로필 정보 조회 (ID 기반)
-    console.log(`[디버그] ID 기반 프로필 API 직접 호출: 사용자 ID ${userId}`);
-    
-    try {
-      // 명시적인 타임아웃 설정하여 빠른 실패 처리
-      const profileResponse = await apiClient.get(`/api/profile/id/${userId}`, {
-        timeout: 3000 // 3초 타임아웃
-      });
-      
-      console.log(`[디버그] 프로필 응답 데이터:`, profileResponse.data);
-      
-      if (profileResponse.data && profileResponse.data.username) {
-        const username = profileResponse.data.username;
-        console.log(`[디버그] API에서 사용자 ID ${userId}의 유저명 찾음:`, username);
-        
-        // 캐시에 사용자 ID-유저명 매핑 저장
-        try {
-          const userMappingStr = localStorage.getItem("user_id_mapping") || "{}";
-          const userMapping: Record<string, string> = JSON.parse(userMappingStr);
-          userMapping[userId] = username;
-          localStorage.setItem("user_id_mapping", JSON.stringify(userMapping));
-          console.log(`[디버그] 사용자 ID ${userId}와 유저명 ${username} 매핑 캐시 저장 완료`);
-        } catch (e) {
-          console.error("[디버그] 사용자 매핑 캐시 업데이트 실패:", e);
-        }
-        
-        return username;
-      } else {
-        console.warn(`[디버그] 응답에 username이 없음:`, profileResponse.data);
-      }
-    } catch (apiError) {
-      console.error(`[디버그] /api/profile/id/${userId} API 호출 실패:`, apiError);
-      // 실패 시 fetch API로 한 번 더 시도
-      try {
-        console.log(`[디버그] fetch API로 재시도: /api/profile/id/${userId}`);
-        const response = await fetch(`http://localhost:8080/api/profile/id/${userId}`);
-        if (response.ok) {
-          const data = await response.json();
-          console.log(`[디버그] fetch API 응답:`, data);
-          if (data && data.username) {
-            // 캐시에 저장
-            try {
-              const userMappingStr = localStorage.getItem("user_id_mapping") || "{}";
-              const userMapping: Record<string, string> = JSON.parse(userMappingStr);
-              userMapping[userId] = data.username;
-              localStorage.setItem("user_id_mapping", JSON.stringify(userMapping));
-            } catch (e) {
-              console.error("[디버그] 사용자 매핑 캐시 업데이트 실패:", e);
-            }
-            return data.username;
-          }
-        } else {
-          console.error(`[디버그] fetch API 호출 실패:`, response.status);
-        }
-      } catch (fetchError) {
-        console.error(`[디버그] fetch API 호출 중 오류:`, fetchError);
-      }
-    }
-
-    // 4. 기본값 반환 (모든 시도 실패 시)
-    console.warn(`[디버그] 사용자 ID ${userId}에 대한 유저명을 찾을 수 없음, 기본값 사용`);
-    return `사용자${userId}`;
+    // 기본값 반환
+    return `user${userId}`;
   } catch (error) {
-    console.error(`[디버그] 사용자 ID ${userId}의 유저명 조회 중 예외 발생:`, error);
-    return `사용자${userId}`;
+    console.error(`사용자 ID ${userId}의 유저명 조회 실패:`, error);
+    return `user${userId}`;
   }
 };
 

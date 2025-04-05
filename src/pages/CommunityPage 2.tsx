@@ -15,8 +15,6 @@ import {
   FaEdit,
   FaTrash,
   FaAt,
-  FaBell,
-  FaExclamationTriangle,
 } from "react-icons/fa";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
@@ -86,12 +84,6 @@ const CommunityPage: React.FC = () => {
 
   // 게시글 수정 상태 추가
   const [editingPostId, setEditingPostId] = useState<number | null>(null);
-
-  // 신고 관련 상태 추가
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [reportContent, setReportContent] = useState("");
-  const [reportTargetId, setReportTargetId] = useState<number | null>(null);
-  const [reportTargetType, setReportTargetType] = useState<"comment" | "post" | null>(null);
 
   // URL 쿼리 파라미터 확인하여 특정 게시글 표시
   useEffect(() => {
@@ -849,43 +841,6 @@ const CommunityPage: React.FC = () => {
     }
   };
 
-  // 신고 모달 열기 함수
-  const openReportModal = (id: number, type: "comment" | "post") => {
-    setReportTargetId(id);
-    setReportTargetType(type);
-    setReportContent("");
-    setShowReportModal(true);
-  };
-
-  // 신고 제출 처리 함수
-  const handleReportSubmit = async () => {
-    if (!reportContent.trim()) {
-      toast.error("신고 내용을 입력해주세요.");
-      return;
-    }
-
-    try {
-      // targetUserId 추가
-      await backendApi.createReport({
-        targetId: reportTargetId!,
-        targetUserId: reportTargetType === "post" 
-          ? posts.find(p => p.id === reportTargetId)?.user.id || 0
-          : posts.flatMap(p => p.comments).find(c => c.id === reportTargetId)?.user.id || 0,
-        reportType: reportTargetType,
-        content: reportContent,
-      });
-      
-      toast.success("신고가 접수되었습니다.");
-      setShowReportModal(false);
-      setReportContent("");
-      setReportTargetId(null);
-      setReportTargetType(null);
-    } catch (error) {
-      console.error("신고 접수 실패:", error);
-      toast.error("신고 접수에 실패했습니다. 다시 시도해주세요.");
-    }
-  };
-
   return (
     <div className="container mx-auto px-4 py-2">
       {/* 상단 검색 및 버튼 영역 - 고정 헤더로 변경 */}
@@ -1296,15 +1251,6 @@ const CommunityPage: React.FC = () => {
                       <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
                         <span>{formatDate(post.createdAt)}</span>
                         <div className="flex items-center space-x-3">
-                          {isLoggedIn && user?.id !== post.user.id && (
-                            <button 
-                              className="p-1 rounded-md text-red-500"
-                              title="게시글 신고하기"
-                              onClick={() => openReportModal(post.id, "post")}
-                            >
-                              <FaBell size={14} />
-                            </button>
-                          )}
                           <div className="flex items-center space-x-1">
                             <button
                               className={`p-1 rounded-md ${post.liked ? "text-blue-600" : "text-gray-400 hover:text-blue-600"}`}
@@ -1379,20 +1325,9 @@ const CommunityPage: React.FC = () => {
                             </div>
                             <div className="flex-1">
                               <div className="flex justify-between items-center mb-1">
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs text-gray-500">
-                                    {new Date(comment.createdAt).toLocaleString()}
-                                  </span>
-                                  {isLoggedIn && user?.id !== comment.user.id && (
-                                    <button 
-                                      className="p-1 hover:bg-gray-100 rounded-full"
-                                      title="댓글 신고하기"
-                                      onClick={() => openReportModal(comment.id, "comment")}
-                                    >
-                                      <FaBell className="text-red-500 text-xs" />
-                                    </button>
-                                  )}
-                                </div>
+                                <span className="text-xs text-gray-500">
+                                  {new Date(comment.createdAt).toLocaleString()}
+                                </span>
                                 {isLoggedIn && user?.id === comment.user.id && (
                                   <button
                                     onClick={() =>
@@ -1617,15 +1552,6 @@ const CommunityPage: React.FC = () => {
                     <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
                       <span>{formatDate(post.createdAt)}</span>
                       <div className="flex items-center space-x-3">
-                        {isLoggedIn && user?.id !== post.user.id && (
-                          <button 
-                            className="p-1 rounded-md text-red-500"
-                            title="게시글 신고하기"
-                            onClick={() => openReportModal(post.id, "post")}
-                          >
-                            <FaBell size={14} />
-                          </button>
-                        )}
                         <div className="flex items-center space-x-1">
                           <button
                             className={`p-1 rounded-md ${post.liked ? "text-blue-600" : "text-gray-400 hover:text-blue-600"}`}
@@ -1635,9 +1561,7 @@ const CommunityPage: React.FC = () => {
                           >
                             <FaThumbsUp size={14} />
                           </button>
-                          <span className="text-sm">
-                            {post.likeCount || 0}
-                          </span>
+                          <span className="text-sm">{post.likeCount || 0}</span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <button
@@ -1700,20 +1624,9 @@ const CommunityPage: React.FC = () => {
                           </div>
                           <div className="flex-1">
                             <div className="flex justify-between items-center mb-1">
-                              <div className="flex items-center gap-1">
-                                <span className="text-xs text-gray-500">
-                                  {new Date(comment.createdAt).toLocaleString()}
-                                </span>
-                                {isLoggedIn && user?.id !== comment.user.id && (
-                                  <button 
-                                    className="p-1 hover:bg-gray-100 rounded-full"
-                                    title="댓글 신고하기"
-                                    onClick={() => openReportModal(comment.id, "comment")}
-                                  >
-                                    <FaBell className="text-red-500 text-xs" />
-                                  </button>
-                                )}
-                              </div>
+                              <span className="text-xs text-gray-500">
+                                {new Date(comment.createdAt).toLocaleString()}
+                              </span>
                               {isLoggedIn && user?.id === comment.user.id && (
                                 <button
                                   onClick={() =>
@@ -1831,46 +1744,6 @@ const CommunityPage: React.FC = () => {
         >
           <FaArrowUp />
         </button>
-      )}
-
-      {/* 신고 모달 */}
-      {showReportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="relative w-full max-w-md bg-white rounded-lg shadow-lg p-6">
-            <div className="flex items-center mb-4">
-              <FaExclamationTriangle className="text-red-500 mr-2" />
-              <h2 className="text-xl font-bold">댓글 신고</h2>
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="absolute right-4 top-4 text-gray-500 hover:text-gray-700"
-              >
-                <FaTimes />
-              </button>
-            </div>
-
-            <textarea
-              value={reportContent}
-              onChange={(e) => setReportContent(e.target.value)}
-              placeholder="신고 내용을 자세히 입력해주세요..."
-              className="w-full h-32 p-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
-            ></textarea>
-
-            <div className="mt-4 flex justify-end space-x-2">
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleReportSubmit}
-                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
-              >
-                신고
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

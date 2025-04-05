@@ -24,7 +24,7 @@ import {
 import { UserProfile, UserActivity } from "../types/user";
 import ContentCard from "../components/ContentCard";
 import FollowModal from "../components/FollowModal";
-import { backendApi, Post, MovieReview, TvShowReview, apiClient } from "../api/backendApi";
+import { backendApi, Post, MovieReview, TvShowReview } from "../api/backendApi";
 import { formatDate } from "../utils/dateUtils";
 
 // MovieReview 인터페이스를 확장하여 contentType 속성 추가
@@ -83,68 +83,15 @@ const UserProfilePage: React.FC = () => {
 
       try {
         setLoading(true);
-        console.log(`[디버그] 사용자 ${userId} 프로필 데이터 로드 시작`);
+        console.log(`사용자 ${userId} 프로필 데이터 로드 시작`);
 
-        // 백엔드에서 사용자 정보 직접 가져오기 시도
-        try {
-          const directResponse = await apiClient.get(`/api/profile/id/${userId}`);
-          console.log(`[디버그] /api/profile/id/${userId} 직접 호출 응답:`, directResponse.data);
-          
-          if (directResponse.data && directResponse.data.username) {
-            // 직접 백엔드에서 가져온 프로필 정보로 상태 업데이트
-            const profileData = {
-              user: {
-                id: parseInt(userId),
-                username: directResponse.data.username,
-                email: directResponse.data.email || "",
-                bio: directResponse.data.bio || "",
-                roles: directResponse.data.roles || ["USER"],
-                profileImageUrl: directResponse.data.profileImageUrl,
-                createdAt: "2023-01-01",
-                updatedAt: "2023-01-01",
-              },
-              followingCount: directResponse.data.followingCount || 0,
-              followerCount: directResponse.data.followerCount || 0,
-              watchedMoviesCount: directResponse.data.reviewCount || 0,
-              reviewedMoviesCount: directResponse.data.reviewCount || 0,
-              isFollowing: directResponse.data.isFollowing || false,
-              mutualFollow: directResponse.data.mutualFollow || false,
-              followsMe: directResponse.data.followsMe || false,
-            };
-            
-            console.log(`[디버그] 직접 API 호출로 유저명 확인: ${directResponse.data.username}`);
-            setProfileData(profileData);
-            setIsFollowing(profileData.isFollowing || false);
-            
-            // API 활동 정보 가져오기
-            const activity = await getOtherUserActivity(userId);
-            setActivityData(activity);
-            
-            // 초기 데이터 로드
-            if (activeTab === "posts") {
-              fetchUserPosts();
-            } else if (activeTab === "reviews") {
-              fetchUserReviews();
-            } else if (activeTab === "scraps") {
-              fetchUserScraps();
-            }
-            
-            setLoading(false);
-            return; // 성공적으로 처리했으므로 여기서 종료
-          }
-        } catch (directError) {
-          console.error(`[디버그] 직접 API 호출 실패:`, directError);
-        }
-
-        // 직접 API 호출이 실패한 경우 기존 방식 시도
         // 병렬로 여러 API 요청 처리
         const [profile, activity] = await Promise.all([
           getOtherUserProfile(userId),
           getOtherUserActivity(userId),
         ]);
 
-        console.log("[디버그] getOtherUserProfile 사용자 프로필 데이터:", profile);
-        console.log("[디버그] 사용자 username:", profile.user?.username);
+        console.log("사용자 프로필 데이터:", profile);
 
         // mutualFollow 속성이 API에서 제공되지 않는 경우 설정
         if (
@@ -173,16 +120,16 @@ const UserProfilePage: React.FC = () => {
           fetchUserScraps();
         }
       } catch (error) {
-        console.error("[디버그] 사용자 데이터 로드 실패", error);
+        console.error("Failed to fetch user data", error);
       } finally {
         setLoading(false);
       }
     };
 
-    if (userId) {
+    if (isLoggedIn && userId) {
       fetchUserData();
     }
-  }, [userId, activeTab]);
+  }, [isLoggedIn, userId, activeTab]);
 
   // 사용자의 게시물 가져오기
   const fetchUserPosts = async () => {
@@ -595,10 +542,6 @@ const UserProfilePage: React.FC = () => {
                 )}
               </div>
               <div className="flex space-x-2">
-                {/* 블라인드 표시 */}
-                <div className="text-sm px-4 py-1.5 rounded font-medium transition-colors bg-red-500 text-white flex items-center justify-center">
-                  블라인드
-                </div>
                 {/* 팔로우/언팔로우 버튼 */}
                 {profileData.user?.id !== user?.id && (
                   <button
@@ -631,7 +574,7 @@ const UserProfilePage: React.FC = () => {
             <div className="flex space-x-6 mb-4">
               <div className="text-center md:text-left">
                 <span className="font-semibold">
-                  {posts.length || 0}
+                  {profileData?.watchedMoviesCount || 0}
                 </span>
                 <span className="ml-1">게시물</span>
               </div>
