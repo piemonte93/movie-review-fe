@@ -348,34 +348,40 @@ const UserProfilePage: React.FC = () => {
         });
       }
 
-      // API 호출
-      const result = await toggleFollow(userId);
+      try {
+        // API 호출
+        const result = await toggleFollow(userId);
+        
+        // API 응답 확인
+        console.log("팔로우 토글 API 응답:", result);
 
-      // API 응답 확인
-      console.log("팔로우 토글 API 응답:", result);
+        // API 결과를 기반으로 상태 업데이트 (실제 상태 반영)
+        if (result && result.isFollowing !== undefined) {
+          setIsFollowing(result.isFollowing);
 
-      // API 결과를 기반으로 상태 업데이트 (실제 상태 반영)
-      if (result && result.isFollowing !== undefined) {
-        setIsFollowing(result.isFollowing);
+          if (profileData) {
+            const followerCount =
+              result.followerCount !== undefined
+                ? result.followerCount
+                : result.isFollowing
+                  ? profileData.followerCount + 1
+                  : Math.max(0, profileData.followerCount - 1);
 
-        if (profileData) {
-          const followerCount =
-            result.followerCount !== undefined
-              ? result.followerCount
-              : result.isFollowing
-                ? profileData.followerCount + 1
-                : Math.max(0, profileData.followerCount - 1);
+            const followsMe = profileData.followsMe || false;
+            const isMutualFollow = result.isFollowing && followsMe;
 
-          const followsMe = profileData.followsMe || false;
-          const isMutualFollow = result.isFollowing && followsMe;
-
-          setProfileData({
-            ...profileData,
-            followerCount: followerCount,
-            isFollowing: result.isFollowing,
-            mutualFollow: isMutualFollow,
-          });
+            setProfileData({
+              ...profileData,
+              followerCount: followerCount,
+              isFollowing: result.isFollowing,
+              mutualFollow: isMutualFollow,
+            });
+          }
         }
+      } catch (apiError) {
+        console.error("API 호출 중 오류 발생:", apiError);
+        // API 오류 발생 시 낙관적 업데이트 유지 (UI 상태 변경 안 함)
+        console.log("API 오류로 인해 클라이언트 상태 유지함");
       }
     } catch (error) {
       console.error("팔로우 상태 업데이트 실패:", error);
