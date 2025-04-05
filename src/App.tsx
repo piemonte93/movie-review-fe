@@ -23,6 +23,7 @@ import AdminPage from "./pages/AdminPage";
 import { ToastContainer } from "react-toastify";
 import TvShowsPage from "./pages/TvShowsPage";
 import Footer from "./components/Footer";
+import TvReviewsPage from "./pages/TvReviewsPage";
 
 function App() {
   return (
@@ -60,8 +61,13 @@ function App() {
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/profile/edit" element={<ProfileEditPage />} />
                 <Route path="/profile/:userId" element={<UserProfilePage />} />
+                <Route
+                  path="/user-profile/:userId"
+                  element={<UserProfilePage />}
+                />
                 <Route path="/community" element={<CommunityPage />} />
                 <Route path="/movie-reviews" element={<MovieReviewsPage />} />
+                <Route path="/tv-reviews" element={<TvReviewsPage />} />
                 <Route path="/admin" element={<AdminPage />} />
               </Routes>
             </main>

@@ -15,7 +15,7 @@ import {
   FaEdit,
   FaTrash,
 } from "react-icons/fa";
-import { FaStarHalfStroke, FaFilm } from "react-icons/fa6";
+import { FaStarHalfStroke, FaTv } from "react-icons/fa6";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { backendApi } from "../api/backendApi";
@@ -24,29 +24,24 @@ import { Content } from "../types/content";
 import axios from "axios";
 import { formatDate } from "../utils/dateUtils";
 
-// Content 타입을 Movie 타입으로 매핑하는 함수
-const mapContentToMovie = (content: Content): Movie | null => {
-  // TV 쇼는 제외하고 영화만 매핑
-  if (content.media_type === "tv") {
-    return null;
-  }
-
+// Content 타입을 TvShow 타입으로 매핑하는 함수
+const mapContentToTvShow = (content: Content): TvShow => {
   return {
     id: content.id,
-    title: content.title || content.name || "제목 없음",
+    name: content.name || content.title || "제목 없음",
     poster_path: content.poster_path || "",
-    release_date: content.release_date || content.first_air_date || "",
+    first_air_date: content.first_air_date || content.release_date || "",
     overview: content.overview || "",
     vote_average: content.vote_average || 0,
   };
 };
 
-// TMDB API 영화 정보 타입
-interface Movie {
+// TMDB API TV쇼 정보 타입
+interface TvShow {
   id: number;
-  title: string;
+  name: string;
   poster_path: string;
-  release_date: string;
+  first_air_date: string;
   overview?: string;
   vote_average?: number;
 }
@@ -67,23 +62,25 @@ interface Comment {
 interface CommentResponse {
   id: number;
   content: string;
-  username: string;
-  user_profile_image_url: string | null;
-  created_at: string;
-  updated_at: string | null;
-  user_id: number;
-  // 추가 필드 - 백엔드에서 다양한 형태로 반환될 수 있음
-  userId?: number;
+  created_at?: string;
   createdAt?: string;
+  user_id?: number;
+  userId?: number;
+  username?: string;
+  user_profile_image_url?: string;
   user?: {
     userId: number;
     username: string;
     profileUrl: string | null;
   };
+  likeCount?: number;
+  dislikeCount?: number;
+  liked?: boolean;
+  disliked?: boolean;
 }
 
-// 영화 리뷰 데이터 타입 정의
-interface MovieReview {
+// TV 쇼 리뷰 데이터 타입 정의
+interface TvShowReview {
   id: number;
   title: string;
   content: string;
@@ -91,7 +88,7 @@ interface MovieReview {
   movieTitle: string;
   movieId: number;
   moviePoster?: string;
-  createdAt: Date;
+  createdAt: string;
   comments: Comment[];
   likes: { userId: number }[];
   dislikes: { userId: number }[];
@@ -110,7 +107,7 @@ interface MovieReview {
 }
 
 // 백엔드에서 반환하는 리뷰 형식
-interface MovieReviewResponse {
+interface TvShowReviewResponse {
   id: number;
   userId: number;
   username: string;
@@ -136,12 +133,18 @@ interface MovieReviewResponse {
 interface ReviewResponse {
   content: {
     id: number;
-    userId: number;
-    username: string;
-    userProfileImageUrl: string | null;
+    userId?: number;
+    username?: string;
+    userProfileImageUrl?: string | null;
+    user?: {
+      id: number;
+      username: string;
+      profileImageUrl: string | null;
+    };
     movieId: number;
     movieTitle: string;
-    moviePosterPath: string | null;
+    moviePoster?: string;
+    moviePosterPath?: string | null;
     title: string;
     content: string;
     rating: number;
@@ -151,7 +154,6 @@ interface ReviewResponse {
     likeCount: number;
     dislikeCount: number;
     isSpoiler: boolean;
-    contentType?: string;
   }[];
   totalElements: number;
   totalPages: number;
@@ -159,69 +161,51 @@ interface ReviewResponse {
   size: number;
 }
 
-// 백엔드 날짜 문자열을 ISO 형식으로 변환하는 유틸리티 함수
-const convertBackendDateToISO = (
-  dateValue: string | undefined | null
-): string => {
-  if (!dateValue) {
-    console.warn("날짜 필드가 없습니다. 현재 시간으로 설정합니다.");
-    return new Date().toISOString();
-  }
-
-  if (typeof dateValue !== "string" || dateValue.trim() === "") {
-    console.warn("날짜 필드가 비어있습니다. 현재 시간으로 설정합니다.");
+// 백엔드에서 온 날짜 문자열을 ISO 형식으로 변환
+const convertBackendDateToISO = (date: string | null | undefined): string => {
+  if (!date) {
+    console.warn("날짜 값이 없어 현재 시간으로 대체합니다.");
     return new Date().toISOString();
   }
 
   try {
-    // 서버로부터 온 LocalDateTime 문자열 처리 (2023-04-03T15:30:45)
+    // LocalDateTime 형식 확인 (2023-04-03T15:30:45)
     const localDateTimeRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
-    if (localDateTimeRegex.test(dateValue)) {
-      console.log(`LocalDateTime 형식 날짜 변환 전: ${dateValue}`);
 
-      // 중요: 서버에서 보낸 시간은 이미 KST(한국시간)이지만 타임존 정보가 없음
+    if (localDateTimeRegex.test(date)) {
+      console.log(`TV 리뷰 날짜가 LocalDateTime 형식입니다: ${date}`);
+
+      // 중요: 서버에서 보낸 시간은 KST(한국시간)이지만 타임존 정보가 없음
       // 타임존 정보만 추가(KST = +09:00)하고 추가 계산을 하지 않음
-      const date = new Date(`${dateValue}+09:00`);
-      const isoDate = date.toISOString();
+      const dateObj = new Date(`${date}+09:00`);
+      const isoString = dateObj.toISOString();
 
-      console.log(
-        `LocalDateTime 형식 날짜 변환 후(KST 타임존 추가): ${isoDate}`
-      );
-
-      // 날짜 유효성 검사
-      const testDate = new Date(isoDate);
-      if (!isNaN(testDate.getTime())) {
-        return isoDate;
-      }
+      console.log(`TV 리뷰 KST 타임존 정보 추가 후: ${isoString}`);
+      return isoString;
     }
 
-    // 다른 형식의 유효한 날짜인 경우
-    const date = new Date(dateValue);
-    if (!isNaN(date.getTime())) {
-      return date.toISOString();
-    }
-
-    throw new Error(`유효하지 않은 날짜 형식: ${dateValue}`);
+    // 이미 ISO 형식이거나 다른 형식의 경우 그대로 Date 객체로 변환
+    return new Date(date).toISOString();
   } catch (error) {
-    console.warn(`날짜 파싱 오류:`, error);
+    console.error("날짜 변환 오류:", error);
     return new Date().toISOString();
   }
 };
 
-const MovieReviewsPage: React.FC = () => {
+const TvReviewsPage: React.FC = () => {
   const { isLoggedIn, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [movieTitle, setMovieTitle] = useState("");
-  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
-  const [movieSearchQuery, setMovieSearchQuery] = useState("");
-  const [movieSearchResults, setMovieSearchResults] = useState<Movie[]>([]);
-  const [isSearchingMovie, setIsSearchingMovie] = useState(false);
+  const [tvShowTitle, setTvShowTitle] = useState("");
+  const [selectedTvShow, setSelectedTvShow] = useState<TvShow | null>(null);
+  const [tvShowSearchQuery, setTvShowSearchQuery] = useState("");
+  const [tvShowSearchResults, setTvShowSearchResults] = useState<TvShow[]>([]);
+  const [isSearchingTvShow, setIsSearchingTvShow] = useState(false);
   const [rating, setRating] = useState<number>(0);
   const [isSpoiler, setIsSpoiler] = useState<boolean>(false);
-  const [reviews, setReviews] = useState<MovieReview[]>([]);
+  const [reviews, setReviews] = useState<TvShowReview[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -229,8 +213,8 @@ const MovieReviewsPage: React.FC = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [movieQuery, setMovieQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<MovieReview[]>([]);
+  const [tvShowQuery, setTvShowQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<TvShowReview[]>([]);
   const [expandedCommentId, setExpandedCommentId] = useState<number | null>(
     null
   );
@@ -241,7 +225,7 @@ const MovieReviewsPage: React.FC = () => {
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
   // 무한 스크롤 관련 상태 추가
-  const [visibleReviews, setVisibleReviews] = useState<MovieReview[]>([]);
+  const [visibleReviews, setVisibleReviews] = useState<TvShowReview[]>([]);
   const [page, setPage] = useState<number>(0);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [totalPages, setTotalPages] = useState<number>(0);
@@ -253,544 +237,330 @@ const MovieReviewsPage: React.FC = () => {
   // TMDB API 키 (실제 환경에서는 환경 변수로 관리)
   const TMDB_API_KEY = "a95a7823323dd52f66d0dc776498a8a1";
 
-  // 영화 검색 함수
-  const searchMovies = async (query: string) => {
+  // TV 쇼 검색 함수
+  const searchTvShows = async (query: string) => {
     if (!query.trim()) {
-      setMovieSearchResults([]);
+      setTvShowSearchResults([]);
       return;
     }
 
     try {
-      const response = await backendApi.searchMoviesByTitle(query);
-      // Content 타입을 Movie 타입으로 변환
-      const movies = response.results.map(mapContentToMovie);
-      setMovieSearchResults(
-        movies.filter((movie) => movie !== null) as Movie[]
+      const response = await axios.get(
+        `https://api.themoviedb.org/3/search/tv?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(
+          query
+        )}&language=ko-KR`
       );
+      setTvShowSearchResults(response.data.results);
     } catch (error) {
-      console.error("영화 검색 중 오류 발생:", error);
-      toast.error("영화 검색에 실패했습니다.");
-      setMovieSearchResults([]);
+      console.error("TV 쇼 검색 중 오류 발생:", error);
+      toast.error("TV 쇼 검색 중 오류가 발생했습니다.");
     }
   };
 
-  // 영화 검색어 변경 핸들러
-  const handleMovieSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // TV 쇼 검색어 변경 핸들러
+  const handleTvShowSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
-    setMovieSearchQuery(query);
-    setIsSearchingMovie(true);
+    setTvShowSearchQuery(query);
+    setIsSearchingTvShow(true);
 
-    // 디바운싱을 위한 타이머
-    const timer = setTimeout(() => {
-      searchMovies(query);
+    // 디바운싱: 검색어 입력이 끝난 후 일정 시간 후에 검색 수행
+    const timeoutId = setTimeout(() => {
+      searchTvShows(query);
     }, 500);
 
-    return () => clearTimeout(timer);
+    return () => clearTimeout(timeoutId);
   };
 
-  // 영화 선택 핸들러
-  const handleSelectMovie = (movie: Movie) => {
-    console.log("영화 선택:", movie);
+  // TV 쇼 선택 핸들러
+  const handleSelectTvShow = (tvShow: TvShow) => {
+    setSelectedTvShow(tvShow);
+    setTvShowTitle(tvShow.name);
+    setTvShowSearchQuery(""); // 검색어 초기화
+    setIsSearchingTvShow(false);
+    setTvShowSearchResults([]); // 검색 결과 초기화
+    // 사용자가 이미 이 TV 쇼에 대한 리뷰를 작성했는지 확인
+    checkUserReviewForTvShow(tvShow.id);
+  };
 
-    // 필수 필드 검증
-    if (!movie.id) {
-      console.error("선택된 영화에 id가 없습니다:", movie);
-      toast.error("유효하지 않은 영화입니다. 다른 영화를 선택해주세요.");
+  // 사용자가 TV 쇼에 대한 리뷰를 이미 작성했는지 확인
+  const checkUserReviewForTvShow = async (tvShowId: number) => {
+    if (!isLoggedIn || !user) {
       return;
     }
 
-    if (!movie.title) {
-      console.error("선택된 영화에 title이 없습니다:", movie);
-      toast.error("영화 제목이 없습니다. 다른 영화를 선택해주세요.");
-      return;
-    }
-
-    // 영화 정보 설정
-    setSelectedMovie({
-      id: movie.id,
-      title: movie.title,
-      poster_path: movie.poster_path || "",
-      release_date: movie.release_date || "",
-      overview: movie.overview || "",
-      vote_average: movie.vote_average || 0,
-    });
-
-    setMovieTitle(movie.title);
-    setMovieSearchQuery("");
-    setMovieSearchResults([]);
-    setIsSearchingMovie(false);
-
-    console.log("영화 선택 완료:", {
-      id: movie.id,
-      title: movie.title,
-      poster_path: movie.poster_path || "",
-    });
-  };
-
-  // 선택한 영화 취소 핸들러
-  const handleClearSelectedMovie = () => {
-    setSelectedMovie(null);
-    setMovieTitle("");
-  };
-
-  // 리뷰 목록 가져오기 함수
-  const fetchReviews = async () => {
     try {
-      setLoading(true);
-      const response = await backendApi.getReviews(page, reviewsPerPage);
-      console.log("리뷰 API 응답 원본:", JSON.stringify(response, null, 2));
-
-      // response 객체 유효성 검사 강화
-      if (response && Array.isArray(response.content)) {
-        // 타입 안전성 강화를 위해 타입 명시
-        const validReviews: ReviewResponse["content"] = response.content
-          .filter(
-            (review: any) => review && typeof review === "object" && review.id
-          )
-          // 명시적으로 movie 타입의 리뷰만 필터링
-          .filter((review: any) => review.contentType === "movie");
-
-        console.log(
-          `영화 리뷰 필터링 결과: ${validReviews.length}개 (contentType: movie)`,
-          validReviews.map((r) => ({ id: r.id, contentType: r.contentType }))
+      const hasWrittenReview = await backendApi.checkUserReviewForTv(tvShowId);
+      if (hasWrittenReview) {
+        toast.info(
+          "이미 이 TV 쇼에 대한 리뷰를 작성하셨습니다. 작성된 리뷰는 목록에서 확인 가능합니다."
         );
-
-        // 빈 리뷰 목록 처리
-        if (validReviews.length === 0) {
-          console.log("유효한 리뷰가 없습니다.");
-          setReviews([]);
-          setVisibleReviews([]);
-          setTotalPages(response.totalPages || 0);
-          setHasMore(false);
-          setLoading(false);
-          return;
-        }
-
-        console.log(
-          "리뷰의 comment_count 값들:",
-          validReviews.map((review) => ({
-            id: review.id,
-            comment_count: review.commentCount || 0,
-          }))
-        );
-
-        const mappedComments: Comment[] = [];
-        console.log(`리뷰 ID ${validReviews[0].id}의 댓글 데이터:`, []);
-        console.log(
-          `리뷰 ID ${validReviews[0].id}의 변환된 댓글:`,
-          mappedComments
-        );
-
-        // 필드명 매핑 처리 개선 및 타입 안전성 강화
-        const mappedReviews: MovieReview[] = validReviews.map((review) => {
-          return {
-            id: review.id,
-            title: review.title,
-            content: review.content,
-            rating: review.rating,
-            movieTitle: review.movieTitle || "",
-            movieId: review.movieId,
-            moviePoster: review.moviePosterPath || "",
-            createdAt: new Date(review.createdAt),
-            comments: mappedComments,
-            likes: [],
-            dislikes: [],
-            isSpoiler: review.isSpoiler,
-            isLiked: false,
-            isDisliked: false,
-            likeCount: review.likeCount || 0,
-            dislikeCount: review.dislikeCount || 0,
-            commentCount: review.commentCount || 0,
-            user: {
-              id: review.userId || 0,
-              username: review.username || "",
-              profileImageUrl: review.userProfileImageUrl,
-              reviewCount: 0,
-            },
-          };
-        });
-
-        console.log("변환된 리뷰:", mappedReviews);
-
-        if (page === 0) {
-          setReviews(mappedReviews);
-          setVisibleReviews(mappedReviews);
-        } else {
-          setReviews((prev) => [...prev, ...mappedReviews]);
-          setVisibleReviews((prev) => [...prev, ...mappedReviews]);
-        }
-
-        setTotalPages(response.totalPages || 0);
-        setHasMore(response.currentPage < (response.totalPages || 0) - 1);
-      } else {
-        console.error("Invalid response format:", response);
-        setReviews([]);
-        setVisibleReviews([]);
-        setTotalPages(0);
-        setHasMore(false);
+        // 리뷰 작성 폼 닫기
+        setShowWriteForm(false);
       }
     } catch (error) {
-      console.error("리뷰 목록 불러오기 실패:", error);
-      if (error instanceof Error && error.message === "로그인이 필요합니다.") {
-        toast.error("로그인이 필요합니다.");
-        navigate("/login", { state: { from: location } });
-      } else {
-        toast.error("리뷰 목록을 불러오는데 실패했습니다.");
+      console.error("리뷰 확인 중 오류 발생:", error);
+    }
+  };
+
+  // 선택한 TV 쇼 초기화
+  const handleClearSelectedTvShow = () => {
+    setSelectedTvShow(null);
+    setTvShowTitle("");
+  };
+
+  // 리뷰 목록 가져오기
+  const fetchReviews = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      console.log(`TV 쇼 리뷰 페이지 ${page}/${reviewsPerPage} 요청 시작`);
+      const response = await backendApi.getAllTvReviews(page, reviewsPerPage);
+      console.log("API 응답 원본:", response);
+
+      // 응답이 없는 경우
+      if (!response) {
+        console.log("API 응답이 없습니다.");
+        setLoading(false);
+        return;
       }
-      setReviews([]);
-      setVisibleReviews([]);
-      setTotalPages(0);
-      setHasMore(false);
+
+      // 응답의 키 확인
+      console.log("응답 키:", Object.keys(response));
+
+      // content 배열이 없는 경우
+      if (!response.content || !Array.isArray(response.content)) {
+        console.error("응답에 content 배열이 없습니다:", response);
+        setLoading(false);
+        setHasMore(false);
+        return;
+      }
+
+      // 받아온 리뷰가 없는 경우
+      if (response.content.length === 0) {
+        console.log(`TV 쇼 리뷰 데이터 0개 수신 성공`);
+        setLoading(false);
+        setHasMore(false);
+        setTotalPages(response.totalPages || 0);
+        return;
+      }
+
+      // 첫 번째 리뷰 구조 확인
+      if (response.content.length > 0) {
+        const firstReview = response.content[0] as any;
+        console.log("첫 번째 리뷰 구조:", firstReview);
+        console.log("첫 번째 리뷰의 user 객체:", firstReview.user);
+        console.log("첫 번째 리뷰의 userId:", firstReview.userId);
+        console.log("첫 번째 리뷰의 username:", firstReview.username);
+        console.log("첫 번째 리뷰의 contentType:", firstReview.contentType);
+      }
+
+      // contentType이 "tv"인 리뷰만 필터링
+      const filteredReviews = response.content.filter(
+        (review: any) => review.contentType === "tv"
+      );
+
+      console.log(
+        `TV 타입 리뷰 ${filteredReviews.length}개 필터링됨 (contentType: tv)`,
+        filteredReviews.map((r) => ({ id: r.id, contentType: r.contentType }))
+      );
+
+      // 원본 리뷰와 필터링된 리뷰의 차이가 있다면 로그
+      if (filteredReviews.length < response.content.length) {
+        console.log(
+          `필터링으로 제외된 리뷰: ${response.content.length - filteredReviews.length}개`
+        );
+        const excludedReviews = response.content.filter(
+          (review: any) => review.contentType !== "tv"
+        );
+        console.log(
+          "제외된 리뷰:",
+          excludedReviews.map((r) => ({
+            id: r.id,
+            contentType: r.contentType || "없음",
+          }))
+        );
+      }
+
+      // 유효한 리뷰만 필터링
+      const validReviews = filteredReviews.filter(
+        (review) => review && review.id && review.title
+      );
+
+      console.log(`유효한 리뷰 ${validReviews.length}개 추출`);
+
+      // 리뷰 데이터 매핑
+      const mappedReviews = validReviews.map((review: any) => {
+        // 포스터 경로 디버깅
+        console.log(`리뷰 ID ${review.id}의 포스터 정보:`, {
+          moviePoster: review.moviePoster,
+          moviePosterPath: review.moviePosterPath,
+        });
+
+        // 포스터 경로 처리: 백엔드에서 여러 가지 필드명으로 올 수 있음
+        const posterPath = review.moviePoster || review.moviePosterPath || "";
+        console.log(`리뷰 ID ${review.id}의 최종 포스터 경로:`, posterPath);
+
+        return {
+          id: review.id,
+          title: review.title,
+          content: review.content,
+          rating: review.rating,
+          movieId: review.movieId,
+          movieTitle: review.movieTitle,
+          moviePoster: posterPath,
+          isSpoiler: review.isSpoiler,
+          isLiked: false, // 기본값으로 설정
+          isDisliked: false, // 기본값으로 설정
+          likeCount: review.likeCount,
+          dislikeCount: review.dislikeCount,
+          commentCount: review.commentCount,
+          createdAt: review.createdAt,
+          comments: [],
+          likes: [],
+          dislikes: [],
+          user: {
+            id: review.user?.id || review.userId || 0,
+            username: review.user?.username || review.username || "알 수 없음",
+            profileImageUrl:
+              review.user?.profileImageUrl || review.userProfileUrl || null,
+            reviewCount: 0, // 백엔드에서 제공하지 않는 정보, 필요하면 추가 요청 필요
+          },
+        };
+      });
+
+      console.log(`매핑된 리뷰 ${mappedReviews.length}개 생성 완료`);
+
+      if (page === 0) {
+        // 첫 페이지인 경우, 리뷰 목록을 새로 설정
+        setReviews(mappedReviews);
+        setVisibleReviews(mappedReviews);
+      } else {
+        // 페이지 추가인 경우, 기존 리뷰 목록에 추가
+        setReviews((prevReviews) => [...prevReviews, ...mappedReviews]);
+        setVisibleReviews((prevReviews) => [...prevReviews, ...mappedReviews]);
+      }
+
+      // 총 페이지 수 설정
+      setTotalPages(response.totalPages);
+
+      // 다음 페이지가 있는지 여부 설정
+      setHasMore(page < response.totalPages - 1);
+
+      console.log(
+        `TV 쇼 리뷰 데이터 ${mappedReviews.length}개 수신 성공, 총 페이지: ${response.totalPages}, 현재 페이지: ${page}`
+      );
+    } catch (error) {
+      console.error("TV 쇼 리뷰 목록 가져오기 실패:", error);
+
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        setError("리뷰를 보려면 로그인이 필요합니다.");
+        toast.error("리뷰를 보려면 로그인이 필요합니다.");
+      } else {
+        setError("리뷰 목록을 불러오는 중 오류가 발생했습니다.");
+        toast.error("리뷰 목록을 불러오는 중 오류가 발생했습니다.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // useEffect에서 fetchReviews 호출
-  useEffect(() => {
-    fetchReviews();
-  }, [page, navigate, location]);
-
-  // 리뷰 작성 처리
+  // 리뷰 제출 핸들러
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!isLoggedIn) {
-      toast.error("로그인이 필요합니다.");
+      toast.error("리뷰를 작성하려면 로그인이 필요합니다.");
+      navigate("/login", { state: { from: location } });
       return;
     }
 
-    if (!selectedMovie) {
-      toast.error("영화를 선택해주세요.");
+    if (!selectedTvShow) {
+      toast.error("리뷰할 TV 쇼를 선택해주세요.");
       return;
     }
 
-    if (!title.trim() || !content.trim()) {
-      toast.error("제목과 내용을 모두 입력해주세요.");
+    if (!title.trim()) {
+      toast.error("리뷰 제목을 입력해주세요.");
+      return;
+    }
+
+    if (!content.trim()) {
+      toast.error("리뷰 내용을 입력해주세요.");
+      return;
+    }
+
+    if (rating === 0) {
+      toast.error("평점을 선택해주세요.");
       return;
     }
 
     setSubmitting(true);
+
     try {
+      // 리뷰 데이터 준비
+      const reviewData = {
+        movie_id: selectedTvShow.id,
+        movie_title: selectedTvShow.name,
+        movie_poster_path: selectedTvShow.poster_path,
+        title,
+        content,
+        rating,
+        is_spoiler: isSpoiler,
+      };
+
+      console.log("전송할 리뷰 데이터:", reviewData);
+      console.log("현재 편집 중인 리뷰 ID:", editingReviewId);
+
+      let successMessage = "";
+
+      // 리뷰 수정 또는 새 리뷰 작성 분기
       if (editingReviewId) {
-        // 리뷰 수정 로직
-        // 현재 수정 중인 리뷰 찾기
-        const currentReview = reviews.find(
-          (review) => review.id === editingReviewId
-        );
-
-        // 영화가 변경되었는지 확인
-        if (currentReview && selectedMovie.id !== currentReview.movieId) {
-          // 해당 영화에 대한 리뷰가 이미 존재하는지 확인
-          try {
-            const hasExistingReview = await backendApi.checkUserReviewForMovie(
-              selectedMovie.id
-            );
-
-            if (hasExistingReview) {
-              toast.error("이미 선택한 영화에 대한 리뷰를 작성하셨습니다.");
-              setSubmitting(false);
-              return;
-            }
-          } catch (checkError) {
-            console.error("리뷰 존재 여부 확인 실패:", checkError);
-
-            // API 호출이 실패한 경우 클라이언트 측에서 확인
-            const existingReview = reviews.find(
-              (review) =>
-                review.id !== editingReviewId &&
-                review.movieId === selectedMovie.id
-            );
-
-            if (existingReview) {
-              toast.error("이미 선택한 영화에 대한 리뷰를 작성하셨습니다.");
-              setSubmitting(false);
-              return;
-            }
-          }
-        }
-
-        const reviewData = {
-          title: title.trim(),
-          content: content.trim(),
-          rating: rating,
-          is_spoiler: isSpoiler,
-          movie_id: selectedMovie.id,
-          movie_title: selectedMovie.title,
-          movie_poster_path: selectedMovie.poster_path || "",
-        };
-
-        console.log(`리뷰 ID ${editingReviewId} 수정 요청:`, reviewData);
-
-        // 백엔드 API 호출
-        await backendApi.updateMovieReview(editingReviewId, reviewData);
-
-        // 현재 리뷰 목록에서 수정된 리뷰를 찾아 업데이트
-        const updatedReviews = reviews.map((review) =>
-          review.id === editingReviewId
-            ? {
-                ...review,
-                title: title.trim(),
-                content: content.trim(),
-                rating: rating,
-                isSpoiler: isSpoiler,
-                movieId: selectedMovie.id,
-                movieTitle: selectedMovie.title,
-                moviePoster: selectedMovie.poster_path || "",
-              }
-            : review
-        );
-
-        // 상태 업데이트
-        setReviews(updatedReviews);
-        setVisibleReviews(updatedReviews);
-
-        // 폼 초기화
-        resetForm();
-        setShowWriteForm(false);
+        // 기존 리뷰 수정 - PUT 요청
+        console.log(`리뷰 ID ${editingReviewId} 수정 요청 시작`);
+        await backendApi.updateTvReview(editingReviewId, reviewData);
+        successMessage = "TV 쇼 리뷰가 성공적으로 수정되었습니다.";
+        // 편집 모드 종료
         setEditingReviewId(null);
-
-        toast.success("리뷰가 성공적으로 수정되었습니다.");
       } else {
-        // 새 리뷰 작성
-        // 해당 영화에 대한 리뷰가 이미 존재하는지 사전 확인
-        try {
-          const hasExistingReview = await backendApi.checkUserReviewForMovie(
-            selectedMovie.id
-          );
-
-          if (hasExistingReview) {
-            toast.error("이미 선택한 영화에 대한 리뷰를 작성하셨습니다.", {
-              autoClose: 5000,
-              onClose: () => {
-                setTimeout(() => {
-                  const shouldEdit = window.confirm(
-                    "이미 작성된 리뷰를 수정하시겠습니까?"
-                  );
-                  if (shouldEdit) {
-                    // 기존 리뷰 찾기
-                    const existingReview = reviews.find(
-                      (review) => review.movieId === selectedMovie?.id
-                    );
-                    if (existingReview) {
-                      handleEditReview(existingReview);
-                    } else {
-                      toast.error(
-                        "기존 리뷰를 찾을 수 없습니다. 리뷰 목록을 새로고침합니다."
-                      );
-                      fetchReviews();
-                    }
-                  }
-                }, 500);
-              },
-            });
-            setSubmitting(false);
-            return;
-          }
-        } catch (checkError) {
-          console.error("리뷰 존재 여부 확인 실패:", checkError);
-
-          // API 호출이 실패한 경우 클라이언트 측에서 확인
-          const existingReview = reviews.find(
-            (review) => review.movieId === selectedMovie.id
-          );
-
-          if (existingReview) {
-            toast.error("이미 선택한 영화에 대한 리뷰를 작성하셨습니다.", {
-              autoClose: 5000,
-              onClose: () => {
-                setTimeout(() => {
-                  const shouldEdit = window.confirm(
-                    "이미 작성된 리뷰를 수정하시겠습니까?"
-                  );
-                  if (shouldEdit) {
-                    handleEditReview(existingReview);
-                  }
-                }, 500);
-              },
-            });
-            setSubmitting(false);
-            return;
-          }
-        }
-
-        const reviewData = {
-          movie_id: selectedMovie.id,
-          movie_title: selectedMovie.title,
-          movie_poster_path: selectedMovie.poster_path,
-          title: title.trim(),
-          content: content.trim(),
-          rating: rating,
-          is_spoiler: isSpoiler,
-        };
-
-        console.log("리뷰 작성 요청 데이터:", reviewData);
-        const response = await backendApi.createMovieReview(reviewData);
-        console.log("리뷰 생성 성공:", response);
-
-        toast.success("리뷰가 성공적으로 등록되었습니다.");
-        resetForm();
-        setPage(0);
-        fetchReviews();
+        // 새 리뷰 작성 - POST 요청
+        console.log("새 TV 쇼 리뷰 작성 요청 시작");
+        await backendApi.createTvReview(reviewData);
+        successMessage = "TV 쇼 리뷰가 성공적으로 등록되었습니다.";
       }
+
+      toast.success(successMessage);
+
+      // 폼 초기화
+      resetForm();
+
+      // 리뷰 목록 새로고침
+      setPage(0);
+      await fetchReviews();
+
+      // 작성 폼 닫기
+      setShowWriteForm(false);
     } catch (error) {
-      console.error("리뷰 제출 실패:", error);
-      console.log("리뷰 제출 오류 타입:", typeof error);
+      console.error("TV 쇼 리뷰 작성/수정 실패:", error);
 
-      // 에러 객체 자세히 로깅
       if (error instanceof Error) {
-        console.log("에러 객체 이름:", error.name);
-        console.log("에러 메시지:", error.message);
-        console.log("에러 스택:", error.stack);
-
-        // 에러 메시지가 비어있거나 undefined인 경우 기본 메시지 설정
-        const errorMessage = error.message || "알 수 없는 오류가 발생했습니다.";
-        console.log("최종 표시할 에러 메시지:", errorMessage);
-
-        // 중복 리뷰 에러 메시지 처리
+        // 이미 리뷰를 작성한 경우 처리
         if (
-          errorMessage.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다") ||
-          errorMessage.includes("기존 리뷰를 수정하시겠습니까")
+          error.message.includes(
+            "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다"
+          )
         ) {
-          // 중복 리뷰 메시지 표시 및 수정 확인 다이얼로그
-          toast.error(errorMessage, {
-            autoClose: 5000,
-            onClose: () => {
-              setTimeout(() => {
-                const shouldEdit = window.confirm(
-                  "이미 작성된 리뷰를 수정하시겠습니까?"
-                );
-                if (shouldEdit) {
-                  // 기존 리뷰 찾기
-                  const existingReview = reviews.find(
-                    (review) => review.movieId === selectedMovie?.id
-                  );
-                  if (existingReview) {
-                    handleEditReview(existingReview);
-                  } else {
-                    toast.error(
-                      "기존 리뷰를 찾을 수 없습니다. 리뷰 목록을 새로고침합니다."
-                    );
-                    fetchReviews();
-                  }
-                }
-              }, 500);
-            },
-          });
+          toast.error(
+            "이미 이 TV 쇼에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
+          );
         } else {
-          // 기타 오류 메시지 표시
-          toast.error(errorMessage, {
-            autoClose: 7000,
-          });
+          toast.error(`리뷰 작성/수정 실패: ${error.message}`);
         }
-      } else if (axios.isAxiosError(error) && error.response) {
-        // Axios 에러인 경우 응답 데이터에서 메시지 추출
-        const errorResponse = error.response.data;
-        let errorMessage = "리뷰 작성에 실패했습니다.";
-
-        if (typeof errorResponse === "string") {
-          errorMessage = errorResponse;
-        } else if (errorResponse && typeof errorResponse === "object") {
-          errorMessage =
-            errorResponse.message ||
-            errorResponse.error ||
-            JSON.stringify(errorResponse);
-        }
-
-        console.log("Axios 에러에서 추출한 메시지:", errorMessage);
-        toast.error(errorMessage, {
-          autoClose: 7000,
-        });
       } else {
-        toast.error("리뷰 작성에 실패했습니다. 서버 연결을 확인해주세요.", {
-          autoClose: 7000,
-        });
+        toast.error("리뷰 작성/수정 중 오류가 발생했습니다.");
       }
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  // 리뷰 댓글 작성 처리
-  const handleCommentSubmit = async (reviewId: number) => {
-    if (!commentContent.trim()) return;
-
-    try {
-      const response = await backendApi.addReviewComment(
-        reviewId,
-        commentContent
-      );
-      console.log("새 리뷰 댓글 응답:", response);
-
-      // createdAt 필드 확인 및 보정
-      let createdAtValue;
-      if (!response.createdAt || response.createdAt === "") {
-        console.warn(
-          "리뷰 댓글의 createdAt 필드가 비어있습니다. 현재 시간으로 대체합니다."
-        );
-        createdAtValue = new Date().toISOString();
-      } else {
-        // 서버로부터 온 LocalDateTime 문자열 처리 (2023-04-03T15:30:45)
-        const localDateTimeRegex =
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
-        if (localDateTimeRegex.test(response.createdAt)) {
-          console.log(`새 댓글의 LocalDateTime 형식 감지:`, response.createdAt);
-
-          // 중요: 서버에서 보낸 시간은 이미 KST(한국시간)이지만 타임존 정보가 없음
-          // 타임존 정보만 추가(KST = +09:00)하고 추가 계산을 하지 않음
-          const date = new Date(`${response.createdAt}+09:00`);
-          createdAtValue = date.toISOString();
-
-          console.log(`새 댓글의 KST 타임존 정보 추가:`, createdAtValue);
-        } else {
-          createdAtValue = response.createdAt;
-        }
-      }
-
-      // 명시적으로 날짜가 있는 새 댓글 객체 생성
-      const newComment: Comment = {
-        id: response.id,
-        content: response.content,
-        createdAt: createdAtValue,
-        username: user?.username || "알 수 없는 사용자",
-        profileImageUrl: user?.profileImageUrl || null,
-        userId: user?.id || 0,
-        likeCount: 0,
-        dislikeCount: 0,
-      };
-
-      // 리뷰 업데이트
-      setReviews((prevReviews) =>
-        prevReviews.map((review) => {
-          if (review.id === reviewId) {
-            return {
-              ...review,
-              comments: [...(review.comments || []), newComment],
-              commentCount: (review.commentCount || 0) + 1,
-            };
-          }
-          return review;
-        })
-      );
-
-      setVisibleReviews((prevReviews) =>
-        prevReviews.map((review) => {
-          if (review.id === reviewId) {
-            return {
-              ...review,
-              comments: [...(review.comments || []), newComment],
-              commentCount: (review.commentCount || 0) + 1,
-            };
-          }
-          return review;
-        })
-      );
-
-      // 댓글 입력창 초기화
-      setCommentContent("");
-      toast.success("댓글이 등록되었습니다.");
-    } catch (error) {
-      console.error("댓글 작성 실패:", error);
-      toast.error("댓글 작성에 실패했습니다.");
     }
   };
 
@@ -881,17 +651,16 @@ const MovieReviewsPage: React.FC = () => {
     setShowSearchModal(false);
   };
 
-  // 댓글 토글
+  // 댓글 토글 함수 - 댓글 보여주기/숨기기 및 댓글 데이터 로드
   const toggleComments = async (reviewId: number) => {
-    console.log("댓글 토글:", reviewId, "현재:", expandedCommentId);
-
-    // 이미 확장된 경우 닫기
+    // 이미 확장된 댓글이면 닫기
     if (expandedCommentId === reviewId) {
       setExpandedCommentId(null);
       return;
     }
 
     try {
+      console.log(`댓글 토글: ${reviewId} 현재: ${expandedCommentId}`);
       console.log(`리뷰 ID ${reviewId}의 댓글 목록 요청 시작`);
       // 댓글 로딩 상태 설정
       setLoading(true);
@@ -899,100 +668,75 @@ const MovieReviewsPage: React.FC = () => {
       // 댓글 데이터 가져오기 시도
       const response = await backendApi.getReviewComments(reviewId);
       console.log(`리뷰 ID ${reviewId}의 댓글 데이터 원본:`, response);
-      console.log(`리뷰 ID ${reviewId}의 댓글 데이터 매핑 시작`);
+      console.log(
+        `리뷰 ID ${reviewId}의 댓글 데이터 구조:`,
+        Object.keys(response)
+      );
+
+      // 댓글 데이터가 없는 경우
+      if (!response.content || !Array.isArray(response.content)) {
+        console.warn(`리뷰 ID ${reviewId}의 댓글 데이터가 없습니다.`);
+        setReviews((prevReviews) =>
+          prevReviews.map((review) =>
+            review.id === reviewId ? { ...review, comments: [] } : review
+          )
+        );
+        setExpandedCommentId(reviewId);
+        setLoading(false);
+        return;
+      }
 
       // 첫 번째 댓글의 구조 로깅 (디버깅용)
-      if (response.content && response.content.length > 0) {
-        const firstComment = response.content[0];
-        console.log(`첫 번째 댓글 전체 구조:`, firstComment);
-        console.log(`첫 번째 댓글 사용자 정보:`, {
-          user_id: firstComment.user_id,
-          userId: firstComment.userId,
-          user: firstComment.user,
+      if (response.content.length > 0) {
+        console.log(`첫 번째 댓글 전체 구조:`, response.content[0]);
+        console.log(`첫 번째 댓글 속성:`, {
+          id: response.content[0].id,
+          userId: response.content[0].userId,
+          username: response.content[0].username,
+          createdAt: response.content[0].createdAt,
+          user: response.content[0].user,
         });
       }
 
+      // 댓글 데이터 매핑
       const mappedComments: Comment[] = response.content.map(
         (comment: CommentResponse) => {
-          // userId 정보 로깅 및 추출
-          const userId =
-            comment.user_id !== undefined
-              ? comment.user_id
-              : comment.userId !== undefined
-                ? comment.userId
-                : comment.user?.userId !== undefined
-                  ? comment.user.userId
-                  : undefined;
-
-          console.log(`댓글 ID ${comment.id}의 사용자 정보:`, {
-            originalUserId: comment.user_id,
-            alternativeUserId: comment.userId,
-            userObjectUserId: comment.user?.userId,
-            finalUserId: userId,
+          // 로깅을 통해 어떤 필드가 존재하는지 확인
+          console.log(`댓글 ID ${comment.id} 데이터:`, {
+            createdAt: comment.createdAt,
+            created_at: comment.created_at,
+            typeOfCreatedAt: comment.createdAt
+              ? typeof comment.createdAt
+              : "undefined",
+            user: comment.user,
+            userId: comment.userId,
+            username: comment.username,
           });
 
-          // 날짜 데이터 확인 및 처리
-          let createdAt;
-
-          if (comment.created_at && comment.created_at.trim() !== "") {
-            try {
-              // 서버로부터 온 LocalDateTime 문자열 처리 (2023-04-03T15:30:45)
-              const localDateTimeRegex =
-                /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
-              if (localDateTimeRegex.test(comment.created_at)) {
-                console.log(
-                  `댓글 ID ${comment.id}의 LocalDateTime 형식 감지:`,
-                  comment.created_at
-                );
-
-                // 중요: 서버에서 보낸 시간은 이미 KST(한국시간)이지만 타임존 정보가 없음
-                // 기존: Z를 추가하여 UTC로 해석하는 방식은 시간이 잘못 표시되는 문제 발생
-                // 수정: 타임존 정보만 추가(KST = +09:00)하고 추가 계산을 하지 않음
-                const date = new Date(`${comment.created_at}+09:00`);
-                createdAt = date.toISOString();
-
-                console.log(
-                  `댓글 ID ${comment.id}의 KST 타임존 정보 추가:`,
-                  createdAt
-                );
-              } else {
-                createdAt = comment.created_at;
-              }
-
-              // 날짜 형식 검증
-              const testDate = new Date(createdAt);
-              if (isNaN(testDate.getTime())) {
-                throw new Error("유효하지 않은 날짜 형식");
-              }
-
-              // 미래 날짜 체크 (디버깅 용도)
-              if (testDate.getTime() > Date.now()) {
-                console.log(
-                  `댓글 ID ${comment.id}의 날짜가 미래입니다:`,
-                  createdAt
-                );
-                // 미래 날짜도 그대로 표시 (수정됨)
-              }
-            } catch (error) {
-              console.warn(`날짜 파싱 오류 (댓글 ID: ${comment.id}):`, error);
-              createdAt = new Date().toISOString();
-            }
-          } else {
-            console.warn(`댓글 ID ${comment.id}의 created_at이 비어있습니다.`);
-            createdAt = new Date().toISOString();
-          }
-
+          // 날짜 변환 및 검증
+          const createdAtValue = comment.created_at || comment.createdAt;
+          const createdAt = convertBackendDateToISO(createdAtValue);
           console.log(`댓글 ID ${comment.id}의 최종 날짜 값:`, createdAt);
-          console.log(`댓글 ID ${comment.id}의 최종 userId 값:`, userId);
+
+          // userId 추출 (comment.userId 또는 comment.user?.userId 중 하나에서)
+          const userId =
+            comment.userId || (comment.user && comment.user.userId);
+          const username =
+            comment.username ||
+            (comment.user && comment.user.username) ||
+            "사용자";
+          const profileImageUrl =
+            comment.user_profile_image_url ||
+            (comment.user && comment.user.profileUrl);
 
           return {
             id: comment.id,
             content: comment.content,
             createdAt: createdAt,
-            username: comment.username,
-            profileImageUrl: comment.user_profile_image_url,
-            likeCount: 0,
-            dislikeCount: 0,
+            username: username,
+            profileImageUrl: profileImageUrl,
+            likeCount: comment.likeCount || 0,
+            dislikeCount: comment.dislikeCount || 0,
             userId: userId,
           };
         }
@@ -1000,6 +744,7 @@ const MovieReviewsPage: React.FC = () => {
 
       console.log(`리뷰 ID ${reviewId}의 변환된 댓글:`, mappedComments);
 
+      // 댓글 상태 업데이트
       setReviews((prevReviews) =>
         prevReviews.map((review) =>
           review.id === reviewId
@@ -1017,126 +762,183 @@ const MovieReviewsPage: React.FC = () => {
         )
       );
 
-      // 댓글 ID 설정 (추가)
+      // 성공적으로 댓글을 가져왔으므로 확장된 댓글 ID 설정
       setExpandedCommentId(reviewId);
     } catch (error) {
       console.error(`리뷰 ID ${reviewId}의 댓글 목록 불러오기 실패:`, error);
       toast.error("댓글 목록을 불러오는데 실패했습니다.");
     } finally {
-      // 로딩 상태 해제
       setLoading(false);
     }
   };
 
-  // fetchReviewComments: 별도 함수로 댓글 목록을 가져옴
-  const fetchReviewComments = async (reviewId: number) => {
+  // 좋아요 처리
+  const handleReviewLike = async (reviewId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
     try {
-      console.log(`리뷰 ID ${reviewId}의 댓글 목록 새로고침 요청`);
-      const response = await backendApi.getReviewComments(reviewId);
+      // 실제 API 호출
+      const updatedReview = await backendApi.likeReview(reviewId);
+      console.log("서버 응답 (좋아요):", updatedReview);
 
-      const mappedComments: Comment[] = response.content.map(
-        (comment: CommentResponse) => {
-          // userId 정보 로깅 및 추출
-          const userId =
-            comment.user_id !== undefined
-              ? comment.user_id
-              : comment.userId !== undefined
-                ? comment.userId
-                : comment.user?.userId !== undefined
-                  ? comment.user.userId
-                  : undefined;
-
-          // 날짜 처리
-          let createdAt;
-          if (comment.created_at && comment.created_at.trim() !== "") {
-            try {
-              const localDateTimeRegex =
-                /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
-              if (localDateTimeRegex.test(comment.created_at)) {
-                const date = new Date(`${comment.created_at}+09:00`);
-                createdAt = date.toISOString();
-              } else {
-                createdAt = comment.created_at;
-              }
-            } catch (error) {
-              createdAt = new Date().toISOString();
+      const updateReviewState = (review: TvShowReview) =>
+        review.id === reviewId
+          ? {
+              ...review,
+              isLiked: updatedReview.isLiked,
+              likeCount: updatedReview.likeCount,
+              isDisliked: false,
+              dislikeCount: updatedReview.dislikeCount,
             }
-          } else {
-            createdAt = new Date().toISOString();
-          }
+          : review;
 
-          return {
-            id: comment.id,
-            content: comment.content,
-            createdAt: createdAt,
-            username: comment.username,
-            profileImageUrl: comment.user_profile_image_url,
-            likeCount: 0,
-            dislikeCount: 0,
-            userId: userId,
-          };
-        }
+      // 리뷰 목록 업데이트
+      setReviews((prevReviews) => prevReviews.map(updateReviewState));
+      setVisibleReviews((prevReviews) => prevReviews.map(updateReviewState));
+      setSearchResults((prevResults) => prevResults.map(updateReviewState));
+
+      toast.success(
+        updatedReview.isLiked
+          ? "좋아요가 추가되었습니다."
+          : "좋아요가 취소되었습니다."
       );
-
-      // 리뷰 상태 업데이트
-      setReviews((prevReviews) =>
-        prevReviews.map((review) =>
-          review.id === reviewId
-            ? { ...review, comments: mappedComments }
-            : review
-        )
-      );
-
-      setVisibleReviews((prevReviews) =>
-        prevReviews.map((review) =>
-          review.id === reviewId
-            ? { ...review, comments: mappedComments }
-            : review
-        )
-      );
-
-      return mappedComments;
     } catch (error) {
-      console.error(`댓글 목록 새로고침 실패:`, error);
-      throw error;
+      console.error("좋아요 처리 실패:", error);
+      toast.error("좋아요 처리에 실패했습니다.");
     }
   };
 
+  // 싫어요 처리
+  const handleReviewDislike = async (reviewId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    try {
+      // 실제 API 호출
+      const updatedReview = await backendApi.dislikeReview(reviewId);
+      console.log("서버 응답 (싫어요):", updatedReview);
+
+      const updateReviewState = (review: TvShowReview) =>
+        review.id === reviewId
+          ? {
+              ...review,
+              isDisliked: updatedReview.isDisliked,
+              dislikeCount: updatedReview.dislikeCount,
+              isLiked: false,
+              likeCount: updatedReview.likeCount,
+            }
+          : review;
+
+      // 리뷰 목록 업데이트
+      setReviews((prevReviews) => prevReviews.map(updateReviewState));
+      setVisibleReviews((prevReviews) => prevReviews.map(updateReviewState));
+      setSearchResults((prevResults) => prevResults.map(updateReviewState));
+
+      toast.success(
+        updatedReview.isDisliked
+          ? "싫어요가 추가되었습니다."
+          : "싫어요가 취소되었습니다."
+      );
+    } catch (error) {
+      console.error("싫어요 처리 실패:", error);
+      toast.error("싫어요 처리에 실패했습니다.");
+    }
+  };
+
+  // 영화 상세 페이지로 이동하는 함수
+  const navigateToTvShowDetail = (tvShowId: number) => {
+    navigate(`/tv/${tvShowId}`);
+  };
+
+  // 스크롤 이벤트 핸들러
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY;
+      const showScrollButton = scrollY > 300; // 스크롤이 300px 이상 내려갔을 때 버튼 표시
+      setShowScrollTop(showScrollButton);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // 최상단으로 스크롤하는 함수
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
+
+  // 다음 페이지 리뷰를 불러오는 함수
+  const fetchMoreReviews = () => {
+    if (!hasMore || loading) return;
+    setPage(page + 1);
+  };
+
+  // 포스터 URL 가져오기 함수
+  const getPosterUrl = (posterPath: string | null, size = "original") => {
+    return backendApi.getPosterUrl(posterPath, size);
+  };
+
+  // 폼 리셋 함수
+  const resetForm = () => {
+    setTitle("");
+    setContent("");
+    setRating(0);
+    setSelectedTvShow(null);
+    setIsSpoiler(false);
+    setSearchResults([]);
+    setTvShowQuery("");
+    setTvShowSearchQuery("");
+    setTvShowSearchResults([]);
+    setIsSearchingTvShow(false);
+  };
+
+  const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
+
   // 리뷰 수정 핸들러
-  const handleEditReview = (review: MovieReview) => {
+  const handleEditReview = (review: TvShowReview) => {
     setEditingReviewId(review.id);
     setTitle(review.title);
     setContent(review.content);
     setRating(review.rating);
     setIsSpoiler(review.isSpoiler);
-    setSelectedMovie({
+    setSelectedTvShow({
       id: review.movieId,
-      title: review.movieTitle,
+      name: review.movieTitle,
       poster_path: review.moviePoster || "",
-      release_date: "", // 영화 개봉일 정보를 빈 문자열로 설정하면 기본 영화 정보로 초기화
+      first_air_date: "", // 기본 날짜로 초기화
+      overview: "",
       vote_average: 0,
     });
     setShowWriteForm(true);
 
-    // 영화 정보 API로 가져오기
-    const fetchMovieDetails = async () => {
+    // TV 쇼 정보 API로 가져오기
+    const fetchTvShowDetails = async () => {
       try {
-        const movieDetails = await backendApi.getMovieDetails(review.movieId);
-        if (movieDetails) {
-          setSelectedMovie({
+        const tvShowDetails = await backendApi.getTvDetails(review.movieId);
+        if (tvShowDetails) {
+          setSelectedTvShow({
             id: review.movieId,
-            title: review.movieTitle,
+            name: review.movieTitle,
             poster_path: review.moviePoster || "",
-            release_date: movieDetails.release_date || "",
-            vote_average: movieDetails.vote_average || 0,
+            first_air_date: tvShowDetails.first_air_date || "",
+            overview: tvShowDetails.overview || "",
+            vote_average: tvShowDetails.vote_average || 0,
           });
         }
       } catch (error) {
-        console.error("영화 정보 가져오기 실패:", error);
+        console.error("TV 쇼 정보 가져오기 실패:", error);
       }
     };
 
-    fetchMovieDetails();
+    fetchTvShowDetails();
   };
 
   // 리뷰 삭제 핸들러
@@ -1147,8 +949,8 @@ const MovieReviewsPage: React.FC = () => {
     }
 
     try {
-      await backendApi.deleteMovieReview(reviewId);
-      // 성공적으로 삭제된 후, 리뷰 목록 새로고침
+      await backendApi.deleteTvReview(reviewId);
+      // 성공적으로 삭제된 후 리뷰 목록 새로고침
       fetchReviews();
       toast.success("리뷰가 삭제되었습니다.");
     } catch (error) {
@@ -1161,6 +963,38 @@ const MovieReviewsPage: React.FC = () => {
   const handleDeleteComment = async (reviewId: number, commentId: number) => {
     if (!isLoggedIn) {
       navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    // 권한 확인을 위해 댓글 정보 가져오기
+    const review = reviews.find((r) => r.id === reviewId);
+    if (!review) {
+      toast.error("리뷰를 찾을 수 없습니다.");
+      return;
+    }
+
+    const comment = review.comments.find((c) => c.id === commentId);
+    if (!comment) {
+      toast.error("댓글을 찾을 수 없습니다.");
+      return;
+    }
+
+    // 권한 체크: 현재 사용자가 댓글 작성자이거나 관리자인지 확인
+    const hasPermission = isCommentAuthor(comment.userId) || isAdmin();
+
+    console.log("댓글 삭제 권한 체크:", {
+      commentId,
+      commentUserId: comment.userId,
+      commentUserIdType: typeof comment.userId,
+      currentUserId: user?.id,
+      currentUserIdType: typeof user?.id,
+      isCommentAuthor: isCommentAuthor(comment.userId),
+      isAdminUser: isAdmin(),
+      hasPermission,
+    });
+
+    if (!hasPermission) {
+      toast.error("댓글 삭제 권한이 없습니다.");
       return;
     }
 
@@ -1232,52 +1066,172 @@ const MovieReviewsPage: React.FC = () => {
     }
   };
 
-  // 스크롤 이벤트 핸들러
+  // 댓글 목록 가져오기 함수
+  const fetchReviewComments = async (reviewId: number) => {
+    try {
+      console.log(`리뷰 ID ${reviewId}의 댓글 목록 요청 시작`);
+      const response = await backendApi.getReviewComments(reviewId);
+      console.log(`리뷰 ID ${reviewId}의 댓글 데이터 매핑 시작:`, response);
+
+      const mappedComments: Comment[] = response.content.map(
+        (comment: CommentResponse) => {
+          // 날짜 데이터 확인 및 처리
+          // 서버 응답에서 날짜 필드 검사 (created_at 또는 createdAt)
+          const dateValue = comment.created_at || comment.createdAt;
+
+          console.log(`댓글 ID ${comment.id}의 날짜 데이터:`, {
+            created_at: comment.created_at,
+            createdAt: comment.createdAt,
+            dateValue: dateValue,
+            commentObj: comment,
+          });
+
+          // 날짜 변환 및 검증
+          const createdAt = convertBackendDateToISO(dateValue);
+          console.log(`댓글 ID ${comment.id}의 최종 날짜 값:`, createdAt);
+
+          // userId 추출 (comment.userId 또는 comment.user.userId 중 하나에서)
+          const userId =
+            comment.userId || (comment.user && comment.user.userId);
+
+          console.log(`댓글 ID ${comment.id}의 사용자 정보:`, {
+            commentUserId: comment.userId,
+            userObjectId: comment.user?.userId,
+            finalUserId: userId,
+          });
+
+          return {
+            id: comment.id,
+            content: comment.content,
+            createdAt: createdAt,
+            username: comment.username,
+            profileImageUrl: comment.user_profile_image_url,
+            likeCount: 0,
+            dislikeCount: 0,
+            userId: userId,
+          };
+        }
+      );
+
+      console.log(`리뷰 ID ${reviewId}의 변환된 댓글:`, mappedComments);
+
+      setReviews((prevReviews) =>
+        prevReviews.map((review) =>
+          review.id === reviewId
+            ? { ...review, comments: mappedComments }
+            : review
+        )
+      );
+
+      setVisibleReviews((prevReviews) =>
+        prevReviews.map((review) =>
+          review.id === reviewId
+            ? { ...review, comments: mappedComments }
+            : review
+        )
+      );
+
+      return mappedComments;
+    } catch (error) {
+      console.error(`리뷰 ID ${reviewId}의 댓글 목록 불러오기 실패:`, error);
+      toast.error("댓글 목록을 불러오는데 실패했습니다.");
+      throw error;
+    }
+  };
+
+  // 무한 스크롤 관련 코드
+  useEffect(() => {
+    fetchReviews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, navigate, location]);
+
+  // 스크롤 이벤트 리스너 추가
   useEffect(() => {
     const handleScroll = () => {
-      const scrollY = window.scrollY;
-      const showScrollButton = scrollY > 300; // 스크롤이 300px 이상 내려갔을 때 버튼 표시
-      setShowScrollTop(showScrollButton);
+      setShowScrollTop(window.scrollY > 500);
     };
 
     window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 최상단으로 스크롤하는 함수
-  const scrollToTop = () => {
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
+  // 댓글 제출 핸들러
+  const handleCommentSubmit = async (reviewId: number) => {
+    if (!isLoggedIn || !commentContent.trim()) {
+      return;
+    }
+
+    try {
+      const newComment = await backendApi.addReviewComment(
+        reviewId,
+        commentContent
+      );
+
+      console.log("새 댓글 생성 응답:", newComment);
+
+      // 백엔드 응답에서 날짜 처리
+      const commentCreatedAt = convertBackendDateToISO(newComment.createdAt);
+      console.log("변환된 댓글 작성 시간:", commentCreatedAt);
+
+      // 현재 리뷰 찾기
+      const updatedReviews = reviews.map((review) => {
+        if (review.id === reviewId) {
+          // 새 댓글을 앞에 추가
+          const updatedComments = [
+            {
+              id: newComment.id,
+              content: newComment.content,
+              createdAt: commentCreatedAt,
+              username: user?.username || "알 수 없음",
+              profileImageUrl: user?.profileImageUrl || null,
+              likeCount: 0,
+              dislikeCount: 0,
+              userId: user?.id || 0,
+            },
+            ...review.comments,
+          ];
+
+          return {
+            ...review,
+            comments: updatedComments,
+            commentCount: (review.commentCount || 0) + 1,
+          };
+        }
+        return review;
+      });
+
+      setReviews(updatedReviews);
+      setVisibleReviews(updatedReviews);
+      setCommentContent("");
+
+      toast.success("댓글이 등록되었습니다.");
+    } catch (error) {
+      console.error("댓글 작성 실패:", error);
+      toast.error("댓글 작성에 실패했습니다.");
+    }
   };
 
-  // 다음 페이지 리뷰를 불러오는 함수
-  const fetchMoreReviews = () => {
-    if (!hasMore || loading) return;
-    setPage(page + 1);
-  };
-
-  // 포스터 URL 가져오기 함수
-  const getPosterUrl = (posterPath: string | null, size = "original") => {
-    return backendApi.getPosterUrl(posterPath, size);
-  };
-
-  // 폼 리셋 함수 추가
-  const resetForm = () => {
-    setTitle("");
-    setContent("");
-    setRating(0);
-    setSelectedMovie(null);
-    setIsSpoiler(false);
-    setSearchResults([]);
-    setMovieQuery("");
-    setMovieSearchQuery("");
-    setMovieSearchResults([]);
-    setIsSearchingMovie(false);
-  };
-
-  const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
+  // 댓글 섹션 확장 시 댓글 데이터와 권한 정보를 로그에 출력
+  useEffect(() => {
+    if (expandedCommentId && reviews.length > 0) {
+      const review = reviews.find((r) => r.id === expandedCommentId);
+      if (review && review.comments) {
+        review.comments.forEach((comment) => {
+          console.log("댓글 권한 정보:", {
+            commentId: comment.id,
+            commentUserId: comment.userId,
+            currentUserId: user?.id,
+            isAdmin: user?.roles?.includes("ROLE_ADMIN"),
+            isAuthor: user?.id === comment.userId,
+            isLoggedIn,
+          });
+        });
+      }
+    }
+  }, [expandedCommentId, reviews, user, isLoggedIn]);
 
   // 로그인 사용자가 댓글 작성자인지 확인하는 함수
   const isCommentAuthor = useCallback(
@@ -1316,100 +1270,27 @@ const MovieReviewsPage: React.FC = () => {
     return isUserAdmin;
   }, [isLoggedIn, user]);
 
-  // 좋아요 처리
-  const handleReviewLike = async (reviewId: number) => {
-    if (!isLoggedIn) {
-      navigate("/login", { state: { from: location } });
-      return;
-    }
-
-    try {
-      // 실제 API 호출
-      const updatedReview = await backendApi.likeReview(reviewId);
-      console.log("서버 응답 (좋아요):", updatedReview);
-
-      const updateReviewState = (review: MovieReview) =>
-        review.id === reviewId
-          ? {
-              ...review,
-              isLiked: updatedReview.isLiked,
-              likeCount: updatedReview.likeCount,
-              isDisliked: false,
-              dislikeCount: updatedReview.dislikeCount,
-            }
-          : review;
-
-      // 리뷰 목록 업데이트
-      setReviews((prevReviews) => prevReviews.map(updateReviewState));
-      setVisibleReviews((prevReviews) => prevReviews.map(updateReviewState));
-      setSearchResults((prevResults) => prevResults.map(updateReviewState));
-
-      toast.success(
-        updatedReview.isLiked
-          ? "좋아요가 추가되었습니다."
-          : "좋아요가 취소되었습니다."
-      );
-    } catch (error) {
-      console.error("좋아요 처리 실패:", error);
-      toast.error("좋아요 처리에 실패했습니다.");
-    }
-  };
-
-  // 싫어요 처리
-  const handleReviewDislike = async (reviewId: number) => {
-    if (!isLoggedIn) {
-      navigate("/login", { state: { from: location } });
-      return;
-    }
-
-    try {
-      // 실제 API 호출
-      const updatedReview = await backendApi.dislikeReview(reviewId);
-      console.log("서버 응답 (싫어요):", updatedReview);
-
-      const updateReviewState = (review: MovieReview) =>
-        review.id === reviewId
-          ? {
-              ...review,
-              isDisliked: updatedReview.isDisliked,
-              dislikeCount: updatedReview.dislikeCount,
-              isLiked: false,
-              likeCount: updatedReview.likeCount,
-            }
-          : review;
-
-      // 리뷰 목록 업데이트
-      setReviews((prevReviews) => prevReviews.map(updateReviewState));
-      setVisibleReviews((prevReviews) => prevReviews.map(updateReviewState));
-      setSearchResults((prevResults) => prevResults.map(updateReviewState));
-
-      toast.success(
-        updatedReview.isDisliked
-          ? "싫어요가 추가되었습니다."
-          : "싫어요가 취소되었습니다."
-      );
-    } catch (error) {
-      console.error("싫어요 처리 실패:", error);
-      toast.error("싫어요 처리에 실패했습니다.");
-    }
-  };
-
-  // 영화 상세 페이지로 이동하는 함수
-  const navigateToMovieDetail = (movieId: number) => {
-    navigate(`/movie/${movieId}`);
-  };
-
   return (
     <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6">TV 쇼 리뷰</h1>
+
       {/* 리뷰 작성 버튼 */}
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">영화 리뷰</h1>
+        <div className="flex items-center gap-2">
+          <h2 className="text-xl font-semibold">전체 리뷰 목록</h2>
+          {totalPages > 0 && (
+            <span className="text-gray-500 text-sm">
+              (총 {reviews.length}개)
+            </span>
+          )}
+        </div>
         {isLoggedIn && (
           <button
             onClick={() => setShowWriteForm(true)}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors flex items-center gap-1"
           >
-            리뷰 작성
+            <FaPen className="text-sm" />
+            <span>리뷰 작성</span>
           </button>
         )}
       </div>
@@ -1563,7 +1444,7 @@ const MovieReviewsPage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  {isLoggedIn && user?.username === review.user.username && (
+                  {isLoggedIn && user?.id === review.user.id && (
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleEditReview(review)}
@@ -1584,18 +1465,18 @@ const MovieReviewsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* 영화 정보와 리뷰 내용 */}
+              {/* TV 쇼 정보와 리뷰 내용 */}
               <div className="flex flex-col sm:flex-row mb-4">
                 <div className="flex flex-col w-full sm:w-32 mb-3 sm:mb-0 sm:mr-4 flex-shrink-0 items-center sm:items-start">
                   {review.moviePoster ? (
                     <div
                       className="cursor-pointer"
-                      onClick={() => navigateToMovieDetail(review.movieId)}
+                      onClick={() => navigateToTvShowDetail(review.movieId)}
                     >
                       <img
                         src={getPosterUrl(review.moviePoster, "w500")}
                         alt={review.movieTitle}
-                        className="w-auto max-w-[150px] sm:w-full max-h-[225px] object-cover rounded mb-2"
+                        className="w-auto max-w-[150px] h-auto max-h-[225px] sm:w-32 sm:h-48 object-cover rounded mb-2"
                         onError={(e) => {
                           console.log(
                             `이미지 로드 실패: ${review.moviePoster}`
@@ -1614,10 +1495,10 @@ const MovieReviewsPage: React.FC = () => {
                   ) : (
                     <div
                       className="cursor-pointer"
-                      onClick={() => navigateToMovieDetail(review.movieId)}
+                      onClick={() => navigateToTvShowDetail(review.movieId)}
                     >
-                      <div className="w-[150px] sm:w-full h-[225px] bg-gray-200 rounded flex items-center justify-center mb-2">
-                        <FaFilm className="text-gray-400 text-4xl" />
+                      <div className="w-[150px] h-[225px] sm:w-32 sm:h-48 bg-gray-200 rounded flex items-center justify-center mb-2">
+                        <FaTv className="text-gray-400 text-4xl" />
                       </div>
                       <p
                         className="text-sm font-semibold text-center w-full truncate max-w-[150px] sm:max-w-full"
@@ -1644,11 +1525,18 @@ const MovieReviewsPage: React.FC = () => {
               {/* 리뷰 액션 버튼 */}
               <div className="flex items-center justify-between border-t pt-3">
                 <div className="text-xs text-gray-500">
-                  {formatDate(
-                    typeof review.createdAt === "object"
-                      ? review.createdAt.toISOString()
-                      : review.createdAt
-                  )}
+                  {(() => {
+                    console.log(
+                      `리뷰 ID ${review.id}의 날짜 표시 전 값:`,
+                      review.createdAt
+                    );
+                    const formattedDate = formatDate(review.createdAt);
+                    console.log(
+                      `리뷰 ID ${review.id}의 날짜 표시 후 값:`,
+                      formattedDate
+                    );
+                    return formattedDate;
+                  })()}
                 </div>
                 <div className="flex items-center space-x-4">
                   <button
@@ -1737,7 +1625,20 @@ const MovieReviewsPage: React.FC = () => {
                               </Link>
                               <div className="flex items-center gap-2">
                                 <span className="text-sm text-gray-500">
-                                  {formatDate(comment.createdAt)}
+                                  {(() => {
+                                    console.log(
+                                      `댓글 ID ${comment.id}의 날짜 표시 전 값:`,
+                                      comment.createdAt
+                                    );
+                                    const formattedDate = formatDate(
+                                      comment.createdAt
+                                    );
+                                    console.log(
+                                      `댓글 ID ${comment.id}의 날짜 표시 후 값:`,
+                                      formattedDate
+                                    );
+                                    return formattedDate;
+                                  })()}
                                 </span>
                                 {isLoggedIn &&
                                   (isCommentAuthor(comment.userId) ||
@@ -1793,6 +1694,19 @@ const MovieReviewsPage: React.FC = () => {
         </div>
       </InfiniteScroll>
 
+      {/* 스포일러 컨텐츠에 대한 CSS 스타일 */}
+      <style>
+        {`
+          .spoiler-content {
+            filter: blur(4px);
+            transition: filter 0.3s ease;
+          }
+          .spoiler-content:hover {
+            filter: blur(0);
+          }
+        `}
+      </style>
+
       {/* 리뷰 작성 모달 */}
       {showWriteForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1814,36 +1728,36 @@ const MovieReviewsPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleSubmitReview} className="space-y-4">
-              {/* 영화 검색 */}
+              {/* TV 쇼 검색 */}
               <div className="mb-4">
                 <label className="block text-gray-700 font-medium mb-2">
-                  영화 선택
+                  TV 쇼 선택
                 </label>
                 <div className="relative">
-                  {selectedMovie ? (
+                  {selectedTvShow ? (
                     <div className="flex items-center space-x-4 p-2 border rounded">
-                      <div className="w-24 h-36 relative">
-                        <img
-                          src={getPosterUrl(selectedMovie.poster_path, "w500")}
-                          alt={selectedMovie.title}
-                          className="w-full h-full object-cover rounded"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src =
-                              "https://via.placeholder.com/1000x1500?text=No+Image";
-                          }}
-                        />
-                      </div>
+                      <img
+                        src={getPosterUrl(selectedTvShow.poster_path, "w500")}
+                        alt={selectedTvShow.name}
+                        className="w-16 h-24 object-cover rounded"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src =
+                            "https://via.placeholder.com/1000x1500?text=No+Image";
+                        }}
+                      />
                       <div className="flex-1">
-                        <h3 className="font-semibold">{selectedMovie.title}</h3>
-                        <p className="text-sm text-gray-500">
-                          {selectedMovie.release_date
-                            ? new Date(selectedMovie.release_date).getFullYear()
+                        <div className="font-medium">{selectedTvShow.name}</div>
+                        <div className="text-sm text-gray-500">
+                          {selectedTvShow.first_air_date
+                            ? new Date(
+                                selectedTvShow.first_air_date
+                              ).getFullYear()
                             : "연도 정보 없음"}
-                        </p>
+                        </div>
                       </div>
                       <button
                         type="button"
-                        onClick={handleClearSelectedMovie}
+                        onClick={handleClearSelectedTvShow}
                         className="text-gray-500 hover:text-gray-700"
                       >
                         <FaTimes />
@@ -1852,26 +1766,26 @@ const MovieReviewsPage: React.FC = () => {
                   ) : (
                     <input
                       type="text"
-                      placeholder="영화 제목 검색"
-                      value={movieSearchQuery}
-                      onChange={handleMovieSearchChange}
-                      onClick={() => setIsSearchingMovie(true)}
+                      placeholder="TV 쇼 제목 검색"
+                      value={tvShowSearchQuery}
+                      onChange={handleTvShowSearchChange}
+                      onClick={() => setIsSearchingTvShow(true)}
                       className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
                     />
                   )}
 
-                  {isSearchingMovie && movieSearchResults.length > 0 && (
+                  {isSearchingTvShow && tvShowSearchResults.length > 0 && (
                     <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border rounded shadow-lg">
-                      {movieSearchResults.map((movie) => (
+                      {tvShowSearchResults.map((tvShow) => (
                         <div
-                          key={movie.id}
+                          key={tvShow.id}
                           className="flex items-center p-2 hover:bg-gray-100 cursor-pointer"
-                          onClick={() => handleSelectMovie(movie)}
+                          onClick={() => handleSelectTvShow(tvShow)}
                         >
-                          {movie.poster_path ? (
+                          {tvShow.poster_path ? (
                             <img
-                              src={getPosterUrl(movie.poster_path, "w342")}
-                              alt={movie.title}
+                              src={getPosterUrl(tvShow.poster_path, "w342")}
+                              alt={tvShow.name}
                               className="w-16 h-24 object-cover rounded mr-2"
                               onError={(e) => {
                                 (e.target as HTMLImageElement).src =
@@ -1880,14 +1794,14 @@ const MovieReviewsPage: React.FC = () => {
                             />
                           ) : (
                             <div className="w-16 h-24 bg-gray-200 rounded mr-2 flex items-center justify-center">
-                              <FaFilm className="text-gray-400" />
+                              <FaTv className="text-gray-400" />
                             </div>
                           )}
                           <div>
-                            <div className="font-medium">{movie.title}</div>
+                            <div className="font-medium">{tvShow.name}</div>
                             <div className="text-sm text-gray-500">
-                              {movie.release_date
-                                ? new Date(movie.release_date).getFullYear()
+                              {tvShow.first_air_date
+                                ? new Date(tvShow.first_air_date).getFullYear()
                                 : "연도 정보 없음"}
                             </div>
                           </div>
@@ -2004,9 +1918,9 @@ const MovieReviewsPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting || !selectedMovie}
+                  disabled={submitting || !selectedTvShow}
                   className={`px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors ${
-                    (submitting || !selectedMovie) &&
+                    (submitting || !selectedTvShow) &&
                     "opacity-50 cursor-not-allowed"
                   }`}
                 >
@@ -2031,21 +1945,8 @@ const MovieReviewsPage: React.FC = () => {
           <FaArrowUp />
         </button>
       )}
-
-      {/* 스포일러 컨텐츠에 대한 CSS 스타일 */}
-      <style>
-        {`
-          .spoiler-content {
-            filter: blur(4px);
-            transition: filter 0.3s ease;
-          }
-          .spoiler-content:hover {
-            filter: blur(0);
-          }
-        `}
-      </style>
     </div>
   );
 };
 
-export default MovieReviewsPage;
+export default TvReviewsPage;

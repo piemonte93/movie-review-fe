@@ -381,9 +381,39 @@ const ProfilePage: React.FC = () => {
     if (!user) return;
     try {
       setLoading(true);
-      const response = await backendApi.getUserReviews(user.username, page);
-      setReviews(response.content);
-      setTotalPages(response.totalPages);
+
+      console.log(`사용자 ${user.username}의 리뷰 데이터 로드 시작`);
+
+      // 영화 리뷰와 TV 쇼 리뷰를 병렬로 가져옴
+      const [movieReviewsResponse, tvReviewsResponse] = await Promise.all([
+        backendApi.getUserReviews(user.username, page),
+        backendApi.getUserTvReviews(user.username, page),
+      ]);
+
+      console.log(
+        `영화 리뷰 ${movieReviewsResponse.content.length}개, TV 쇼 리뷰 ${tvReviewsResponse.content.length}개 로드 완료`
+      );
+
+      // 두 결과를 합침
+      const allReviews = [
+        ...movieReviewsResponse.content,
+        ...tvReviewsResponse.content,
+      ];
+
+      // 날짜 기준으로 정렬 (최신순)
+      const sortedReviews = allReviews.sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      setReviews(sortedReviews);
+
+      // 총 페이지 수는 두 API 중 더 큰 값을 사용
+      const maxTotalPages = Math.max(
+        movieReviewsResponse.totalPages || 0,
+        tvReviewsResponse.totalPages || 0
+      );
+      setTotalPages(maxTotalPages);
     } catch (error) {
       console.error("리뷰 로딩 실패:", error);
       toast.error("리뷰를 불러오는데 실패했습니다.");
@@ -615,7 +645,14 @@ const ProfilePage: React.FC = () => {
               className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
             >
               <div className="flex justify-between items-start mb-2">
-                <h3 className="font-bold text-lg">{review.movieTitle}</h3>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-lg">{review.movieTitle}</h3>
+                    <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
+                      {review.contentType === "tv" ? "TV 쇼" : "영화"}
+                    </span>
+                  </div>
+                </div>
                 <div className="flex items-center">
                   <span className="text-yellow-400 mr-1">★</span>
                   <span className="font-medium">{review.rating}</span>
@@ -632,7 +669,7 @@ const ProfilePage: React.FC = () => {
     );
   };
 
-  // 스크랩 탭 렌더링 수정
+  // 스크랩 탭 렌더링
   const renderScrapsTab = () => {
     console.log("스크랩 탭 렌더링:", { scrapLoading, scrappedMovies });
 
@@ -681,28 +718,46 @@ const ProfilePage: React.FC = () => {
   // 좋아요 탭 렌더링
   const renderLikesTab = () => {
     if (loading) {
-      return <div>로딩 중...</div>;
+      return <div className="text-center py-8">로딩 중...</div>;
     }
 
     if (!reviews || reviews.length === 0) {
-      return <div>좋아요한 리뷰가 없습니다.</div>;
+      return (
+        <div className="text-center py-8 text-gray-500">
+          좋아요한 리뷰가 없습니다.
+        </div>
+      );
     }
 
     return (
-      <div className="grid grid-cols-1 gap-4">
-        {reviews.map((review) => (
-          <div key={review.id} className="bg-white p-4 rounded-lg shadow">
-            <h3 className="text-lg font-semibold">{review.movieTitle}</h3>
-            <div className="flex items-center mt-2">
-              <span className="text-yellow-500">★</span>
-              <span className="ml-1">{review.rating}</span>
+      <div className="mt-4">
+        <div className="space-y-4">
+          {reviews.map((review) => (
+            <div
+              key={review.id}
+              className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-lg">{review.movieTitle}</h3>
+                    <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
+                      {review.contentType === "tv" ? "TV 쇼" : "영화"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center">
+                  <span className="text-yellow-400 mr-1">★</span>
+                  <span className="font-medium">{review.rating}</span>
+                </div>
+              </div>
+              <p className="text-gray-700 mb-3">{review.content}</p>
+              <div className="text-sm text-gray-500">
+                {formatDate(review.createdAt)}
+              </div>
             </div>
-            <p className="mt-2">{review.content}</p>
-            <div className="mt-2 text-sm text-gray-500">
-              {new Date(review.createdAt).toLocaleDateString()}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     );
   };
