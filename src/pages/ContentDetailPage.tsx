@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation } from "react-router-dom";
 import { backendApi } from "../api/backendApi";
-import { FaStar } from "react-icons/fa";
+import { FaStar, FaTimes, FaBookmark } from "react-icons/fa";
 import { ContentDetail, Review, Video } from "../types/content";
 import VideoPlayerModal from "../components/VideoPlayerModal";
 import CastCarousel from "../components/CastCarousel";
 import defaultProfile from "../assets/default-profile.svg";
+import { useAuth } from "../context/AuthContext";
+import { toast } from "react-toastify";
+import { checkContentScrapStatus, toggleContentScrap } from "../api/userApi";
 
 /* // 임시 데이터는 주석 처리
 const mockMovieDetails = {
@@ -74,6 +77,7 @@ const mockVideos = [
 */
 
 const ContentDetailPage = () => {
+  const { isLoggedIn, user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const [content, setContent] = useState<ContentDetail | null>(null);
@@ -86,6 +90,17 @@ const ContentDetailPage = () => {
   const [reviewImageErrors, setReviewImageErrors] = useState<{
     [key: number]: boolean;
   }>({});
+  const [isScraped, setIsScraped] = useState<boolean>(false);
+  const [scrappingInProgress, setScrappingInProgress] =
+    useState<boolean>(false);
+
+  // 리뷰 작성 모달 관련 상태
+  const [showWriteForm, setShowWriteForm] = useState(false);
+  const [title, setTitle] = useState("");
+  const [reviewContent, setReviewContent] = useState("");
+  const [rating, setRating] = useState<number>(0);
+  const [isSpoiler, setIsSpoiler] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
 
   // URL 경로에서 미디어 타입 결정 (tv 또는 movie)
   const mediaType = location.pathname.includes("/tv/") ? "tv" : "movie";
@@ -106,6 +121,146 @@ const ContentDetailPage = () => {
 
   const handleReviewImageError = (reviewId: number) => {
     setReviewImageErrors((prev) => ({ ...prev, [reviewId]: true }));
+  };
+
+  // 리뷰 작성 제출 핸들러
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!isLoggedIn) {
+      toast.error("리뷰를 작성하려면 로그인이 필요합니다.");
+      return;
+    }
+
+    if (!content) {
+      toast.error("컨텐츠 정보를 찾을 수 없습니다.");
+      return;
+    }
+
+    if (!title.trim() || !reviewContent.trim()) {
+      toast.error("제목과 내용을 모두 입력해주세요.");
+      return;
+    }
+
+    if (rating === 0) {
+      toast.error("별점을 선택해주세요.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      // 해당 영화에 대한 리뷰가 이미 존재하는지 사전 확인
+      try {
+        const hasExistingReview = await backendApi.checkUserReviewForMovie(
+          parseInt(id!)
+        );
+
+        if (hasExistingReview) {
+          toast.error("이미 이 영화에 대한 리뷰를 작성하셨습니다.");
+          setSubmitting(false);
+          return;
+        }
+      } catch (checkError) {
+        console.error("리뷰 존재 여부 확인 실패:", checkError);
+      }
+
+      const reviewData = {
+        movie_id: parseInt(id!),
+        movie_title: content.title || content.name || "",
+        movie_poster_path: content.posterPath || content.poster_path || "",
+        title: title.trim(),
+        content: reviewContent.trim(),
+        rating: rating,
+        is_spoiler: isSpoiler,
+      };
+
+      console.log("리뷰 작성 요청 데이터:", reviewData);
+      const response = await backendApi.createMovieReview(reviewData);
+      console.log("리뷰 생성 성공:", response);
+
+      toast.success("리뷰가 성공적으로 등록되었습니다.");
+      resetForm();
+
+      // 리뷰 목록 새로고침
+      if (mediaType === "movie") {
+        const reviewsResponse = await backendApi.getMovieReviews(parseInt(id!));
+        setReviews(reviewsResponse.results || []);
+      }
+    } catch (error) {
+      console.error("리뷰 작성 실패:", error);
+      toast.error("리뷰 작성에 실패했습니다. 다시 시도해주세요.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 폼 초기화
+  const resetForm = () => {
+    setTitle("");
+    setReviewContent("");
+    setRating(0);
+    setIsSpoiler(false);
+    setShowWriteForm(false);
+  };
+
+  // 별점 클릭 핸들러
+  const handleRatingClick = (index: number, isHalf: boolean) => {
+    // isHalf가 true이면 0.5 단위, false면 1.0 단위로 설정
+    const newRating = isHalf ? index + 0.5 : index + 1;
+    setRating(newRating);
+  };
+
+  // 스크랩 상태 확인
+  useEffect(() => {
+    const checkScrapStatus = async () => {
+      if (isLoggedIn && id) {
+        try {
+          const contentId = parseInt(id);
+          const mediaType = isTV ? "tv" : "movie";
+          const scrapStatus = await checkContentScrapStatus(
+            contentId,
+            mediaType
+          );
+          setIsScraped(scrapStatus);
+        } catch (error) {
+          console.error("스크랩 상태 확인 실패:", error);
+        }
+      }
+    };
+
+    if (content) {
+      checkScrapStatus();
+    }
+  }, [isLoggedIn, id, content, isTV]);
+
+  // 스크랩 토글 핸들러
+  const handleToggleScrap = async () => {
+    if (!isLoggedIn) {
+      toast.info("스크랩 기능을 사용하려면 로그인이 필요합니다.");
+      return;
+    }
+
+    if (!id) return;
+
+    try {
+      setScrappingInProgress(true);
+      const contentId = parseInt(id);
+      const mediaType = isTV ? "tv" : "movie";
+      const response = await toggleContentScrap(contentId, mediaType);
+      setIsScraped(response.isScraped);
+
+      toast.success(
+        response.isScraped
+          ? "콘텐츠가 스크랩 되었습니다. 마이페이지에서 확인하세요."
+          : "스크랩이 취소되었습니다."
+      );
+    } catch (error) {
+      console.error("스크랩 토글 실패:", error);
+      toast.error("스크랩 처리 중 오류가 발생했습니다.");
+    } finally {
+      setScrappingInProgress(false);
+    }
   };
 
   useEffect(() => {
@@ -330,13 +485,194 @@ const ContentDetailPage = () => {
                   </div>
                 )}
 
-              {/* 리뷰 쓰기 버튼 */}
-              <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
-                리뷰 쓰기
-              </button>
+              {/* 안에 버튼 부분 수정: 리뷰 쓰기 버튼 옆에 스크랩 버튼 추가 */}
+              <div className="flex flex-wrap gap-2 mt-4">
+                {!isTV && isLoggedIn && (
+                  <button
+                    onClick={() => setShowWriteForm(true)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+                  >
+                    리뷰 쓰기
+                  </button>
+                )}
+                {isLoggedIn && (
+                  <button
+                    onClick={handleToggleScrap}
+                    disabled={scrappingInProgress}
+                    className={`flex items-center px-4 py-2 rounded transition ${
+                      isScraped
+                        ? "bg-yellow-500 text-white hover:bg-yellow-600"
+                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    }`}
+                  >
+                    <FaBookmark className="mr-1" />
+                    {isScraped ? "스크랩됨" : "스크랩하기"}
+                  </button>
+                )}
+                {!isLoggedIn && (
+                  <Link
+                    to="/login"
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+                  >
+                    로그인하고 리뷰 쓰기
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
         </div>
+
+        {/* 리뷰 작성 모달 */}
+        {showWriteForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold">리뷰 작성</h2>
+                <button
+                  onClick={() => setShowWriteForm(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <FaTimes />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitReview} className="space-y-4">
+                {/* 영화 정보 표시 */}
+                <div className="mb-4">
+                  <label className="block text-gray-700 font-medium mb-2">
+                    영화
+                  </label>
+                  <div className="flex items-center space-x-4 p-2 border rounded">
+                    {(content.posterPath || content.poster_path) && (
+                      <img
+                        src={`https://image.tmdb.org/t/p/w92${content.posterPath || content.poster_path}`}
+                        alt={content.title || content.name || ""}
+                        className="w-16 h-24 object-cover rounded"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <div className="font-medium">
+                        {content.title || content.name}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {content.releaseDate || content.release_date
+                          ? new Date(
+                              content.releaseDate || content.release_date || ""
+                            ).getFullYear()
+                          : "연도 정보 없음"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 리뷰 제목 */}
+                <div>
+                  <label className="block text-gray-700 font-medium mb-2">
+                    제목
+                  </label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                {/* 별점 */}
+                <div>
+                  <label className="block text-gray-700 font-medium mb-2">
+                    별점
+                  </label>
+                  <div className="flex items-center space-x-1">
+                    {[0, 1, 2, 3, 4].map((index) => (
+                      <div key={index} className="text-2xl flex">
+                        {/* 별 왼쪽 부분 (0.5 점) */}
+                        <div
+                          onClick={() => handleRatingClick(index, true)}
+                          className="w-[0.5em] h-[1em] overflow-hidden cursor-pointer"
+                          title={`${index + 0.5}점`}
+                        >
+                          {index + 0.5 <= rating ? (
+                            <div className="text-yellow-400 w-[1em]">
+                              <FaStar />
+                            </div>
+                          ) : (
+                            <div className="text-gray-300 w-[1em]">
+                              <FaStar />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 별 오른쪽 부분 (1.0 점) */}
+                        <div
+                          onClick={() => handleRatingClick(index, false)}
+                          className="w-[0.5em] h-[1em] overflow-hidden cursor-pointer"
+                          title={`${index + 1}점`}
+                        >
+                          {index + 1 <= rating ? (
+                            <div className="text-yellow-400 w-[1em] ml-[-0.5em]">
+                              <FaStar />
+                            </div>
+                          ) : (
+                            <div className="text-gray-300 w-[1em] ml-[-0.5em]">
+                              <FaStar />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <span className="ml-2 text-gray-700">{rating}점</span>
+                  </div>
+                </div>
+
+                {/* 리뷰 내용 */}
+                <div>
+                  <label className="block text-gray-700 font-medium mb-2">
+                    내용
+                  </label>
+                  <textarea
+                    value={reviewContent}
+                    onChange={(e) => setReviewContent(e.target.value)}
+                    rows={6}
+                    className="w-full p-2 border rounded focus:outline-none focus:border-blue-500"
+                    required
+                  ></textarea>
+                </div>
+
+                {/* 스포일러 여부 */}
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="isSpoiler"
+                    checked={isSpoiler}
+                    onChange={(e) => setIsSpoiler(e.target.checked)}
+                    className="mr-2"
+                  />
+                  <label htmlFor="isSpoiler">스포일러 포함</label>
+                </div>
+
+                {/* 제출 버튼 */}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowWriteForm(false)}
+                    className="mr-2 px-4 py-2 border rounded"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-400"
+                  >
+                    {submitting ? "제출 중..." : "리뷰 등록"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* 출연진 섹션 */}
         {cast.length > 0 && <CastCarousel cast={cast} />}
@@ -353,7 +689,8 @@ const ContentDetailPage = () => {
               reviews.slice(0, 4).map((review) => (
                 <div key={review.id} className="border rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    {!reviewImageErrors[review.id] && review.avatar_path ? (
+                    {!reviewImageErrors[Number(review.id)] &&
+                    review.avatar_path ? (
                       <img
                         src={
                           review.avatar_path.startsWith("/http")
@@ -362,7 +699,9 @@ const ContentDetailPage = () => {
                         }
                         alt={review.author}
                         className="w-8 h-8 rounded-full object-cover"
-                        onError={() => handleReviewImageError(review.id)}
+                        onError={() =>
+                          handleReviewImageError(Number(review.id))
+                        }
                       />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center">

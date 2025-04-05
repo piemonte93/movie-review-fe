@@ -56,12 +56,12 @@ apiClient.interceptors.response.use(
     // OAuth 관련 경로 확인 (로그아웃 처리 제외 대상)
     const isOAuthPath =
       requestUrl.includes("/oauth2/") ||
-      requestUrl.includes("/auth/oauth") ||
-      requestUrl.includes("/check-username") ||
-      requestUrl.includes("/update-username");
+      requestUrl.includes("/api/auth/oauth") ||
+      requestUrl.includes("/api/auth/check-username") ||
+      requestUrl.includes("/api/auth/update-username");
 
     // 로그인 요청인지 확인 (로그아웃 처리 제외 대상)
-    const isLoginPath = requestUrl.includes("/auth/login");
+    const isLoginPath = requestUrl.includes("/api/auth/login");
 
     if (
       error.response &&
@@ -228,7 +228,7 @@ export const authApi = {
   requestPasswordReset: async (email: string): Promise<MessageResponse> => {
     try {
       const response = await apiClient.post<MessageResponse>(
-        "/auth/forgot-password",
+        "/api/auth/forgot-password",
         { email }
       );
       return response.data;
@@ -242,7 +242,7 @@ export const authApi = {
   verifyCode: async (email: string, code: string): Promise<TokenResponse> => {
     try {
       const response = await apiClient.post<TokenResponse>(
-        "/auth/verify-code",
+        "/api/auth/verify-code",
         { email, code }
       );
       return response.data;
@@ -268,7 +268,7 @@ export const authApi = {
 
       // 요청 데이터를 직접 지정하여 전송
       const response = await apiClient.post<MessageResponse>(
-        "/auth/reset-password",
+        "/api/auth/reset-password",
         JSON.stringify({
           token: token,
           newPassword: newPassword,
@@ -289,7 +289,7 @@ export const authApi = {
   // 구글 OAuth 로그인 URL 생성 및 리다이렉트
   googleLogin: () => {
     // OAuth 관련 설정
-    const GOOGLE_AUTH_URL = `${BASE_URL}/auth/oauth2/authorize/google`;
+    const GOOGLE_AUTH_URL = `${BASE_URL}/api/auth/oauth2/authorize/google`;
 
     // 리다이렉트 URL - 하드코딩으로 정확한 URI 설정
     const REDIRECT_URI = "http://localhost:5173/oauth2/redirect";
@@ -333,11 +333,14 @@ export const authApi = {
 
       // 토큰으로 사용자 정보 요청
       console.log("사용자 정보 요청 시작...");
-      const response = await apiClient.get<AuthResponse>("/auth/user-info", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiClient.get<AuthResponse>(
+        "/api/auth/user-info",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
       console.log("사용자 정보 응답:", response.data);
 
       // 응답에서 필요한 정보 추출 및 검증
@@ -433,7 +436,7 @@ export const authApi = {
   checkUsername: async (username: string): Promise<boolean> => {
     try {
       const response = await apiClient.get<{ available: boolean }>(
-        `/auth/check-username?username=${encodeURIComponent(username)}`
+        `/api/auth/check-username?username=${encodeURIComponent(username)}`
       );
       return response.data.available;
     } catch (error) {
@@ -446,7 +449,7 @@ export const authApi = {
   updateUsername: async (username: string): Promise<AuthResponse> => {
     try {
       const response = await apiClient.post<AuthResponse>(
-        "/auth/update-username",
+        "/api/auth/update-username",
         { username }
       );
 
@@ -472,7 +475,7 @@ export const authApi = {
   cancelOAuthSignup: async (): Promise<MessageResponse> => {
     try {
       const response = await apiClient.delete<MessageResponse>(
-        "/auth/cancel-oauth-signup"
+        "/api/auth/cancel-oauth-signup"
       );
 
       // 로컬 스토리지 초기화
@@ -494,7 +497,7 @@ export const authApi = {
   checkEmail: async (email: string): Promise<boolean> => {
     try {
       const response = await apiClient.get<{ available: boolean }>(
-        `/auth/check-email?email=${encodeURIComponent(email)}`
+        `/api/auth/check-email?email=${encodeURIComponent(email)}`
       );
       return response.data.available;
     } catch (error) {
@@ -507,7 +510,7 @@ export const authApi = {
   sendVerificationCode: async (email: string): Promise<MessageResponse> => {
     try {
       const response = await apiClient.post<MessageResponse>(
-        "/auth/send-verification-code",
+        "/api/auth/send-verification-code",
         { email }
       );
       return response.data;
@@ -524,7 +527,7 @@ export const authApi = {
   ): Promise<MessageResponse> => {
     try {
       const response = await apiClient.post<MessageResponse>(
-        "/auth/verify-email",
+        "/api/auth/verify-email",
         { email, code }
       );
       return response.data;

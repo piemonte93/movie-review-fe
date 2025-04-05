@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   FaCamera,
@@ -34,13 +34,14 @@ import FollowModal from "../components/FollowModal";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { formatDate } from "../utils/dateUtils";
 import { backendApi, Post, MovieReview } from "../api/backendApi";
-import { toast } from "react-toastify";
+import { toast } from "react-hot-toast";
 
 // 프로필 페이지 컴포넌트
 const ProfilePage: React.FC = () => {
   const { user, isLoggedIn, updateUserInfo } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const [posts, setPosts] = useState<Post[]>([]);
   const [reviews, setReviews] = useState<MovieReview[]>([]);
   const [totalPages, setTotalPages] = useState(0);
@@ -66,6 +67,22 @@ const ProfilePage: React.FC = () => {
   const [showFollowingModal, setShowFollowingModal] = useState<boolean>(false);
   const [followersData, setFollowersData] = useState<any[]>([]);
   const [followingData, setFollowingData] = useState<any[]>([]);
+
+  // 상태 추가
+  const [scrapLoading, setScrapLoading] = useState(false);
+  const [scrapError, setScrapError] = useState(false);
+
+  // 현재 경로 디버깅을 위한 로그 - 이전 경로 비교 추가
+  const [prevPathname, setPrevPathname] = useState(location.pathname);
+
+  useEffect(() => {
+    // 경로가 실제로 변경된 경우에만 로그 출력
+    if (prevPathname !== location.pathname) {
+      console.log("Current pathname changed:", location.pathname);
+      console.log("Current location key:", location.key);
+      setPrevPathname(location.pathname);
+    }
+  }, [location, prevPathname]);
 
   useEffect(() => {
     // 사용자 데이터 로드
@@ -375,11 +392,48 @@ const ProfilePage: React.FC = () => {
     }
   };
 
+  // 스크랩 데이터 로드 함수 추가
+  const loadScraps = useCallback(async () => {
+    try {
+      console.log("스크랩 데이터 로드 시작");
+      setScrapLoading(true);
+      setScrapError(false);
+
+      // 타임아웃 설정
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error("스크랩 데이터 로드 타임아웃")),
+          5000
+        );
+      });
+
+      // 실제 API 호출
+      const dataPromise = getUserScraps();
+
+      // 경쟁 상태로 둘 중 먼저 완료되는 것 처리
+      const scraps = await Promise.race([dataPromise, timeoutPromise]);
+
+      console.log("스크랩 데이터 로드 완료:", scraps);
+      setScrappedMovies(scraps);
+    } catch (error) {
+      console.error("스크랩 데이터 로드 실패:", error);
+      setScrapError(true);
+    } finally {
+      setScrapLoading(false);
+    }
+  }, []);
+
+  // 탭 변경 처리 수정
   useEffect(() => {
+    console.log("활성화된 탭 변경:", activeTab);
+
     if (activeTab === "reviews" && user) {
       fetchReviews(0);
+    } else if (activeTab === "scraps") {
+      console.log("스크랩 탭 활성화됨");
+      loadScraps();
     }
-  }, [activeTab, user]);
+  }, [activeTab, user, loadScraps]);
 
   const handleLoadMore = () => {
     if (activeTab === "posts") {
@@ -578,10 +632,33 @@ const ProfilePage: React.FC = () => {
     );
   };
 
-  // 스크랩 탭 렌더링
+  // 스크랩 탭 렌더링 수정
   const renderScrapsTab = () => {
-    if (loading) {
-      return <div className="text-center py-8">로딩 중...</div>;
+    console.log("스크랩 탭 렌더링:", { scrapLoading, scrappedMovies });
+
+    if (scrapLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center py-8">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-gray-600">스크랩 목록을 불러오는 중입니다...</p>
+        </div>
+      );
+    }
+
+    if (scrapError) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          <p className="mb-2">
+            스크랩 데이터를 불러오는 중 오류가 발생했습니다.
+          </p>
+          <button
+            onClick={loadScraps}
+            className="text-blue-500 hover:underline"
+          >
+            다시 시도
+          </button>
+        </div>
+      );
     }
 
     if (!scrappedMovies || scrappedMovies.length === 0) {
