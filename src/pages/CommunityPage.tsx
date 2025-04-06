@@ -1279,7 +1279,7 @@ const CommunityPage: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="text-lg font-semibold">{post.title}</h3>
-                        {isLoggedIn && user?.id === post.user.id && (
+                        {isLoggedIn && user?.id === post.user.id && !isUserBlocked() && (
                           <div className="flex gap-2">
                             <button
                               onClick={() => handleEditPost(post)}
@@ -1419,7 +1419,7 @@ const CommunityPage: React.FC = () => {
                                     </button>
                                   )}
                                 </div>
-                                {isLoggedIn && user?.id === comment.user.id && (
+                                {isLoggedIn && user?.id === comment.user.id && !isUserBlocked() && (
                                   <button
                                     onClick={() =>
                                       handleDeleteComment(post.id, comment.id)
@@ -1606,7 +1606,7 @@ const CommunityPage: React.FC = () => {
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="text-lg font-semibold">{post.title}</h3>
-                      {isLoggedIn && user?.id === post.user.id && (
+                      {isLoggedIn && user?.id === post.user.id && !isUserBlocked() && (
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleEditPost(post)}
@@ -1746,7 +1746,7 @@ const CommunityPage: React.FC = () => {
                                   </button>
                                 )}
                               </div>
-                              {isLoggedIn && user?.id === comment.user.id && (
+                              {isLoggedIn && user?.id === comment.user.id && !isUserBlocked() && (
                                 <button
                                   onClick={() =>
                                     handleDeleteComment(post.id, comment.id)

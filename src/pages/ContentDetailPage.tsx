@@ -77,7 +77,7 @@ const mockVideos = [
 */
 
 const ContentDetailPage = () => {
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, user, isUserBlocked } = useAuth();
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const [content, setContent] = useState<ContentDetail | null>(null);
@@ -487,7 +487,7 @@ const ContentDetailPage = () => {
 
               {/* 안에 버튼 부분 수정: 리뷰 쓰기 버튼 옆에 스크랩 버튼 추가 */}
               <div className="flex flex-wrap gap-2 mt-4">
-                {!isTV && isLoggedIn && (
+                {!isTV && isLoggedIn && !isUserBlocked() && (
                   <button
                     onClick={() => setShowWriteForm(true)}
                     className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"

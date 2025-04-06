@@ -1687,7 +1687,7 @@ const MovieReviewsPage: React.FC = () => {
                   </div>
                   {isLoggedIn && (user?.id === review.user.id || user?.roles?.includes("ROLE_ADMIN") || false) && (
                     <div className="flex space-x-2">
-                      {user?.id === review.user.id && (
+                      {user?.id === review.user.id && !isUserBlocked() && (
                         <button
                           onClick={() => handleEditReview(review)}
                           className="text-gray-500 hover:text-blue-500"
@@ -1696,13 +1696,15 @@ const MovieReviewsPage: React.FC = () => {
                           <FaEdit />
                         </button>
                       )}
-                      <button
-                        onClick={() => handleDeleteReview(review.id)}
-                        className="text-gray-500 hover:text-red-500"
-                        title="삭제"
-                      >
-                        <FaTrash />
-                      </button>
+                      {(user?.id === review.user.id && !isUserBlocked() || user?.roles?.includes("ROLE_ADMIN") || false) && (
+                        <button
+                          onClick={() => handleDeleteReview(review.id)}
+                          className="text-gray-500 hover:text-red-500"
+                          title="삭제"
+                        >
+                          <FaTrash />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1892,7 +1894,7 @@ const MovieReviewsPage: React.FC = () => {
                                       </button>
                                     )}
                                   </div>
-                                  {isLoggedIn && (user?.id === comment.userId || user?.roles?.includes("ROLE_ADMIN") || false) && (
+                                  {isLoggedIn && ((user?.id === comment.userId && !isUserBlocked()) || user?.roles?.includes("ROLE_ADMIN") || false) && (
                                     <button
                                       onClick={() => handleDeleteComment(review.id, comment.id)}
                                       className="text-xs text-gray-500 hover:text-red-500"

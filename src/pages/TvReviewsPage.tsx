@@ -1531,20 +1531,24 @@ const TvReviewsPage: React.FC = () => {
                   </div>
                   {isLoggedIn && user?.id === review.user.id && (
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEditReview(review)}
-                        className="text-gray-600 hover:text-blue-600"
-                        title="수정"
-                      >
-                        <FaEdit />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteReview(review.id)}
-                        className="text-gray-600 hover:text-red-600"
-                        title="삭제"
-                      >
-                        <FaTrash />
-                      </button>
+                      {!isUserBlocked() && (
+                        <>
+                          <button
+                            onClick={() => handleEditReview(review)}
+                            className="text-gray-600 hover:text-blue-600"
+                            title="수정"
+                          >
+                            <FaEdit />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteReview(review.id)}
+                            className="text-gray-600 hover:text-red-600"
+                            title="삭제"
+                          >
+                            <FaTrash />
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1745,7 +1749,7 @@ const TvReviewsPage: React.FC = () => {
                                 </span>
                                 {isLoggedIn &&
                                   (isCommentAuthor(comment.userId) ||
-                                    isAdmin()) && (
+                                    isAdmin()) && !isUserBlocked() && (
                                     <button
                                       onClick={() =>
                                         handleDeleteComment(
