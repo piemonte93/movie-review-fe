@@ -1682,9 +1682,7 @@ export const backendApi = {
           if (errorMessage.includes("리뷰 작성 권한이 없습니다")) {
             throw new Error("리뷰 작성 권한이 없습니다.");
           } else if (
-            errorMessage.includes(
-              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다"
-            )
+            errorMessage.includes("이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다")
           ) {
             throw new Error(
               "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
@@ -1916,7 +1914,7 @@ export const backendApi = {
   // TV 쇼 리뷰 삭제
   deleteTvReview: async (reviewId: number): Promise<void> => {
     try {
-      const response = await apiClient.delete(`/api/tvreviews/${reviewId}`);
+      const response = await apiClient.delete(`/api/tv-reviews/${reviewId}`);
       console.log("TV 쇼 리뷰 삭제 성공:", response.status);
     } catch (error) {
       console.error("TV 쇼 리뷰 삭제 실패:", error);

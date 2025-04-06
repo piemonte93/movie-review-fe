@@ -15,8 +15,6 @@ import {
   FaEdit,
   FaTrash,
   FaAt,
-  FaBell,
-  FaExclamationTriangle,
 } from "react-icons/fa";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
@@ -42,7 +40,7 @@ interface Notification {
 const CommunityPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLoggedIn, user, isUserBlocked } = useAuth();
+  const { isLoggedIn, user, isUserBlocked, isAdminOrModerator } = useAuth();
   const { addNotification } = useNotifications();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -86,28 +84,6 @@ const CommunityPage: React.FC = () => {
 
   // 게시글 수정 상태 추가
   const [editingPostId, setEditingPostId] = useState<number | null>(null);
-
-  // 신고 관련 상태 추가
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [reportContent, setReportContent] = useState("");
-  const [reportTargetId, setReportTargetId] = useState<number | null>(null);
-  const [reportTargetType, setReportTargetType] = useState<"comment" | "post" | null>(null);
-
-  // 글쓰기 버튼 클릭 처리 핸들러
-  const handleWriteButtonClick = async () => {
-    try {
-      if (isUserBlocked()) {
-        toast.error("현재 글쓰기 기능이 제한되었습니다. 관리자에게 문의해주세요.");
-        return;
-      }
-      
-      // 정상 상태인 경우 글쓰기 폼 표시
-      setShowWriteForm(true);
-    } catch (error) {
-      console.error("사용자 상태 확인 실패:", error);
-      toast.error("사용자 정보를 확인할 수 없습니다. 다시 시도해주세요.");
-    }
-  };
 
   // URL 쿼리 파라미터 확인하여 특정 게시글 표시
   useEffect(() => {
@@ -318,50 +294,105 @@ const CommunityPage: React.FC = () => {
     setMentionedUsers(post.mentions || []);
   };
 
-  // 게시글 삭제 처리
+  // Admin 또는 Moderator인지 확인하는 함수
+  const isAdmin = () => {
+    return isAdminOrModerator();
+  };
+
+  // 게시글 삭제 함수
   const handleDeletePost = async (postId: number) => {
-    if (!window.confirm("게시글을 삭제하시겠습니까?")) {
+    if (!isLoggedIn) {
+      toast.error("로그인이 필요합니다.");
+      return;
+    }
+
+    // 권한 확인: 자신의 게시글이거나 관리자/모더레이터 권한이 있는 경우
+    const post = posts.find((p) => p.id === postId);
+    if (!post) {
+      toast.error("게시글을 찾을 수 없습니다.");
+      return;
+    }
+
+    const isAuthor = user?.id === post.user.id;
+    if (!isAuthor && !isAdmin()) {
+      toast.error("삭제 권한이 없습니다.");
+      return;
+    }
+
+    if (!window.confirm("정말 삭제하시겠습니까?")) {
       return;
     }
 
     try {
       await backendApi.deletePost(postId);
-      // 성공 후 UI에서 제거
-      setPosts(posts.filter((post) => post.id !== postId));
-      setVisiblePosts(visiblePosts.filter((post) => post.id !== postId));
       toast.success("게시글이 삭제되었습니다.");
+      
+      // 현재 보고 있는 게시글 목록에서 삭제된 게시글 제거
+      setPosts(posts.filter((p) => p.id !== postId));
+      setVisiblePosts(visiblePosts.filter((p) => p.id !== postId));
     } catch (error) {
       console.error("게시글 삭제 실패:", error);
       toast.error("게시글 삭제에 실패했습니다.");
     }
   };
 
-  // 댓글 삭제 처리
+  // 댓글 삭제 함수
   const handleDeleteComment = async (postId: number, commentId: number) => {
-    if (!window.confirm("댓글을 삭제하시겠습니까?")) {
+    if (!isLoggedIn) {
+      toast.error("로그인이 필요합니다.");
+      return;
+    }
+
+    // 삭제할 댓글이 포함된 게시물 찾기
+    const post = posts.find((p) => p.id === postId);
+    if (!post || !post.comments) {
+      toast.error("게시글 또는 댓글을 찾을 수 없습니다.");
+      return;
+    }
+
+    // 삭제할 댓글 찾기
+    const comment = post.comments.find((c) => c.id === commentId);
+    if (!comment) {
+      toast.error("댓글을 찾을 수 없습니다.");
+      return;
+    }
+
+    // 권한 확인: 자신의 댓글이거나 관리자/모더레이터 권한이 있는 경우
+    const isCommentAuthor = user?.id === comment.user.id;
+    if (!isCommentAuthor && !isAdmin()) {
+      toast.error("삭제 권한이 없습니다.");
       return;
     }
 
     try {
       await backendApi.deleteComment(commentId);
-
-      // 성공 후 UI 업데이트
-      const updatedPosts = posts.map((post) => {
-        if (post.id === postId) {
-          return {
-            ...post,
-            comments: post.comments.filter(
-              (comment) => comment.id !== commentId
-            ),
-            commentCount: Math.max(0, post.commentCount - 1),
-          };
-        }
-        return post;
-      });
-
-      setPosts(updatedPosts);
-      setVisiblePosts(updatedPosts);
       toast.success("댓글이 삭제되었습니다.");
+      
+      // UI 업데이트 - 삭제된 댓글 제거
+      setPosts(
+        posts.map((p) => {
+          if (p.id === postId) {
+            return {
+              ...p,
+              comments: p.comments.filter((c) => c.id !== commentId),
+            };
+          }
+          return p;
+        })
+      );
+      
+      // visiblePosts도 함께 업데이트 추가
+      setVisiblePosts(
+        visiblePosts.map((p) => {
+          if (p.id === postId) {
+            return {
+              ...p,
+              comments: p.comments.filter((c) => c.id !== commentId),
+            };
+          }
+          return p;
+        })
+      );
     } catch (error) {
       console.error("댓글 삭제 실패:", error);
       toast.error("댓글 삭제에 실패했습니다.");
@@ -483,21 +514,7 @@ const CommunityPage: React.FC = () => {
 
   // 댓글 작성 처리
   const handleCommentSubmit = async (postId: number) => {
-    if (!isLoggedIn) {
-      navigate("/login", { state: { from: location } });
-      return;
-    }
-
-    if (!newComment.trim()) {
-      toast.error("댓글 내용을 입력해주세요.");
-      return;
-    }
-    
-    // 차단된 사용자인 경우 댓글 작성 불가
-    if (isUserBlocked()) {
-      toast.error("현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.");
-      return;
-    }
+    if (!newComment.trim()) return;
 
     try {
       const response = await backendApi.createComment(postId, newComment);
@@ -520,6 +537,15 @@ const CommunityPage: React.FC = () => {
 
       // 성공적으로 댓글을 추가한 후 현재 게시글 목록을 업데이트
       setPosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId
+            ? { ...post, comments: [...post.comments, newCommentWithDate] }
+            : post
+        )
+      );
+      
+      // visiblePosts도 함께 업데이트 추가
+      setVisiblePosts((prevPosts) =>
         prevPosts.map((post) =>
           post.id === postId
             ? { ...post, comments: [...post.comments, newCommentWithDate] }
@@ -879,43 +905,6 @@ const CommunityPage: React.FC = () => {
     }
   };
 
-  // 신고 모달 열기 함수
-  const openReportModal = (id: number, type: "comment" | "post") => {
-    setReportTargetId(id);
-    setReportTargetType(type);
-    setReportContent("");
-    setShowReportModal(true);
-  };
-
-  // 신고 제출 처리 함수
-  const handleReportSubmit = async () => {
-    if (!reportContent.trim()) {
-      toast.error("신고 내용을 입력해주세요.");
-      return;
-    }
-
-    try {
-      // targetUserId 추가
-      await backendApi.createReport({
-        targetId: reportTargetId!,
-        targetUserId: reportTargetType === "post" 
-          ? posts.find(p => p.id === reportTargetId)?.user.id || 0
-          : posts.flatMap(p => p.comments).find(c => c.id === reportTargetId)?.user.id || 0,
-        reportType: reportTargetType,
-        content: reportContent,
-      });
-      
-      toast.success("신고가 접수되었습니다.");
-      setShowReportModal(false);
-      setReportContent("");
-      setReportTargetId(null);
-      setReportTargetType(null);
-    } catch (error) {
-      console.error("신고 접수 실패:", error);
-      toast.error("신고 접수에 실패했습니다. 다시 시도해주세요.");
-    }
-  };
-
   return (
     <div className="container mx-auto px-4 py-2">
       {/* 상단 검색 및 버튼 영역 - 고정 헤더로 변경 */}
@@ -935,7 +924,11 @@ const CommunityPage: React.FC = () => {
               <FaSearch className="text-gray-600" />
             </button>
             <button
-              onClick={handleWriteButtonClick}
+              onClick={() => {
+                setShowWriteForm(true);
+                setShowSearch(false);
+                setShowSearchModal(false);
+              }}
               className="rounded-full p-2 hover:bg-gray-100"
               title="글 작성하기"
             >
@@ -1279,8 +1272,8 @@ const CommunityPage: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="text-lg font-semibold">{post.title}</h3>
-                        {isLoggedIn && user?.id === post.user.id && !isUserBlocked() && (
-                          <div className="flex gap-2">
+                        <div className="flex gap-2">
+                          {isLoggedIn && user?.id === post.user.id && (
                             <button
                               onClick={() => handleEditPost(post)}
                               className="text-gray-500 hover:text-blue-500"
@@ -1288,6 +1281,8 @@ const CommunityPage: React.FC = () => {
                             >
                               <FaEdit />
                             </button>
+                          )}
+                          {isLoggedIn && (user?.id === post.user.id || isAdminOrModerator()) && (
                             <button
                               onClick={() => handleDeletePost(post.id)}
                               className="text-gray-500 hover:text-red-500"
@@ -1295,8 +1290,8 @@ const CommunityPage: React.FC = () => {
                             >
                               <FaTrash />
                             </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                       <p
                         className="mt-2 text-gray-700"
@@ -1322,15 +1317,6 @@ const CommunityPage: React.FC = () => {
                       <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
                         <span>{formatDate(post.createdAt)}</span>
                         <div className="flex items-center space-x-3">
-                          {isLoggedIn && user?.id !== post.user.id && (
-                            <button 
-                              className="p-1 rounded-md text-red-500"
-                              title="게시글 신고하기"
-                              onClick={() => openReportModal(post.id, "post")}
-                            >
-                              <FaBell size={14} />
-                            </button>
-                          )}
                           <div className="flex items-center space-x-1">
                             <button
                               className={`p-1 rounded-md ${post.liked ? "text-blue-600" : "text-gray-400 hover:text-blue-600"}`}
@@ -1405,21 +1391,10 @@ const CommunityPage: React.FC = () => {
                             </div>
                             <div className="flex-1">
                               <div className="flex justify-between items-center mb-1">
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs text-gray-500">
-                                    {new Date(comment.createdAt).toLocaleString()}
-                                  </span>
-                                  {isLoggedIn && user?.id !== comment.user.id && (
-                                    <button 
-                                      className="p-1 hover:bg-gray-100 rounded-full"
-                                      title="댓글 신고하기"
-                                      onClick={() => openReportModal(comment.id, "comment")}
-                                    >
-                                      <FaBell className="text-red-500 text-xs" />
-                                    </button>
-                                  )}
-                                </div>
-                                {isLoggedIn && user?.id === comment.user.id && !isUserBlocked() && (
+                                <span className="text-xs text-gray-500">
+                                  {new Date(comment.createdAt).toLocaleString()}
+                                </span>
+                                {isLoggedIn && (user?.id === comment.user.id || isAdminOrModerator()) && (
                                   <button
                                     onClick={() =>
                                       handleDeleteComment(post.id, comment.id)
@@ -1495,16 +1470,14 @@ const CommunityPage: React.FC = () => {
                           <div className="flex-1 flex">
                             <input
                               type="text"
-                              placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
+                              placeholder="댓글을 입력하세요..."
                               className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
                               value={newComment}
                               onChange={(e) => setNewComment(e.target.value)}
-                              disabled={isUserBlocked()}
                             />
                             <button
                               className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
                               onClick={() => handleCommentSubmit(post.id)}
-                              disabled={!newComment.trim() || isUserBlocked()}
                             >
                               <FaReply />
                             </button>
@@ -1513,19 +1486,15 @@ const CommunityPage: React.FC = () => {
                       ) : (
                         <div className="text-center py-2">
                           <p className="text-sm text-gray-500 mb-1">
-                            댓글을 작성하려면 로그인하세요.
+                            댓글을 작성하려면 로그인이 필요합니다.
                           </p>
                           <Link
                             to="/login"
-                            className="text-xs text-blue-500 hover:underline"
+                            className="text-sm text-blue-600 hover:underline"
                           >
                             로그인하기
                           </Link>
                         </div>
-                      )}
-                      
-                      {isLoggedIn && isUserBlocked() && (
-                        <p className="text-xs text-red-500 mt-1 text-center">현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.</p>
                       )}
                     </div>
                   )}
@@ -1606,8 +1575,8 @@ const CommunityPage: React.FC = () => {
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="text-lg font-semibold">{post.title}</h3>
-                      {isLoggedIn && user?.id === post.user.id && !isUserBlocked() && (
-                        <div className="flex gap-2">
+                      <div className="flex gap-2">
+                        {isLoggedIn && user?.id === post.user.id && (
                           <button
                             onClick={() => handleEditPost(post)}
                             className="text-gray-500 hover:text-blue-500"
@@ -1615,6 +1584,8 @@ const CommunityPage: React.FC = () => {
                           >
                             <FaEdit />
                           </button>
+                        )}
+                        {isLoggedIn && (user?.id === post.user.id || isAdminOrModerator()) && (
                           <button
                             onClick={() => handleDeletePost(post.id)}
                             className="text-gray-500 hover:text-red-500"
@@ -1622,8 +1593,8 @@ const CommunityPage: React.FC = () => {
                           >
                             <FaTrash />
                           </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                     <p
                       className="mt-2 text-gray-700"
@@ -1649,15 +1620,6 @@ const CommunityPage: React.FC = () => {
                     <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
                       <span>{formatDate(post.createdAt)}</span>
                       <div className="flex items-center space-x-3">
-                        {isLoggedIn && user?.id !== post.user.id && (
-                          <button 
-                            className="p-1 rounded-md text-red-500"
-                            title="게시글 신고하기"
-                            onClick={() => openReportModal(post.id, "post")}
-                          >
-                            <FaBell size={14} />
-                          </button>
-                        )}
                         <div className="flex items-center space-x-1">
                           <button
                             className={`p-1 rounded-md ${post.liked ? "text-blue-600" : "text-gray-400 hover:text-blue-600"}`}
@@ -1732,21 +1694,10 @@ const CommunityPage: React.FC = () => {
                           </div>
                           <div className="flex-1">
                             <div className="flex justify-between items-center mb-1">
-                              <div className="flex items-center gap-1">
-                                <span className="text-xs text-gray-500">
-                                  {new Date(comment.createdAt).toLocaleString()}
-                                </span>
-                                {isLoggedIn && user?.id !== comment.user.id && (
-                                  <button 
-                                    className="p-1 hover:bg-gray-100 rounded-full"
-                                    title="댓글 신고하기"
-                                    onClick={() => openReportModal(comment.id, "comment")}
-                                  >
-                                    <FaBell className="text-red-500 text-xs" />
-                                  </button>
-                                )}
-                              </div>
-                              {isLoggedIn && user?.id === comment.user.id && !isUserBlocked() && (
+                              <span className="text-xs text-gray-500">
+                                {new Date(comment.createdAt).toLocaleString()}
+                              </span>
+                              {isLoggedIn && (user?.id === comment.user.id || isAdminOrModerator()) && (
                                 <button
                                   onClick={() =>
                                     handleDeleteComment(post.id, comment.id)
@@ -1820,16 +1771,14 @@ const CommunityPage: React.FC = () => {
                         <div className="flex-1 flex">
                           <input
                             type="text"
-                            placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
+                            placeholder="댓글을 입력하세요..."
                             className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
                             value={newComment}
                             onChange={(e) => setNewComment(e.target.value)}
-                            disabled={isUserBlocked()}
                           />
                           <button
                             className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
                             onClick={() => handleCommentSubmit(post.id)}
-                            disabled={!newComment.trim() || isUserBlocked()}
                           >
                             <FaReply />
                           </button>
@@ -1838,19 +1787,15 @@ const CommunityPage: React.FC = () => {
                     ) : (
                       <div className="text-center py-2">
                         <p className="text-sm text-gray-500 mb-1">
-                          댓글을 작성하려면 로그인하세요.
+                          댓글을 작성하려면 로그인이 필요합니다.
                         </p>
                         <Link
                           to="/login"
-                          className="text-xs text-blue-500 hover:underline"
+                          className="text-sm text-blue-600 hover:underline"
                         >
                           로그인하기
                         </Link>
                       </div>
-                    )}
-                    
-                    {isLoggedIn && isUserBlocked() && (
-                      <p className="text-xs text-red-500 mt-1 text-center">현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.</p>
                     )}
                   </div>
                 )}
@@ -1870,54 +1815,6 @@ const CommunityPage: React.FC = () => {
           <FaArrowUp />
         </button>
       )}
-
-      {/* 신고 모달 */}
-      {showReportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="relative w-full max-w-md bg-white rounded-lg shadow-lg p-6">
-            <div className="flex items-center mb-4">
-              <FaExclamationTriangle className="text-red-500 mr-2" />
-              <h2 className="text-xl font-bold">댓글 신고</h2>
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="absolute right-4 top-4 text-gray-500 hover:text-gray-700"
-              >
-                <FaTimes />
-              </button>
-            </div>
-
-            <textarea
-              value={reportContent}
-              onChange={(e) => setReportContent(e.target.value)}
-              placeholder="신고 내용을 자세히 입력해주세요..."
-              className="w-full h-32 p-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
-            ></textarea>
-
-            <div className="mt-4 flex justify-end space-x-2">
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleReportSubmit}
-                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
-              >
-                신고
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 모바일용 게시글 작성 버튼 (고정 플로팅 버튼) */}
-      <button
-        onClick={handleWriteButtonClick}
-        className="fixed bottom-8 right-8 bg-blue-500 text-white p-4 rounded-full shadow-lg hover:bg-blue-600 transition-colors md:hidden"
-      >
-        <FaPen />
-      </button>
     </div>
   );
 };
