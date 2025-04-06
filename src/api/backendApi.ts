@@ -354,6 +354,17 @@ const cacheUserIdMapping = (userId: string, username: string) => {
   }
 };
 
+// 사용자 상태 확인 API 함수 추가
+export const checkUserStatus = async (): Promise<{status: string}> => {
+  try {
+    const response = await apiClient.get('/api/users/status');
+    return response.data;
+  } catch (error) {
+    console.error('사용자 상태 확인 실패:', error);
+    throw error;
+  }
+};
+
 export const backendApi = {
   // Movie endpoints
   getTrendingMovies: async (): Promise<ContentResponse> => {
@@ -2116,6 +2127,8 @@ export const backendApi = {
       throw error;
     }
   },
+
+  checkUserStatus,
 };
 
 // 신고 관련 타입 정의
