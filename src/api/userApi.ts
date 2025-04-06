@@ -622,38 +622,17 @@ export const getOtherUserScraps = async (userId: string) => {
 export const toggleFollow = async (userId: string): Promise<any> => {
   try {
     console.log(`팔로우 토글 API 호출: ${userId}`);
+    
+    // 명확한 API 엔드포인트 경로로 요청
     const response = await apiClient.post(`/api/users/follow/${userId}`);
+    
     console.log("팔로우 토글 API 응답:", response.data);
     return response.data;
   } catch (error) {
     console.error("팔로우 토글 API 오류:", error);
     
-    // API 호출이 실패해도 클라이언트 측에서는 성공한 것처럼 처리
-    console.log("백엔드 API 호출 실패로 인해 클라이언트에서 가짜 응답 생성");
-    
-    // 로컬 스토리지에서 현재 사용자 정보 가져오기
-    const currentUserStr = localStorage.getItem("user");
-    let isCurrentlyFollowing = false;
-    
-    // 이미 팔로우 중인지 확인하는 로직 (로컬 캐시 또는 추정)
-    try {
-      // 로컬 캐시에서 팔로우 상태 확인 시도
-      const followStateStr = localStorage.getItem("follow_state") || "{}";
-      const followState = JSON.parse(followStateStr);
-      isCurrentlyFollowing = followState[userId] || false;
-      
-      // 상태 토글
-      followState[userId] = !isCurrentlyFollowing;
-      localStorage.setItem("follow_state", JSON.stringify(followState));
-    } catch (e) {
-      console.error("로컬 팔로우 상태 처리 중 오류:", e);
-    }
-    
-    // 가짜 응답 반환
-    return {
-      isFollowing: !isCurrentlyFollowing,
-      followerCount: !isCurrentlyFollowing ? 1 : 0
-    };
+    // 오류를 상위로 전파
+    throw error;
   }
 };
 

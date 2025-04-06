@@ -495,43 +495,48 @@ const UserProfilePage: React.FC = () => {
       try {
         // 백엔드는 하나의 토글 엔드포인트를 제공
         console.log(`[디버그] 유저 ID ${userId} 팔로우 상태 토글 요청 전송`);
-        const response = await apiClient.post(`/api/users/follow/${userId}`);
-        console.log(`[디버그] 유저 ID ${userId} 팔로우 상태 토글 성공:`, response.data);
-        console.log(`[디버그] API 응답 데이터 구조:`, JSON.stringify(response.data));
+        
+        // 팔로우 API 호출
+        let response;
+        try {
+          response = await apiClient.post(`/api/users/follow/${userId}`);
+          console.log(`[디버그] 유저 ID ${userId} 팔로우 상태 토글 성공:`, response.data);
+          console.log(`[디버그] API 응답 데이터 구조:`, JSON.stringify(response.data));
+        } catch (apiError: any) {
+          console.error('[디버그] 팔로우 API 호출 실패:', apiError);
+          throw apiError;
+        }
         
         // 백엔드 응답에서 새로운 팔로우 상태 확인 (일관성 확인)
-        if (response.data && response.data.isFollowing !== undefined) {
+        if (response && response.data && response.data.isFollowing !== undefined) {
           const apiFollowStatus = response.data.isFollowing === true;
           
-          // API 응답 상태와 현재 UI 상태가 다른 경우 (드문 경우)
-          if (apiFollowStatus !== newFollowState) {
-            console.log(`[디버그] 경고: API 응답 상태(${apiFollowStatus})와 예상 상태(${newFollowState})가 다릅니다. API 응답을 우선합니다.`);
-            
-            // API 응답 상태로 UI 업데이트
-            setIsFollowing(apiFollowStatus);
-            
-            if (profileData) {
-              const correctedProfileData = {
-                ...profileData,
-                followerCount: apiFollowStatus
+          // API 응답 상태를 UI에 정확히 반영
+          setIsFollowing(apiFollowStatus);
+          
+          if (profileData) {
+            const correctedProfileData = {
+              ...profileData,
+              followerCount: response.data.followerCount !== undefined 
+                ? response.data.followerCount 
+                : (apiFollowStatus
                   ? profileData.followerCount + 1
-                  : Math.max(0, profileData.followerCount - 1),
-                isFollowing: apiFollowStatus,
-                mutualFollow: apiFollowStatus && profileData.followsMe === true,
-              };
-              setProfileData(correctedProfileData);
-            }
-            
-            // 로컬 스토리지도 API 응답으로 업데이트
-            try {
-              const followStateKey = `follow_state_${userId}`;
-              localStorage.setItem(followStateKey, JSON.stringify({ 
-                isFollowing: apiFollowStatus,
-                timestamp: new Date().getTime()
-              }));
-            } catch (storageError) {
-              console.error("로컬 스토리지 수정 실패:", storageError);
-            }
+                  : Math.max(0, profileData.followerCount - 1)),
+              isFollowing: apiFollowStatus,
+              mutualFollow: apiFollowStatus && profileData.followsMe === true,
+            };
+            setProfileData(correctedProfileData);
+          }
+          
+          // 로컬 스토리지도 API 응답으로 업데이트
+          try {
+            const followStateKey = `follow_state_${userId}`;
+            localStorage.setItem(followStateKey, JSON.stringify({ 
+              isFollowing: apiFollowStatus,
+              timestamp: new Date().getTime()
+            }));
+          } catch (storageError) {
+            console.error("로컬 스토리지 수정 실패:", storageError);
           }
           
           // API 응답에 followingCount가 있으면 업데이트 
@@ -549,49 +554,57 @@ const UserProfilePage: React.FC = () => {
             if (user && user.id !== parseInt(userId)) {
               console.log('[디버그] 내 프로필 팔로잉 카운트 업데이트 시도');
               
-              // 내 프로필의 팔로잉 카운트 로컬 업데이트 (즉시 반영)
-              const myProfileCacheKey = `my_profile_${user.id}`;
-              let updatedFollowingCount = 0;
-              
-              // 기존에 캐시된 정보가 있으면 가져옴
+              // 내 프로필의 팔로잉 카운트를 API에서 직접 가져와서 업데이트
               try {
-                const existingCache = localStorage.getItem(myProfileCacheKey);
-                if (existingCache) {
-                  const parsed = JSON.parse(existingCache);
-                  updatedFollowingCount = parsed.followingCount || 0;
-                }
-              } catch (cacheReadError) {
-                console.error('[디버그] 캐시 읽기 실패:', cacheReadError);
-              }
-              
-              // 새로운 팔로잉 상태에 따라 카운트 계산
-              updatedFollowingCount = apiFollowStatus 
-                ? updatedFollowingCount + 1 
-                : Math.max(0, updatedFollowingCount - 1);
-              
-              console.log(`[디버그] 내 프로필 팔로잉 카운트 로컬 업데이트: ${updatedFollowingCount}`);
-              
-              // 새 값 캐싱
-              localStorage.setItem(myProfileCacheKey, JSON.stringify({
-                followingCount: updatedFollowingCount,
-                timestamp: new Date().getTime()
-              }));
-              
-              // 서버에서도 최신 정보 가져와서 정확한 값 확인
-              const myProfileResponse = await apiClient.get(`/api/profile/id/${user.id}`);
-              
-              if (myProfileResponse.data && myProfileResponse.data.followingCount !== undefined) {
-                console.log(`[디버그] 내 프로필 팔로잉 카운트 API 응답: ${myProfileResponse.data.followingCount}`);
+                // 현재 사용자의 마이페이지 새로고침을 위한 API 호출
+                const myProfileResponse = await apiClient.get(`/api/profile/id/${user.id}`);
                 
-                // 서버 값으로 캐시 업데이트
-                localStorage.setItem(myProfileCacheKey, JSON.stringify({
-                  followingCount: myProfileResponse.data.followingCount,
-                  timestamp: new Date().getTime()
-                }));
+                if (myProfileResponse.data && myProfileResponse.data.followingCount !== undefined) {
+                  console.log(`[디버그] 내 프로필 팔로잉 카운트 API 응답: ${myProfileResponse.data.followingCount}`);
+                  
+                  // 내 프로필의 정확한 팔로잉 수를 로컬 스토리지에 캐싱
+                  const myProfileCacheKey = `my_profile_${user.id}`;
+                  localStorage.setItem(myProfileCacheKey, JSON.stringify({
+                    followingCount: myProfileResponse.data.followingCount,
+                    timestamp: new Date().getTime()
+                  }));
+
+                  // 백엔드와 실제 동기화되었는지 확인을 위해
+                  // 내 사용자 ID를 팔로잉한 대상 사용자 ID와 함께 로컬 스토리지에 저장
+                  // 이 정보는 디버깅 및 비교 목적으로 유지
+                  try {
+                    const followingHistoryKey = `following_history_${user.id}`;
+                    let followingHistory = [];
+                    
+                    const existingHistory = localStorage.getItem(followingHistoryKey);
+                    if (existingHistory) {
+                      followingHistory = JSON.parse(existingHistory);
+                    }
+                    
+                    // 새 항목 추가 (팔로우/언팔로우 상태와 함께)
+                    followingHistory.push({
+                      targetUserId: parseInt(userId),
+                      action: apiFollowStatus ? 'follow' : 'unfollow',
+                      timestamp: new Date().getTime(),
+                      followingCount: myProfileResponse.data.followingCount
+                    });
+                    
+                    // 최근 20개 항목만 유지
+                    if (followingHistory.length > 20) {
+                      followingHistory = followingHistory.slice(followingHistory.length - 20);
+                    }
+                    
+                    localStorage.setItem(followingHistoryKey, JSON.stringify(followingHistory));
+                  } catch (historyError) {
+                    console.error('[디버그] 팔로잉 히스토리 저장 실패:', historyError);
+                  }
+                }
+              } catch (profileError) {
+                console.error('[디버그] 내 프로필 정보 가져오기 실패:', profileError);
               }
             }
-          } catch (profileError) {
-            console.error('[디버그] 내 프로필 정보 업데이트 실패:', profileError);
+          } catch (profileUpdateError) {
+            console.error('[디버그] 내 프로필 정보 업데이트 처리 중 오류:', profileUpdateError);
           }
         }
       } catch (apiError: any) {

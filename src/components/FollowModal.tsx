@@ -21,6 +21,7 @@ const FollowModal: React.FC<FollowModalProps> = ({
   updateFollowCounts
 }) => {
   const [localUsers, setLocalUsers] = useState<any[]>([]);
+  const [processingIds, setProcessingIds] = useState<Set<number>>(new Set());
   
   // users prop이 변경될 때마다 localUsers 업데이트
   useEffect(() => {
@@ -30,16 +31,30 @@ const FollowModal: React.FC<FollowModalProps> = ({
   if (!isOpen) return null;
 
   const handleToggleFollow = async (userId: number, currentlyFollowing: boolean) => {
+    // 이미 해당 ID에 대한 요청이 처리 중이면 중복 요청 방지
+    if (processingIds.has(userId)) {
+      console.log(`사용자 ${userId}에 대한 요청이 이미 처리 중입니다.`);
+      return;
+    }
+    
     try {
+      // 처리 중인 ID 목록에 추가
+      setProcessingIds(prev => new Set(prev).add(userId));
+      
       console.log(`사용자 ${userId}에 대한 팔로우 상태 토글 시작: 현재 상태=${currentlyFollowing}`);
       
-      // API 호출
+      // API 호출 - 명확한 경로 사용
       const result = await toggleFollow(userId.toString());
       console.log("팔로우 토글 API 응답:", result);
       
       if (!result) {
+        console.error("팔로우 API 응답이 없습니다");
         throw new Error("팔로우 상태 변경 실패");
       }
+      
+      // 결과에서 팔로우 상태 확인 (명시적으로 boolean 변환)
+      const isFollowingAfterToggle = result.isFollowing === true;
+      console.log(`[디버그] 팔로우 토글 이후 상태: ${isFollowingAfterToggle}`);
       
       // 로컬 상태 업데이트
       setLocalUsers(prevUsers => 
@@ -47,8 +62,8 @@ const FollowModal: React.FC<FollowModalProps> = ({
           if (user.id === userId) {
             return { 
               ...user, 
-              isFollowing: result.isFollowing,
-              mutualFollow: result.isFollowing && user.followsMe
+              isFollowing: isFollowingAfterToggle,
+              mutualFollow: isFollowingAfterToggle && user.followsMe === true
             };
           }
           return user;
@@ -56,15 +71,22 @@ const FollowModal: React.FC<FollowModalProps> = ({
       );
       
       // 부모 컴포넌트에 알림
-      onToggleFollow(userId, result.isFollowing);
+      onToggleFollow(userId, isFollowingAfterToggle);
       
       // 팔로워/팔로우 숫자 업데이트 콜백 호출
       if (updateFollowCounts) {
-        updateFollowCounts(result.isFollowing, userId);
+        updateFollowCounts(isFollowingAfterToggle, userId);
       }
       
     } catch (error) {
       console.error("팔로우 토글 실패:", error);
+    } finally {
+      // 처리 완료 후 ID 목록에서 제거
+      setProcessingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(userId);
+        return newSet;
+      });
     }
   };
 
@@ -128,13 +150,18 @@ const FollowModal: React.FC<FollowModalProps> = ({
                   {/* 팔로우/언팔로우 버튼 */}
                   <button
                     onClick={() => handleToggleFollow(user.id, user.isFollowing)}
+                    disabled={processingIds.has(user.id)}
                     className={`ml-2 py-1 px-3 text-sm rounded font-medium transition-colors ${
-                      user.isFollowing
-                        ? "border border-gray-300 text-black hover:bg-red-50 hover:text-red-600 hover:border-red-200 group"
-                        : "bg-blue-500 text-white hover:bg-blue-600"
+                      processingIds.has(user.id)
+                        ? "opacity-50 cursor-not-allowed border border-gray-300 text-gray-500"
+                        : user.isFollowing
+                          ? "border border-gray-300 text-black hover:bg-red-50 hover:text-red-600 hover:border-red-200 group"
+                          : "bg-blue-500 text-white hover:bg-blue-600"
                     }`}
                   >
-                    {user.isFollowing ? (
+                    {processingIds.has(user.id) ? (
+                      "처리 중..."
+                    ) : user.isFollowing ? (
                       <>
                         <span className="group-hover:hidden">팔로잉</span>
                         <span className="hidden group-hover:inline">언팔로우</span>
