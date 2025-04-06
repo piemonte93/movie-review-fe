@@ -119,7 +119,7 @@ export const getFollowRecommendations = async () => {
 
 // 프로필 이미지 업로드 함수
 export const uploadProfileImage = async (
-  file: File
+    file: File
 ): Promise<{ profileImageUrl: string }> => {
   try {
     const formData = new FormData();
@@ -428,7 +428,7 @@ export const getUsernameFromUserId = async (
 
 // 다른 사용자의 프로필 정보 가져오기
 export const getOtherUserProfile = async (
-  userId: string
+    userId: string
 ): Promise<UserProfile> => {
   try {
     console.log(`사용자 ID: ${userId}의 프로필 데이터 요청 시작`);
@@ -521,7 +521,7 @@ export const getOtherUserProfile = async (
 
 // 다른 사용자의 활동 정보 가져오기
 export const getOtherUserActivity = async (
-  userId: string
+    userId: string
 ): Promise<UserActivity> => {
   try {
     console.log(`사용자 ID: ${userId}의 활동 데이터 요청 시작`);
