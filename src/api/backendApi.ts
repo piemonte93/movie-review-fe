@@ -365,18 +365,153 @@ export const backendApi = {
 
   // TV 프로그램 관련 API
   getTvDetails: async (id: number): Promise<ContentDetail> => {
-    const response = await apiClient.get(`/api/contents/tv/${id}`);
+    try {
+      const response = await apiClient.get(`/api/tv/${id}`);
+      if (!response.data) {
+        throw new Error("TV 프로그램 정보를 찾을 수 없습니다.");
+      }
     return response.data;
+    } catch (error) {
+      console.error("TV 프로그램 상세 정보 조회 실패:", error);
+      throw error;
+    }
   },
 
   getTvReviews: async (id: number): Promise<ReviewResponse> => {
-    const response = await apiClient.get(`/api/contents/tv/${id}/reviews`);
+    try {
+      const response = await apiClient.get(`/api/tv/${id}/reviews`);
+      if (!response.data) {
+        return {
+          id: id,
+          page: 1,
+          results: [],
+          total_pages: 0,
+          total_results: 0
+        };
+      }
     return response.data;
+    } catch (error) {
+      console.error("TV 프로그램 리뷰 조회 실패:", error);
+      return {
+        id: id,
+        page: 1,
+        results: [],
+        total_pages: 0,
+        total_results: 0
+      };
+    }
   },
 
   getTvVideos: async (id: number): Promise<VideoResponse> => {
-    const response = await apiClient.get(`/api/contents/tv/${id}/videos`);
+    try {
+      const response = await apiClient.get(`/api/tv/${id}/videos`);
+      if (!response.data) {
+        return {
+          id: id,
+          results: []
+        };
+      }
     return response.data;
+    } catch (error) {
+      console.error("TV 프로그램 비디오 조회 실패:", error);
+      return {
+        id: id,
+        results: []
+      };
+    }
+  },
+
+  getTvCredits: async (id: number): Promise<ContentDetail> => {
+    try {
+      const response = await apiClient.get(`/api/tv/${id}/credits`);
+      return response.data;
+    } catch (error) {
+      console.error("TV 프로그램 출연진/제작진 조회 실패:", error);
+      return {
+        id: id,
+        cast: [],
+        crew: []
+      };
+    }
+  },
+
+  getFilteredTvShows: async (
+    genres?: number[],
+    year?: number,
+    sortBy = "popularity.desc",
+    page = 1,
+    query?: string,
+    voteMin?: number,
+    isKorean?: boolean,
+    isForeign?: boolean,
+    network?: string
+  ): Promise<ContentResponse> => {
+    try {
+      console.log("TV 프로그램 필터링 요청 시작");
+      const params = new URLSearchParams();
+      
+      if (genres && genres.length > 0) {
+        params.append("genres", genres.join(","));
+      }
+      if (year) {
+        params.append("year", year.toString());
+      }
+      params.append("sort_by", sortBy);
+      params.append("page", page.toString());
+      if (query) {
+        params.append("query", query);
+      }
+      if (voteMin !== undefined) {
+        params.append("vote_avg_min", voteMin.toString());
+      }
+      if (isKorean !== undefined) {
+        params.append("is_korean", isKorean.toString());
+      }
+      if (isForeign !== undefined) {
+        params.append("is_foreign", isForeign.toString());
+      }
+      if (network) {
+        params.append("network", network);
+      }
+
+      console.log("TV 프로그램 필터링 요청 파라미터:", Object.fromEntries(params));
+      const response = await apiClient.get(`/api/contents/discover/tv?${params.toString()}`);
+      
+      if (!response.data || !response.data.results) {
+        console.error("TV 프로그램 API 응답 데이터 없음");
+        return {
+          page: page,
+          results: [],
+          total_pages: 0,
+          total_results: 0
+        };
+      }
+
+      // TV 프로그램 데이터 매핑
+      const mappedResults = response.data.results.map((show: any) => ({
+        ...show,
+        type: "tv",
+        title: show.name || show.title,
+        media_type: "tv"
+      }));
+
+      console.log(`TV 프로그램 ${mappedResults.length}개 조회 성공`);
+      
+      return {
+        page: response.data.page,
+        results: mappedResults,
+        total_pages: response.data.total_pages,
+        total_results: response.data.total_results
+      };
+    } catch (error) {
+      console.error("TV 프로그램 필터링 실패:", error);
+      return {
+        page: page,
+        results: [],
+        total_pages: 0,
+        total_results: 0
+      };
+    }
   },
 
   // 검색 API
@@ -466,17 +601,6 @@ export const backendApi = {
     }
   },
 
-  // TV 프로그램 출연진 정보 가져오기
-  getTvCredits: async (tvId: number) => {
-    try {
-      const response = await apiClient.get(`/api/contents/tv/${tvId}/credits`);
-      return response.data;
-    } catch (error) {
-      console.error("Error fetching TV credits:", error);
-      throw error;
-    }
-  },
-
   // User related endpoints will be added later
   getAllMovieReviews: async (
     page = 0,
@@ -554,154 +678,25 @@ export const backendApi = {
     is_spoiler: boolean;
   }) => {
     try {
-      console.log("리뷰 작성 요청 데이터:", {
-        ...reviewData,
-        url: "/api/review",
-      });
-
       const token = localStorage.getItem("token");
-
-      // JWT 토큰 디버깅
-      if (token) {
-        try {
-          const base64Url = token.split(".")[1];
-          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-          const payload = JSON.parse(atob(base64));
-          console.log("토큰 페이로드:", payload);
-          console.log(
-            "토큰 만료 시간:",
-            new Date(payload.exp * 1000).toLocaleString()
-          );
-        } catch (e) {
-          console.error("토큰 파싱 실패:", e);
-        }
+      if (!token) {
+        throw new Error("로그인이 필요합니다.");
       }
 
-      // Axios 요청 사전 확인
-      console.log("API 요청 설정:", {
-        url: "/api/review",
-        method: "POST",
+      const response = await apiClient.post("/api/reviews/movie", reviewData, {
         headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
         },
-        data: reviewData,
       });
-
-      const response = await apiClient.post("/api/review", reviewData);
-      console.log("리뷰 생성 성공 응답:", response.data);
       return response.data;
-    } catch (error) {
-      console.log("===== 리뷰 생성 API 요청 실패 =====");
-
-      // Axios 오류인 경우
-      if (axios.isAxiosError(error)) {
-        console.log("요청 URL:", error.config?.url);
-        console.log("요청 메소드:", error.config?.method);
-        console.log(
-          "요청 데이터:",
-          typeof error.config?.data === "string"
-            ? JSON.parse(error.config?.data)
-            : error.config?.data
-        );
-        console.log("Axios 오류 상태 코드:", error.response?.status);
-        console.log("Axios 오류 상태 텍스트:", error.response?.statusText);
-
-        // 응답이 없는 경우 (네트워크 오류 등)
-        if (!error.response) {
-          console.log("서버 응답 없음 (네트워크 오류)");
-          throw new Error(
-            "서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요."
-          );
-        }
-
-        // 응답 데이터 추출 (문자열 또는 객체)
-        let errorMessage: string;
-        const responseData = error.response.data;
-
-        if (typeof responseData === "string") {
-          errorMessage = responseData;
-          console.log("문자열 오류 응답:", errorMessage);
-
-          // 백엔드에서 보내는 "이미 이 영화에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?" 메시지 처리
-          if (
-            responseData.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다")
-          ) {
-            throw new Error(
-              "이미 이 영화에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
-            );
-          }
-        } else if (responseData && typeof responseData === "object") {
-          errorMessage =
-            responseData.message ||
-            responseData.error ||
-            JSON.stringify(responseData);
-          console.log("객체 오류 응답:", responseData);
-
-          // 객체 형태의 오류 메시지에서도 중복 리뷰 확인
-          if (
-            errorMessage.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다")
-          ) {
-            throw new Error(
-              "이미 이 영화에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
-            );
-          }
-        } else {
-          errorMessage = "알 수 없는 오류가 발생했습니다.";
-          console.log("예상치 못한 응답 형식:", responseData);
-        }
-
-        // 빈 오류 메시지 처리
-        if (!errorMessage || errorMessage.trim() === "") {
-          errorMessage = "서버에서 자세한 오류 메시지를 제공하지 않았습니다.";
-        }
-
-        console.log("최종 오류 메시지:", errorMessage);
-
-        // HTTP 상태 코드별 처리
-        if (error.response.status === 401) {
-          throw new Error("인증이 필요합니다. 다시 로그인해주세요.");
-        } else if (error.response.status === 403) {
-          // 403 권한 오류일 때 명확한 메시지 전달
-          if (errorMessage.includes("리뷰 작성 권한이 없습니다")) {
-            throw new Error("리뷰 작성 권한이 없습니다.");
-          } else if (
-            errorMessage.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다")
-          ) {
-            throw new Error(
-              "이미 이 영화에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
-            );
-          } else {
-            throw new Error("접근 권한이 없습니다.");
-          }
-        } else if (error.response.status === 400) {
-          throw new Error(`입력 데이터가 올바르지 않습니다: ${errorMessage}`);
-        } else if (error.response.status === 500) {
-          throw new Error(
-            "서버 오류가 발생했습니다. 나중에 다시 시도해주세요."
-          );
-        }
-
-        // 기본 오류 메시지 반환
-        throw new Error(errorMessage);
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error("리뷰 작성 권한이 없습니다. 로그인 후 다시 시도해주세요.");
       }
-
-      // Axios 오류가 아닌 경우
-      console.log("일반 오류:", error);
-      if (error instanceof Error) {
-        // 이미 Error 객체인 경우 그대로 전달
-        // 중복 리뷰 문구가 포함된 경우 확인
-        if (
-          error.message.includes("이미 이 영화에 대한 리뷰를 작성하셨습니다")
-        ) {
-          throw new Error(
-            "이미 이 영화에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
-          );
-        }
-        throw error;
-      } else {
-        throw new Error("리뷰 작성에 실패했습니다. 다시 시도해주세요.");
+      if (error.response?.status === 409) {
+        throw new Error("이미 이 영화에 대한 리뷰를 작성하셨습니다.");
       }
+      throw error;
     }
   },
 
@@ -1012,13 +1007,13 @@ export const backendApi = {
     try {
       console.log(`리뷰 데이터 요청: page=${page}, size=${size}, sort=${sort}`);
       const response = await apiClient.get("/api/reviews", {
-        params: {
-          page,
-          size,
-          sort,
+      params: {
+        page,
+        size,
+        sort,
           contentType: "movie",
-        },
-      });
+      },
+    });
 
       console.log("리뷰 API 응답 코드:", response.status);
       console.log("리뷰 API 응답 헤더:", response.headers);
@@ -1065,10 +1060,10 @@ export const backendApi = {
       const response = await apiClient.get(
         `/api/reviews/${reviewId}/comments`,
         {
-          params: {
-            page,
-            size,
-          },
+      params: {
+        page,
+        size,
+      },
         }
       );
 
@@ -1134,7 +1129,7 @@ export const backendApi = {
       }
 
       console.log(`리뷰 ID ${reviewId}의 댓글 데이터 처리 완료`);
-      return response.data;
+    return response.data;
     } catch (error) {
       console.error(`리뷰 ID ${reviewId}의 댓글 목록 가져오기 실패:`, error);
       throw error;
@@ -1148,7 +1143,7 @@ export const backendApi = {
       const response = await apiClient.post(
         `/api/reviews/${reviewId}/comments`,
         {
-          content,
+      content,
         }
       );
 
@@ -1231,7 +1226,7 @@ export const backendApi = {
       const startTime = new Date().getTime();
 
       // API 호출
-      const response = await apiClient.delete(
+    const response = await apiClient.delete(
         `/api/reviews/${reviewId}/comments/${commentId}`
       );
 
@@ -1467,162 +1462,25 @@ export const backendApi = {
     is_spoiler: boolean;
   }) => {
     try {
-      console.log("TV 쇼 리뷰 작성 요청 데이터:", {
-        ...reviewData,
-        url: "/api/tvreview", // '/api/tvreviews'에서 '/api/tvreview'로 변경
-      });
-
       const token = localStorage.getItem("token");
-
-      // JWT 토큰 디버깅
-      if (token) {
-        try {
-          const base64Url = token.split(".")[1];
-          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-          const payload = JSON.parse(atob(base64));
-          console.log("토큰 페이로드:", payload);
-          console.log(
-            "토큰 만료 시간:",
-            new Date(payload.exp * 1000).toLocaleString()
-          );
-        } catch (e) {
-          console.error("토큰 파싱 실패:", e);
-        }
+      if (!token) {
+        throw new Error("로그인이 필요합니다.");
       }
 
-      // Axios 요청 사전 확인
-      console.log("API 요청 설정:", {
-        url: "/api/tvreview", // '/api/tvreviews'에서 '/api/tvreview'로 변경
-        method: "POST",
+      const response = await apiClient.post("/api/reviews/tv", reviewData, {
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
         },
-        data: reviewData,
       });
-
-      const response = await apiClient.post("/api/tvreview", reviewData); // '/api/tvreviews'에서 '/api/tvreview'로 변경
-      console.log("TV 쇼 리뷰 생성 성공 응답:", response.data);
       return response.data;
-    } catch (error) {
-      console.log("===== TV 쇼 리뷰 생성 API 요청 실패 =====");
-
-      // Axios 오류인 경우
-      if (axios.isAxiosError(error)) {
-        console.log("요청 URL:", error.config?.url);
-        console.log("요청 메소드:", error.config?.method);
-        console.log(
-          "요청 데이터:",
-          typeof error.config?.data === "string"
-            ? JSON.parse(error.config?.data)
-            : error.config?.data
-        );
-        console.log("Axios 오류 상태 코드:", error.response?.status);
-        console.log("Axios 오류 상태 텍스트:", error.response?.statusText);
-
-        // 응답이 없는 경우 (네트워크 오류 등)
-        if (!error.response) {
-          console.log("서버 응답 없음 (네트워크 오류)");
-          throw new Error(
-            "서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요."
-          );
-        }
-
-        // 응답 데이터 추출 (문자열 또는 객체)
-        let errorMessage: string;
-        const responseData = error.response.data;
-
-        if (typeof responseData === "string") {
-          errorMessage = responseData;
-          console.log("문자열 오류 응답:", errorMessage);
-
-          // 백엔드에서 보내는 "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?" 메시지 처리
-          if (
-            responseData.includes(
-              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다"
-            )
-          ) {
-            throw new Error(
-              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
-            );
-          }
-        } else if (responseData && typeof responseData === "object") {
-          errorMessage =
-            responseData.message ||
-            responseData.error ||
-            JSON.stringify(responseData);
-          console.log("객체 오류 응답:", responseData);
-
-          // 객체 형태의 오류 메시지에서도 중복 리뷰 확인
-          if (
-            errorMessage.includes(
-              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다"
-            )
-          ) {
-            throw new Error(
-              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
-            );
-          }
-        } else {
-          errorMessage = "알 수 없는 오류가 발생했습니다.";
-          console.log("예상치 못한 응답 형식:", responseData);
-        }
-
-        // 빈 오류 메시지 처리
-        if (!errorMessage || errorMessage.trim() === "") {
-          errorMessage = "서버에서 자세한 오류 메시지를 제공하지 않았습니다.";
-        }
-
-        console.log("최종 오류 메시지:", errorMessage);
-
-        // HTTP 상태 코드별 처리
-        if (error.response.status === 401) {
-          throw new Error("인증이 필요합니다. 다시 로그인해주세요.");
-        } else if (error.response.status === 403) {
-          // 403 권한 오류일 때 명확한 메시지 전달
-          if (errorMessage.includes("리뷰 작성 권한이 없습니다")) {
-            throw new Error("리뷰 작성 권한이 없습니다.");
-          } else if (
-            errorMessage.includes(
-              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다"
-            )
-          ) {
-            throw new Error(
-              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
-            );
-          } else {
-            throw new Error("접근 권한이 없습니다.");
-          }
-        } else if (error.response.status === 400) {
-          throw new Error(`입력 데이터가 올바르지 않습니다: ${errorMessage}`);
-        } else if (error.response.status === 500) {
-          throw new Error(
-            "서버 오류가 발생했습니다. 나중에 다시 시도해주세요."
-          );
-        }
-
-        // 기본 오류 메시지 반환
-        throw new Error(errorMessage);
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error("리뷰 작성 권한이 없습니다. 로그인 후 다시 시도해주세요.");
       }
-
-      // Axios 오류가 아닌 경우
-      console.log("일반 오류:", error);
-      if (error instanceof Error) {
-        // 이미 Error 객체인 경우 그대로 전달
-        // 중복 리뷰 문구가 포함된 경우 확인
-        if (
-          error.message.includes(
-            "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다"
-          )
-        ) {
-          throw new Error(
-            "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"
-          );
-        }
-        throw error;
-      } else {
-        throw new Error("리뷰 작성에 실패했습니다. 다시 시도해주세요.");
+      if (error.response?.status === 409) {
+        throw new Error("이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다.");
       }
+      throw error;
     }
   },
 

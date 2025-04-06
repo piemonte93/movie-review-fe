@@ -145,6 +145,18 @@ export const useFilteredTvShows = (
         setLoading(true);
         setError(null);
 
+        console.log("TV 프로그램 필터링 요청:", {
+          genres,
+          year,
+          sortBy,
+          page,
+          query,
+          voteMin,
+          isKorean,
+          isForeign,
+          network
+        });
+
         const response = await backendApi.getFilteredTvShows(
           genres,
           year,
@@ -157,20 +169,26 @@ export const useFilteredTvShows = (
           network
         );
 
+        if (!response || !response.results) {
+          throw new Error("TV 프로그램 데이터를 불러올 수 없습니다.");
+        }
+
         // TV 프로그램 데이터를 올바른 형식으로 변환
-        const tvShows: TvShow[] = (response.results || []).map((show: any) => ({
+        const tvShows: TvShow[] = response.results.map((show: any) => ({
           ...show,
           type: "tv",
-          title: show.name || show.title || "제목 없음", // name이 있으면 name을, 없으면 title을, 둘 다 없으면 "제목 없음"을 사용
+          title: show.name || show.title || "제목 없음",
           release_date: show.first_air_date || show.release_date,
         }));
+
+        console.log("변환된 TV 프로그램 데이터:", tvShows);
 
         setContents(tvShows);
         setTotalPages(response.total_pages || 1);
         setTotalResults(response.total_results || 0);
       } catch (err) {
-        setError("TV 쇼 정보를 불러오는데 실패했습니다.");
-        console.error("Error fetching TV shows:", err);
+        console.error("TV 프로그램 데이터 조회 실패:", err);
+        setError("TV 프로그램 정보를 불러오는데 실패했습니다.");
       } finally {
         setLoading(false);
       }
