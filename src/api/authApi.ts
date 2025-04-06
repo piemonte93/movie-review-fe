@@ -146,37 +146,37 @@ export interface EmailVerificationRequest {
 // 인증 API
 export const authApi = {
   // 로그인 API
-  login: async (username: string, password: string): Promise<AuthResponse> => {
+  login: async (loginData: LoginRequest): Promise<AuthResponse> => {
     try {
-      const response = await apiClient.post("/api/auth/signin", {
-        username,
-        password,
+      const response = await apiClient.post("/api/auth/login", {
+        email: loginData.email,
+        password: loginData.password,
       });
       
-      // 사용자 상태 정보 가져오기
+      // 백엔드 응답을 프론트엔드 AuthResponse 형식으로 변환
       if (response.data && response.data.token) {
-        // 토큰을 설정하여 다음 요청에서 인증할 수 있도록 합니다
-        apiClient.defaults.headers.common["Authorization"] = `Bearer ${response.data.token}`;
+        // 토큰 저장
+        localStorage.setItem("token", response.data.token);
         
-        // 추가로 사용자 상태 정보 가져오기
-        try {
-          const userStatusResponse = await apiClient.get("/api/auth/user-info");
-          if (userStatusResponse.data) {
-            // 기존 사용자 정보에 상태 정보 추가
-            return {
-              ...response.data,
-              user: {
-                ...response.data.user,
-                status: userStatusResponse.data.status || "ACTIVE"
-              }
-            };
-          }
-        } catch (statusError) {
-          console.error("사용자 상태 정보 로드 실패:", statusError);
-        }
+        // 사용자 정보 구성
+        const userData = {
+          id: response.data.id,
+          username: response.data.username,
+          email: response.data.email,
+          roles: response.data.roles || [],
+        };
+        
+        // 로컬 스토리지에 사용자 정보 저장
+        localStorage.setItem("user", JSON.stringify(userData));
+        
+        // 응답 형식 변환
+        return {
+          token: response.data.token,
+          user: userData
+        };
       }
       
-      return response.data;
+      throw new Error("로그인 응답이 유효하지 않습니다.");
     } catch (error) {
       console.error("로그인 실패:", error);
       throw error;
