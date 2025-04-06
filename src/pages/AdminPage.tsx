@@ -246,8 +246,8 @@ const AdminPage: React.FC = () => {
                         <th className="py-2 px-4 border-b text-left">신고자</th>
                         <th className="py-2 px-4 border-b text-left">신고 대상</th>
                         <th className="py-2 px-4 border-b text-left">대상 타입</th>
-                        <th className="py-2 px-4 border-b text-left">상태</th>
-                        <th className="py-2 px-4 border-b text-left">조치</th>
+                        <th className="py-2 px-4 border-b text-left w-20">상태</th>
+                        <th className="py-2 px-4 border-b text-left w-28">조치</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -281,7 +281,7 @@ const AdminPage: React.FC = () => {
                             <td className="py-2 px-4 border-b">
                               {getReportTypeText(report.reportType)}
                             </td>
-                            <td className="py-2 px-4 border-b">
+                            <td className="py-2 px-4 border-b w-20 whitespace-nowrap">
                               <span 
                                 className={`px-2 py-1 rounded-full text-xs ${
                                   report.status === "PENDING" 
@@ -294,22 +294,22 @@ const AdminPage: React.FC = () => {
                                 {getStatusText(report.status)}
                               </span>
                             </td>
-                            <td className="py-2 px-4 border-b">
+                            <td className="py-2 px-4 border-b w-28 whitespace-nowrap">
                               {report.status === "PENDING" && (
-                                <>
+                                <div className="flex flex-col gap-1">
                                   <button 
                                     onClick={() => handleProcessReport(report.id, "PROCESSED")}
-                                    className="bg-blue-500 text-white px-3 py-1 rounded-md text-sm mr-2 flex items-center"
+                                    className="bg-blue-500 text-white px-3 py-1 rounded-md text-sm flex items-center"
                                   >
                                     <FaCheck className="mr-1" /> 처리
                                   </button>
                                   <button 
                                     onClick={() => handleProcessReport(report.id, "REJECTED")}
-                                    className="bg-red-500 text-white px-3 py-1 rounded-md text-sm flex items-center mt-1"
+                                    className="bg-red-500 text-white px-3 py-1 rounded-md text-sm flex items-center"
                                   >
                                     <FaTimes className="mr-1" /> 거부
                                   </button>
-                                </>
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -341,10 +341,10 @@ const AdminPage: React.FC = () => {
                         <th className="py-2 px-4 border-b text-left">사용자명</th>
                         <th className="py-2 px-4 border-b text-left">이메일</th>
                         <th className="py-2 px-4 border-b text-left">소셜로그인</th>
-                        <th className="py-2 px-4 border-b text-left">상태</th>
+                        <th className="py-2 px-4 border-b text-left w-20">상태</th>
                         <th className="py-2 px-4 border-b text-left">차단 사유</th>
-                        <th className="py-2 px-4 border-b text-left">차단 일자</th>
-                        <th className="py-2 px-4 border-b text-left">조치</th>
+                        <th className="py-2 px-4 border-b text-left w-24">차단 일자</th>
+                        <th className="py-2 px-4 border-b text-left w-28">조치</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -359,7 +359,7 @@ const AdminPage: React.FC = () => {
                             </td>
                             <td className="py-2 px-4 border-b">{user.email}</td>
                             <td className="py-2 px-4 border-b">{user.socialLogin ? "Yes" : "No"}</td>
-                            <td className="py-2 px-4 border-b">
+                            <td className="py-2 px-4 border-b w-20 whitespace-nowrap">
                               <span
                                 className={`px-2 py-1 rounded-full text-xs ${getUserStatusClass(user.status)}`}
                               >
@@ -367,10 +367,10 @@ const AdminPage: React.FC = () => {
                               </span>
                             </td>
                             <td className="py-2 px-4 border-b">{user.blockReason || "-"}</td>
-                            <td className="py-2 px-4 border-b">
+                            <td className="py-2 px-4 border-b w-24 whitespace-nowrap">
                               {user.blockDate ? new Date(user.blockDate).toLocaleDateString() : "-"}
                             </td>
-                            <td className="py-2 px-4 border-b">
+                            <td className="py-2 px-4 border-b w-28 whitespace-nowrap">
                               {user.status === "BLOCKED" ? (
                                 <button
                                   onClick={() => handleUnblockUser(user.id)}

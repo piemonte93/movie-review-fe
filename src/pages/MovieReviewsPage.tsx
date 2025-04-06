@@ -216,7 +216,7 @@ const convertBackendDateToISO = (
 };
 
 const MovieReviewsPage: React.FC = () => {
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [title, setTitle] = useState("");
@@ -1327,17 +1327,6 @@ const MovieReviewsPage: React.FC = () => {
     [isLoggedIn, user]
   );
 
-  // 로그인한 사용자가 관리자인지 확인하는 함수
-  const isAdmin = useCallback(() => {
-    const isUserAdmin = isLoggedIn && user?.roles?.includes("ROLE_ADMIN");
-    console.log("관리자 권한 확인:", {
-      isLoggedIn,
-      roles: user?.roles || [],
-      isAdmin: isUserAdmin,
-    });
-    return isUserAdmin;
-  }, [isLoggedIn, user]);
-
   // 좋아요 처리
   const handleReviewLike = async (reviewId: number) => {
     if (!isLoggedIn) {
@@ -1658,18 +1647,20 @@ const MovieReviewsPage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  {isLoggedIn && user?.username === review.user.username && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEditReview(review)}
-                        className="text-gray-600 hover:text-blue-600"
-                        title="수정"
-                      >
-                        <FaEdit />
-                      </button>
+                  {isLoggedIn && (user?.id === review.user.id || isAdmin()) && (
+                    <div className="flex space-x-2">
+                      {user?.id === review.user.id && (
+                        <button
+                          onClick={() => handleEditReview(review)}
+                          className="text-gray-500 hover:text-blue-500"
+                          title="수정"
+                        >
+                          <FaEdit />
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDeleteReview(review.id)}
-                        className="text-gray-600 hover:text-red-600"
+                        className="text-gray-500 hover:text-red-500"
                         title="삭제"
                       >
                         <FaTrash />
@@ -1863,7 +1854,7 @@ const MovieReviewsPage: React.FC = () => {
                                       </button>
                                     )}
                                   </div>
-                                  {isLoggedIn && user?.id === comment.userId && (
+                                  {isLoggedIn && (user?.id === comment.userId || isAdmin()) && (
                                     <button
                                       onClick={() => handleDeleteComment(review.id, comment.id)}
                                       className="text-xs text-gray-500 hover:text-red-500"

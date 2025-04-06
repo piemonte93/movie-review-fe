@@ -195,7 +195,7 @@ const convertBackendDateToISO = (date: string | null | undefined): string => {
 };
 
 const TvReviewsPage: React.FC = () => {
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [title, setTitle] = useState("");
@@ -958,8 +958,12 @@ const TvReviewsPage: React.FC = () => {
 
     try {
       await backendApi.deleteTvReview(reviewId);
-      // 성공적으로 삭제된 후 리뷰 목록 새로고침
-      fetchReviews();
+      
+      // 삭제된 리뷰를 모든 상태 배열에서 제거
+      setReviews((prevReviews) => prevReviews.filter(review => review.id !== reviewId));
+      setVisibleReviews((prevReviews) => prevReviews.filter(review => review.id !== reviewId));
+      setSearchResults((prevResults) => prevResults.filter(review => review.id !== reviewId));
+      
       toast.success("리뷰가 삭제되었습니다.");
     } catch (error) {
       console.error("리뷰 삭제 실패:", error);
@@ -1037,11 +1041,6 @@ const TvReviewsPage: React.FC = () => {
 
       // 성공 메시지 표시
       toast.success("댓글이 삭제되었습니다.");
-
-      // 서버에서 최신 데이터 가져오기 (백그라운드에서 처리)
-      fetchReviewComments(reviewId).catch((error) => {
-        console.error(`댓글 목록 새로고침 실패: ${error}`);
-      });
     } catch (error) {
       console.error("댓글 삭제 실패:", error);
 
@@ -1266,17 +1265,6 @@ const TvReviewsPage: React.FC = () => {
     },
     [isLoggedIn, user]
   );
-
-  // 로그인한 사용자가 관리자인지 확인하는 함수
-  const isAdmin = useCallback(() => {
-    const isUserAdmin = isLoggedIn && user?.roles?.includes("ROLE_ADMIN");
-    console.log("관리자 권한 확인:", {
-      isLoggedIn,
-      roles: user?.roles || [],
-      isAdmin: isUserAdmin,
-    });
-    return isUserAdmin;
-  }, [isLoggedIn, user]);
 
   // 신고 모달 열기 함수
   const openReportModal = (id: number, type: "comment" | "review") => {
@@ -1504,15 +1492,17 @@ const TvReviewsPage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  {isLoggedIn && user?.id === review.user.id && (
+                  {isLoggedIn && (user?.id === review.user.id || isAdmin()) && (
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEditReview(review)}
-                        className="text-gray-600 hover:text-blue-600"
-                        title="수정"
-                      >
-                        <FaEdit />
-                      </button>
+                      {user?.id === review.user.id && (
+                        <button
+                          onClick={() => handleEditReview(review)}
+                          className="text-gray-600 hover:text-blue-600"
+                          title="수정"
+                        >
+                          <FaEdit />
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDeleteReview(review.id)}
                         className="text-gray-600 hover:text-red-600"

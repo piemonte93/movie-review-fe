@@ -1398,9 +1398,18 @@ export const backendApi = {
   // 영화 리뷰 삭제
   deleteMovieReview: async (reviewId: number): Promise<void> => {
     try {
-      await apiClient.delete(`/api/reviews/${reviewId}`);
+      console.log(`리뷰 ID ${reviewId} 삭제 요청`);
+      const response = await apiClient.delete(`/api/reviews/${reviewId}`);
+      console.log(`리뷰 ID ${reviewId} 삭제 성공`, response.status);
     } catch (error) {
       console.error("리뷰 삭제 실패:", error);
+      
+      // 에러 상세 정보 로깅
+      if (axios.isAxiosError(error)) {
+        console.error("[API 오류 상세]", error.response?.data);
+        console.error("[API 오류 객체]", error.response?.data);
+      }
+      
       throw error;
     }
   },
@@ -1905,10 +1914,18 @@ export const backendApi = {
   // TV 쇼 리뷰 삭제
   deleteTvReview: async (reviewId: number): Promise<void> => {
     try {
+      console.log(`TV 리뷰 ID ${reviewId} 삭제 요청`);
       const response = await apiClient.delete(`/api/tvreviews/${reviewId}`);
-      console.log("TV 쇼 리뷰 삭제 성공:", response.status);
+      console.log(`TV 리뷰 ID ${reviewId} 삭제 성공`, response.status);
     } catch (error) {
-      console.error("TV 쇼 리뷰 삭제 실패:", error);
+      console.error("TV 리뷰 삭제 실패:", error);
+      
+      // 에러 상세 정보 로깅
+      if (axios.isAxiosError(error)) {
+        console.error("[TV 리뷰 API 오류 상세]", error.response?.data);
+        console.error("[TV 리뷰 API 오류 객체]", error.response?.data);
+      }
+      
       throw error;
     }
   },

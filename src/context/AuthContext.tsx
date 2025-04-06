@@ -24,6 +24,7 @@ interface AuthContextType {
   logout: () => void;
   refreshAuthStatus: () => void;
   updateUserInfo: (updatedUser: Partial<User>) => void;
+  isAdmin: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -347,6 +348,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
+  // 관리자 권한 확인 함수
+  const isAdmin = (): boolean => {
+    if (!isLoggedIn || !user || !user.roles) return false;
+
+    // ROLE_ADMIN 또는 ROLE_MODERATOR 권한을 가진 경우 관리자로 간주
+    return user.roles.some(role => 
+      role === "ROLE_ADMIN" || role === "ROLE_MODERATOR"
+    );
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -356,6 +367,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         logout,
         refreshAuthStatus,
         updateUserInfo,
+        isAdmin,
       }}
     >
       {children}

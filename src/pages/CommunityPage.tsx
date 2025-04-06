@@ -42,7 +42,7 @@ interface Notification {
 const CommunityPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, user, isAdmin } = useAuth();
   const { addNotification } = useNotifications();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -486,13 +486,40 @@ const CommunityPage: React.FC = () => {
       const newCommentWithDate = {
         ...response,
         createdAt: response.createdAt || new Date().toISOString(),
+        // 필요한 추가 필드 설정
+        user: {
+          id: user?.id || 0,
+          username: user?.username || "",
+          profileImageUrl: user?.profileImageUrl || null
+        },
+        likeCount: 0,
+        dislikeCount: 0,
+        liked: false,
+        disliked: false
       };
 
       // 성공적으로 댓글을 추가한 후 현재 게시글 목록을 업데이트
       setPosts((prevPosts) =>
         prevPosts.map((post) =>
           post.id === postId
-            ? { ...post, comments: [...post.comments, newCommentWithDate] }
+            ? { 
+                ...post, 
+                comments: [...post.comments, newCommentWithDate],
+                commentCount: (post.commentCount || 0) + 1 
+              }
+            : post
+        )
+      );
+
+      // visiblePosts도 함께 업데이트
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId
+            ? { 
+                ...post, 
+                comments: [...post.comments, newCommentWithDate],
+                commentCount: (post.commentCount || 0) + 1
+              }
             : post
         )
       );
@@ -1253,18 +1280,20 @@ const CommunityPage: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="text-lg font-semibold">{post.title}</h3>
-                        {isLoggedIn && user?.id === post.user.id && (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleEditPost(post)}
-                              className="text-gray-500 hover:text-blue-500"
-                              title="수정"
-                            >
-                              <FaEdit />
-                            </button>
+                        {isLoggedIn && (post.user.id === user?.id || isAdmin()) && (
+                          <div className="flex items-center space-x-2 ml-auto">
+                            {post.user.id === user?.id && (
+                              <button
+                                onClick={() => handleEditPost(post)}
+                                className="p-1 text-gray-500 hover:text-blue-500"
+                                title="수정"
+                              >
+                                <FaEdit />
+                              </button>
+                            )}
                             <button
                               onClick={() => handleDeletePost(post.id)}
-                              className="text-gray-500 hover:text-red-500"
+                              className="p-1 text-gray-500 hover:text-red-500"
                               title="삭제"
                             >
                               <FaTrash />
@@ -1393,15 +1422,13 @@ const CommunityPage: React.FC = () => {
                                     </button>
                                   )}
                                 </div>
-                                {isLoggedIn && user?.id === comment.user.id && (
+                                {isLoggedIn && (comment.user.id === user?.id || isAdmin()) && (
                                   <button
-                                    onClick={() =>
-                                      handleDeleteComment(post.id, comment.id)
-                                    }
-                                    className="text-xs text-gray-500 hover:text-red-500"
+                                    onClick={() => handleDeleteComment(post.id, comment.id)}
+                                    className="p-1 text-gray-500 hover:text-red-500 ml-2"
                                     title="삭제"
                                   >
-                                    <FaTrash />
+                                    <FaTrash className="text-xs" />
                                   </button>
                                 )}
                               </div>
@@ -1426,9 +1453,7 @@ const CommunityPage: React.FC = () => {
                                   <span>{comment.likeCount || 0}</span>
                                 </button>
                                 <button
-                                  onClick={() =>
-                                    handleCommentDislike(comment.id)
-                                  }
+                                  onClick={() => handleCommentDislike(comment.id)}
                                   className={`flex items-center text-xs space-x-1 ${
                                     comment.disliked
                                       ? "text-red-500"
@@ -1574,18 +1599,20 @@ const CommunityPage: React.FC = () => {
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="text-lg font-semibold">{post.title}</h3>
-                      {isLoggedIn && user?.id === post.user.id && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEditPost(post)}
-                            className="text-gray-500 hover:text-blue-500"
-                            title="수정"
-                          >
-                            <FaEdit />
-                          </button>
+                      {isLoggedIn && (post.user.id === user?.id || isAdmin()) && (
+                        <div className="flex items-center space-x-2 ml-auto">
+                          {post.user.id === user?.id && (
+                            <button
+                              onClick={() => handleEditPost(post)}
+                              className="p-1 text-gray-500 hover:text-blue-500"
+                              title="수정"
+                            >
+                              <FaEdit />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleDeletePost(post.id)}
-                            className="text-gray-500 hover:text-red-500"
+                            className="p-1 text-gray-500 hover:text-red-500"
                             title="삭제"
                           >
                             <FaTrash />
@@ -1714,15 +1741,13 @@ const CommunityPage: React.FC = () => {
                                   </button>
                                 )}
                               </div>
-                              {isLoggedIn && user?.id === comment.user.id && (
+                              {isLoggedIn && (comment.user.id === user?.id || isAdmin()) && (
                                 <button
-                                  onClick={() =>
-                                    handleDeleteComment(post.id, comment.id)
-                                  }
-                                  className="text-xs text-gray-500 hover:text-red-500"
+                                  onClick={() => handleDeleteComment(post.id, comment.id)}
+                                  className="p-1 text-gray-500 hover:text-red-500 ml-2"
                                   title="삭제"
                                 >
-                                  <FaTrash />
+                                  <FaTrash className="text-xs" />
                                 </button>
                               )}
                             </div>
