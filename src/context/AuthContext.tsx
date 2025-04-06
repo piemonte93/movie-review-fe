@@ -15,6 +15,7 @@ interface User {
   roles: string[];
   profileImageUrl?: string;
   bio?: string;
+  status?: "ACTIVE" | "BLOCKED" | "DELETED";
 }
 
 interface AuthContextType {
@@ -24,7 +25,7 @@ interface AuthContextType {
   logout: () => void;
   refreshAuthStatus: () => void;
   updateUserInfo: (updatedUser: Partial<User>) => void;
-  isAdmin: () => boolean;
+  isUserBlocked: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -147,7 +148,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     };
   }, [navigate]);
 
-  const refreshAuthStatus = () => {
+  const refreshAuthStatus = async () => {
     try {
       console.log("인증 상태 새로고침 시작");
 
@@ -165,8 +166,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
       if (loggedIn) {
         try {
-          // 사용자 정보 파싱
-          const currentUser = JSON.parse(userStr!);
+          // 사용자 정보 가져오기 (상태 정보도 함께 업데이트)
+          const currentUser = await authApi.getCurrentUser();
 
           // 필수 필드 검증
           if (
@@ -348,14 +349,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
-  // 관리자 권한 확인 함수
-  const isAdmin = (): boolean => {
-    if (!isLoggedIn || !user || !user.roles) return false;
-
-    // ROLE_ADMIN 또는 ROLE_MODERATOR 권한을 가진 경우 관리자로 간주
-    return user.roles.some(role => 
-      role === "ROLE_ADMIN" || role === "ROLE_MODERATOR"
-    );
+  // 사용자가 차단되었는지 확인하는 함수
+  const isUserBlocked = () => {
+    return user?.status === "BLOCKED";
   };
 
   return (
@@ -367,7 +363,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         logout,
         refreshAuthStatus,
         updateUserInfo,
-        isAdmin,
+        isUserBlocked,
       }}
     >
       {children}

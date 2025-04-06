@@ -42,7 +42,7 @@ interface Notification {
 const CommunityPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLoggedIn, user, isAdmin } = useAuth();
+  const { isLoggedIn, user, isUserBlocked } = useAuth();
   const { addNotification } = useNotifications();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -92,6 +92,22 @@ const CommunityPage: React.FC = () => {
   const [reportContent, setReportContent] = useState("");
   const [reportTargetId, setReportTargetId] = useState<number | null>(null);
   const [reportTargetType, setReportTargetType] = useState<"comment" | "post" | null>(null);
+
+  // 글쓰기 버튼 클릭 처리 핸들러
+  const handleWriteButtonClick = async () => {
+    try {
+      if (isUserBlocked()) {
+        toast.error("현재 글쓰기 기능이 제한되었습니다. 관리자에게 문의해주세요.");
+        return;
+      }
+      
+      // 정상 상태인 경우 글쓰기 폼 표시
+      setShowWriteForm(true);
+    } catch (error) {
+      console.error("사용자 상태 확인 실패:", error);
+      toast.error("사용자 정보를 확인할 수 없습니다. 다시 시도해주세요.");
+    }
+  };
 
   // URL 쿼리 파라미터 확인하여 특정 게시글 표시
   useEffect(() => {
@@ -467,7 +483,21 @@ const CommunityPage: React.FC = () => {
 
   // 댓글 작성 처리
   const handleCommentSubmit = async (postId: number) => {
-    if (!newComment.trim()) return;
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    if (!newComment.trim()) {
+      toast.error("댓글 내용을 입력해주세요.");
+      return;
+    }
+    
+    // 차단된 사용자인 경우 댓글 작성 불가
+    if (isUserBlocked()) {
+      toast.error("현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.");
+      return;
+    }
 
     try {
       const response = await backendApi.createComment(postId, newComment);
@@ -486,40 +516,13 @@ const CommunityPage: React.FC = () => {
       const newCommentWithDate = {
         ...response,
         createdAt: response.createdAt || new Date().toISOString(),
-        // 필요한 추가 필드 설정
-        user: {
-          id: user?.id || 0,
-          username: user?.username || "",
-          profileImageUrl: user?.profileImageUrl || null
-        },
-        likeCount: 0,
-        dislikeCount: 0,
-        liked: false,
-        disliked: false
       };
 
       // 성공적으로 댓글을 추가한 후 현재 게시글 목록을 업데이트
       setPosts((prevPosts) =>
         prevPosts.map((post) =>
           post.id === postId
-            ? { 
-                ...post, 
-                comments: [...post.comments, newCommentWithDate],
-                commentCount: (post.commentCount || 0) + 1 
-              }
-            : post
-        )
-      );
-
-      // visiblePosts도 함께 업데이트
-      setVisiblePosts((prevPosts) =>
-        prevPosts.map((post) =>
-          post.id === postId
-            ? { 
-                ...post, 
-                comments: [...post.comments, newCommentWithDate],
-                commentCount: (post.commentCount || 0) + 1
-              }
+            ? { ...post, comments: [...post.comments, newCommentWithDate] }
             : post
         )
       );
@@ -932,11 +935,7 @@ const CommunityPage: React.FC = () => {
               <FaSearch className="text-gray-600" />
             </button>
             <button
-              onClick={() => {
-                setShowWriteForm(true);
-                setShowSearch(false);
-                setShowSearchModal(false);
-              }}
+              onClick={handleWriteButtonClick}
               className="rounded-full p-2 hover:bg-gray-100"
               title="글 작성하기"
             >
@@ -1280,20 +1279,18 @@ const CommunityPage: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="text-lg font-semibold">{post.title}</h3>
-                        {isLoggedIn && (post.user.id === user?.id || isAdmin()) && (
-                          <div className="flex items-center space-x-2 ml-auto">
-                            {post.user.id === user?.id && (
-                              <button
-                                onClick={() => handleEditPost(post)}
-                                className="p-1 text-gray-500 hover:text-blue-500"
-                                title="수정"
-                              >
-                                <FaEdit />
-                              </button>
-                            )}
+                        {isLoggedIn && user?.id === post.user.id && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditPost(post)}
+                              className="text-gray-500 hover:text-blue-500"
+                              title="수정"
+                            >
+                              <FaEdit />
+                            </button>
                             <button
                               onClick={() => handleDeletePost(post.id)}
-                              className="p-1 text-gray-500 hover:text-red-500"
+                              className="text-gray-500 hover:text-red-500"
                               title="삭제"
                             >
                               <FaTrash />
@@ -1422,13 +1419,15 @@ const CommunityPage: React.FC = () => {
                                     </button>
                                   )}
                                 </div>
-                                {isLoggedIn && (comment.user.id === user?.id || isAdmin()) && (
+                                {isLoggedIn && user?.id === comment.user.id && (
                                   <button
-                                    onClick={() => handleDeleteComment(post.id, comment.id)}
-                                    className="p-1 text-gray-500 hover:text-red-500 ml-2"
+                                    onClick={() =>
+                                      handleDeleteComment(post.id, comment.id)
+                                    }
+                                    className="text-xs text-gray-500 hover:text-red-500"
                                     title="삭제"
                                   >
-                                    <FaTrash className="text-xs" />
+                                    <FaTrash />
                                   </button>
                                 )}
                               </div>
@@ -1453,7 +1452,9 @@ const CommunityPage: React.FC = () => {
                                   <span>{comment.likeCount || 0}</span>
                                 </button>
                                 <button
-                                  onClick={() => handleCommentDislike(comment.id)}
+                                  onClick={() =>
+                                    handleCommentDislike(comment.id)
+                                  }
                                   className={`flex items-center text-xs space-x-1 ${
                                     comment.disliked
                                       ? "text-red-500"
@@ -1494,14 +1495,16 @@ const CommunityPage: React.FC = () => {
                           <div className="flex-1 flex">
                             <input
                               type="text"
-                              placeholder="댓글을 입력하세요..."
+                              placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
                               className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
                               value={newComment}
                               onChange={(e) => setNewComment(e.target.value)}
+                              disabled={isUserBlocked()}
                             />
                             <button
                               className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
                               onClick={() => handleCommentSubmit(post.id)}
+                              disabled={!newComment.trim() || isUserBlocked()}
                             >
                               <FaReply />
                             </button>
@@ -1510,15 +1513,19 @@ const CommunityPage: React.FC = () => {
                       ) : (
                         <div className="text-center py-2">
                           <p className="text-sm text-gray-500 mb-1">
-                            댓글을 작성하려면 로그인이 필요합니다.
+                            댓글을 작성하려면 로그인하세요.
                           </p>
                           <Link
                             to="/login"
-                            className="text-sm text-blue-600 hover:underline"
+                            className="text-xs text-blue-500 hover:underline"
                           >
                             로그인하기
                           </Link>
                         </div>
+                      )}
+                      
+                      {isLoggedIn && isUserBlocked() && (
+                        <p className="text-xs text-red-500 mt-1 text-center">현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.</p>
                       )}
                     </div>
                   )}
@@ -1599,20 +1606,18 @@ const CommunityPage: React.FC = () => {
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="text-lg font-semibold">{post.title}</h3>
-                      {isLoggedIn && (post.user.id === user?.id || isAdmin()) && (
-                        <div className="flex items-center space-x-2 ml-auto">
-                          {post.user.id === user?.id && (
-                            <button
-                              onClick={() => handleEditPost(post)}
-                              className="p-1 text-gray-500 hover:text-blue-500"
-                              title="수정"
-                            >
-                              <FaEdit />
-                            </button>
-                          )}
+                      {isLoggedIn && user?.id === post.user.id && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEditPost(post)}
+                            className="text-gray-500 hover:text-blue-500"
+                            title="수정"
+                          >
+                            <FaEdit />
+                          </button>
                           <button
                             onClick={() => handleDeletePost(post.id)}
-                            className="p-1 text-gray-500 hover:text-red-500"
+                            className="text-gray-500 hover:text-red-500"
                             title="삭제"
                           >
                             <FaTrash />
@@ -1741,13 +1746,15 @@ const CommunityPage: React.FC = () => {
                                   </button>
                                 )}
                               </div>
-                              {isLoggedIn && (comment.user.id === user?.id || isAdmin()) && (
+                              {isLoggedIn && user?.id === comment.user.id && (
                                 <button
-                                  onClick={() => handleDeleteComment(post.id, comment.id)}
-                                  className="p-1 text-gray-500 hover:text-red-500 ml-2"
+                                  onClick={() =>
+                                    handleDeleteComment(post.id, comment.id)
+                                  }
+                                  className="text-xs text-gray-500 hover:text-red-500"
                                   title="삭제"
                                 >
-                                  <FaTrash className="text-xs" />
+                                  <FaTrash />
                                 </button>
                               )}
                             </div>
@@ -1813,14 +1820,16 @@ const CommunityPage: React.FC = () => {
                         <div className="flex-1 flex">
                           <input
                             type="text"
-                            placeholder="댓글을 입력하세요..."
+                            placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
                             className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
                             value={newComment}
                             onChange={(e) => setNewComment(e.target.value)}
+                            disabled={isUserBlocked()}
                           />
                           <button
                             className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
                             onClick={() => handleCommentSubmit(post.id)}
+                            disabled={!newComment.trim() || isUserBlocked()}
                           >
                             <FaReply />
                           </button>
@@ -1829,15 +1838,19 @@ const CommunityPage: React.FC = () => {
                     ) : (
                       <div className="text-center py-2">
                         <p className="text-sm text-gray-500 mb-1">
-                          댓글을 작성하려면 로그인이 필요합니다.
+                          댓글을 작성하려면 로그인하세요.
                         </p>
                         <Link
                           to="/login"
-                          className="text-sm text-blue-600 hover:underline"
+                          className="text-xs text-blue-500 hover:underline"
                         >
                           로그인하기
                         </Link>
                       </div>
+                    )}
+                    
+                    {isLoggedIn && isUserBlocked() && (
+                      <p className="text-xs text-red-500 mt-1 text-center">현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.</p>
                     )}
                   </div>
                 )}
@@ -1897,6 +1910,14 @@ const CommunityPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 모바일용 게시글 작성 버튼 (고정 플로팅 버튼) */}
+      <button
+        onClick={handleWriteButtonClick}
+        className="fixed bottom-8 right-8 bg-blue-500 text-white p-4 rounded-full shadow-lg hover:bg-blue-600 transition-colors md:hidden"
+      >
+        <FaPen />
+      </button>
     </div>
   );
 };

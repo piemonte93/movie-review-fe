@@ -195,7 +195,7 @@ const convertBackendDateToISO = (date: string | null | undefined): string => {
 };
 
 const TvReviewsPage: React.FC = () => {
-  const { isLoggedIn, user, isAdmin } = useAuth();
+  const { isLoggedIn, user, isUserBlocked } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [title, setTitle] = useState("");
@@ -244,6 +244,22 @@ const TvReviewsPage: React.FC = () => {
   const [reportContent, setReportContent] = useState("");
   const [reportTargetId, setReportTargetId] = useState<number | null>(null);
   const [reportTargetType, setReportTargetType] = useState<"comment" | "review" | null>(null);
+
+  // 글쓰기 버튼 클릭 처리 핸들러
+  const handleWriteButtonClick = async () => {
+    try {
+      if (isUserBlocked()) {
+        toast.error("현재 글쓰기 기능이 제한되었습니다. 관리자에게 문의해주세요.");
+        return;
+      }
+      
+      // 정상 상태인 경우 글쓰기 폼 표시
+      setShowWriteForm(true);
+    } catch (error) {
+      console.error("사용자 상태 확인 실패:", error);
+      toast.error("사용자 정보를 확인할 수 없습니다. 다시 시도해주세요.");
+    }
+  };
 
   // TV 쇼 검색 함수
   const searchTvShows = async (query: string) => {
@@ -958,12 +974,8 @@ const TvReviewsPage: React.FC = () => {
 
     try {
       await backendApi.deleteTvReview(reviewId);
-      
-      // 삭제된 리뷰를 모든 상태 배열에서 제거
-      setReviews((prevReviews) => prevReviews.filter(review => review.id !== reviewId));
-      setVisibleReviews((prevReviews) => prevReviews.filter(review => review.id !== reviewId));
-      setSearchResults((prevResults) => prevResults.filter(review => review.id !== reviewId));
-      
+      // 성공적으로 삭제된 후 리뷰 목록 새로고침
+      fetchReviews();
       toast.success("리뷰가 삭제되었습니다.");
     } catch (error) {
       console.error("리뷰 삭제 실패:", error);
@@ -1041,6 +1053,11 @@ const TvReviewsPage: React.FC = () => {
 
       // 성공 메시지 표시
       toast.success("댓글이 삭제되었습니다.");
+
+      // 서버에서 최신 데이터 가져오기 (백그라운드에서 처리)
+      fetchReviewComments(reviewId).catch((error) => {
+        console.error(`댓글 목록 새로고침 실패: ${error}`);
+      });
     } catch (error) {
       console.error("댓글 삭제 실패:", error);
 
@@ -1165,12 +1182,20 @@ const TvReviewsPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 댓글 제출 핸들러
+  // 댓글 제출 처리
   const handleCommentSubmit = async (reviewId: number) => {
     if (!isLoggedIn || !commentContent.trim()) {
       return;
     }
-
+    
+    // 차단된 사용자인 경우 댓글 작성 불가
+    if (isUserBlocked()) {
+      toast.error("현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.");
+      return;
+    }
+    
+    setSubmitting(true);
+    
     try {
       const newComment = await backendApi.addReviewComment(
         reviewId,
@@ -1218,6 +1243,8 @@ const TvReviewsPage: React.FC = () => {
     } catch (error) {
       console.error("댓글 작성 실패:", error);
       toast.error("댓글 작성에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -1266,6 +1293,17 @@ const TvReviewsPage: React.FC = () => {
     [isLoggedIn, user]
   );
 
+  // 로그인한 사용자가 관리자인지 확인하는 함수
+  const isAdmin = useCallback(() => {
+    const isUserAdmin = isLoggedIn && user?.roles?.includes("ROLE_ADMIN");
+    console.log("관리자 권한 확인:", {
+      isLoggedIn,
+      roles: user?.roles || [],
+      isAdmin: isUserAdmin,
+    });
+    return isUserAdmin;
+  }, [isLoggedIn, user]);
+
   // 신고 모달 열기 함수
   const openReportModal = (id: number, type: "comment" | "review") => {
     setReportTargetId(id);
@@ -1277,7 +1315,7 @@ const TvReviewsPage: React.FC = () => {
   // 신고 제출 처리 함수
   const handleReportSubmit = async () => {
     if (!reportContent.trim()) {
-      toast.error("신고 내용을 입력해주세요.");
+      toast.error("신고 내용을 자세히 입력해주세요.");
       return;
     }
 
@@ -1334,11 +1372,10 @@ const TvReviewsPage: React.FC = () => {
         </div>
         {isLoggedIn && (
           <button
-            onClick={() => setShowWriteForm(true)}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors flex items-center gap-1"
+            onClick={handleWriteButtonClick}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
           >
-            <FaPen className="text-sm" />
-            <span>리뷰 작성</span>
+            리뷰 작성
           </button>
         )}
       </div>
@@ -1492,17 +1529,15 @@ const TvReviewsPage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  {isLoggedIn && (user?.id === review.user.id || isAdmin()) && (
+                  {isLoggedIn && user?.id === review.user.id && (
                     <div className="flex gap-2">
-                      {user?.id === review.user.id && (
-                        <button
-                          onClick={() => handleEditReview(review)}
-                          className="text-gray-600 hover:text-blue-600"
-                          title="수정"
-                        >
-                          <FaEdit />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleEditReview(review)}
+                        className="text-gray-600 hover:text-blue-600"
+                        title="수정"
+                      >
+                        <FaEdit />
+                      </button>
                       <button
                         onClick={() => handleDeleteReview(review.id)}
                         className="text-gray-600 hover:text-red-600"
@@ -1743,17 +1778,21 @@ const TvReviewsPage: React.FC = () => {
                         type="text"
                         value={commentContent}
                         onChange={(e) => setCommentContent(e.target.value)}
-                        placeholder="댓글을 입력하세요..."
+                        placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
                         className="w-full p-2 text-sm focus:outline-none flex-1"
+                        disabled={!isLoggedIn || isUserBlocked()}
                       />
                       <button
                         onClick={() => handleCommentSubmit(review.id)}
                         className="px-4 bg-blue-500 text-white text-sm hover:bg-blue-600 transition-colors"
-                        disabled={!isLoggedIn || !commentContent.trim()}
+                        disabled={!isLoggedIn || !commentContent.trim() || isUserBlocked()}
                       >
                         등록
                       </button>
                     </div>
+                    {isLoggedIn && isUserBlocked() && (
+                      <p className="text-xs text-red-500 mt-1">현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.</p>
+                    )}
                   </div>
                 </div>
               )}

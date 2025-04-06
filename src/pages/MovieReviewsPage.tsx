@@ -16,8 +16,12 @@ import {
   FaTrash,
   FaBell,
   FaExclamationTriangle,
+  FaPlus,
+  FaFilm,
+  FaCommentSlash,
+  FaCheck,
 } from "react-icons/fa";
-import { FaStarHalfStroke, FaFilm } from "react-icons/fa6";
+import { FaStarHalfStroke } from "react-icons/fa6";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { backendApi } from "../api/backendApi";
@@ -25,6 +29,8 @@ import { toast } from "react-toastify";
 import { Content } from "../types/content";
 import axios from "axios";
 import { formatDate } from "../utils/dateUtils";
+import { useNotifications } from "../context/NotificationContext";
+import Modal from "react-modal";
 
 // Content 타입을 Movie 타입으로 매핑하는 함수
 const mapContentToMovie = (content: Content): Movie | null => {
@@ -216,8 +222,9 @@ const convertBackendDateToISO = (
 };
 
 const MovieReviewsPage: React.FC = () => {
-  const { isLoggedIn, user, isAdmin } = useAuth();
+  const { isLoggedIn, user, isUserBlocked } = useAuth();
   const navigate = useNavigate();
+  const { addNotification } = useNotifications();
   const location = useLocation();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -720,7 +727,15 @@ const MovieReviewsPage: React.FC = () => {
   // 리뷰 댓글 작성 처리
   const handleCommentSubmit = async (reviewId: number) => {
     if (!commentContent.trim()) return;
+    
+    // 차단된 사용자인 경우 댓글 작성 불가
+    if (isUserBlocked()) {
+      toast.error("현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.");
+      return;
+    }
 
+    setSubmitting(true);
+    
     try {
       const response = await backendApi.addReviewComment(
         reviewId,
@@ -803,6 +818,8 @@ const MovieReviewsPage: React.FC = () => {
     } catch (error) {
       console.error("댓글 작성 실패:", error);
       toast.error("댓글 작성에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -1483,6 +1500,27 @@ const MovieReviewsPage: React.FC = () => {
     }
   };
 
+  // Admin 권한을 확인하는 함수 추가
+  const isAdmin = () => {
+    return user?.roles?.includes("ROLE_ADMIN") || false;
+  };
+
+  // 글쓰기 버튼 클릭 처리 핸들러
+  const handleWriteButtonClick = async () => {
+    try {
+      if (isUserBlocked()) {
+        toast.error("현재 글쓰기 기능이 제한되었습니다. 관리자에게 문의해주세요.");
+        return;
+      }
+      
+      // 정상 상태인 경우 글쓰기 폼 표시
+      setShowWriteForm(true);
+    } catch (error) {
+      console.error("사용자 상태 확인 실패:", error);
+      toast.error("사용자 정보를 확인할 수 없습니다. 다시 시도해주세요.");
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* 리뷰 작성 버튼 */}
@@ -1490,7 +1528,7 @@ const MovieReviewsPage: React.FC = () => {
         <h1 className="text-2xl font-bold">영화 리뷰</h1>
         {isLoggedIn && (
           <button
-            onClick={() => setShowWriteForm(true)}
+            onClick={handleWriteButtonClick}
             className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
           >
             리뷰 작성
@@ -1647,7 +1685,7 @@ const MovieReviewsPage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  {isLoggedIn && (user?.id === review.user.id || isAdmin()) && (
+                  {isLoggedIn && (user?.id === review.user.id || user?.roles?.includes("ROLE_ADMIN") || false) && (
                     <div className="flex space-x-2">
                       {user?.id === review.user.id && (
                         <button
@@ -1854,7 +1892,7 @@ const MovieReviewsPage: React.FC = () => {
                                       </button>
                                     )}
                                   </div>
-                                  {isLoggedIn && (user?.id === comment.userId || isAdmin()) && (
+                                  {isLoggedIn && (user?.id === comment.userId || user?.roles?.includes("ROLE_ADMIN") || false) && (
                                     <button
                                       onClick={() => handleDeleteComment(review.id, comment.id)}
                                       className="text-xs text-gray-500 hover:text-red-500"
@@ -1883,17 +1921,21 @@ const MovieReviewsPage: React.FC = () => {
                         type="text"
                         value={commentContent}
                         onChange={(e) => setCommentContent(e.target.value)}
-                        placeholder="댓글을 입력하세요..."
+                        placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
                         className="w-full p-2 text-sm focus:outline-none flex-1"
+                        disabled={!isLoggedIn || isUserBlocked()}
                       />
                       <button
                         onClick={() => handleCommentSubmit(review.id)}
                         className="px-4 bg-blue-500 text-white text-sm hover:bg-blue-600 transition-colors"
-                        disabled={!isLoggedIn || !commentContent.trim()}
+                        disabled={!isLoggedIn || !commentContent.trim() || isUserBlocked()}
                       >
                         등록
                       </button>
                     </div>
+                    {isLoggedIn && isUserBlocked() && (
+                      <p className="text-xs text-red-500 mt-1">현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.</p>
+                    )}
                   </div>
                 </div>
               )}
