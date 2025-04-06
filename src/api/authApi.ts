@@ -9,6 +9,7 @@ const apiClient = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
+  withCredentials: false, // CORS 문제 해결을 위해 credentials 비활성화
 });
 
 // 요청 인터셉터 - 토큰 추가
@@ -111,6 +112,7 @@ export interface AuthResponse {
     email: string;
     username: string;
     roles: string[];
+    status?: "ACTIVE" | "BLOCKED" | "DELETED"; // 사용자 상태 필드 추가
   };
 }
 
@@ -144,36 +146,37 @@ export interface EmailVerificationRequest {
 // 인증 API
 export const authApi = {
   // 로그인 API
-  login: async (loginData: LoginRequest): Promise<AuthResponse> => {
+  login: async (username: string, password: string): Promise<AuthResponse> => {
     try {
-      const response = await apiClient.post<AuthResponse>(
-        "/api/auth/login",
-        loginData
-      );
-
-      // 디버깅: 응답 데이터 출력
-      console.log("로그인 응답:", response.data);
-
-      // JwtResponse 형식에 맞게 구조 변환
-      // 백엔드가 user 객체로 감싸서 주지 않고 flat 구조로 응답을 보내는 경우 처리
-      const userData = {
-        id: response.data.id || 0,
-        username: response.data.username || "",
-        email: response.data.email || "",
-        roles: response.data.roles || [],
-      };
-
-      console.log("변환된 사용자 정보:", userData);
-
-      // 토큰 저장
-      localStorage.setItem("token", response.data.token);
-      localStorage.setItem("user", JSON.stringify(userData));
-
-      // 프론트엔드에서 사용할 사용자 정보 형식으로 변환하여 반환
-      return {
-        token: response.data.token,
-        user: userData,
-      };
+      const response = await apiClient.post("/api/auth/signin", {
+        username,
+        password,
+      });
+      
+      // 사용자 상태 정보 가져오기
+      if (response.data && response.data.token) {
+        // 토큰을 설정하여 다음 요청에서 인증할 수 있도록 합니다
+        apiClient.defaults.headers.common["Authorization"] = `Bearer ${response.data.token}`;
+        
+        // 추가로 사용자 상태 정보 가져오기
+        try {
+          const userStatusResponse = await apiClient.get("/api/auth/user-info");
+          if (userStatusResponse.data) {
+            // 기존 사용자 정보에 상태 정보 추가
+            return {
+              ...response.data,
+              user: {
+                ...response.data.user,
+                status: userStatusResponse.data.status || "ACTIVE"
+              }
+            };
+          }
+        } catch (statusError) {
+          console.error("사용자 상태 정보 로드 실패:", statusError);
+        }
+      }
+      
+      return response.data;
     } catch (error) {
       console.error("로그인 실패:", error);
       throw error;
@@ -201,7 +204,7 @@ export const authApi = {
   },
 
   // 현재 로그인한 사용자 정보 가져오기
-  getCurrentUser: () => {
+  getCurrentUser: async () => {
     const userStr = localStorage.getItem("user");
     console.log("로컬스토리지에서 가져온 사용자 정보 문자열:", userStr);
 
@@ -209,6 +212,25 @@ export const authApi = {
       try {
         const parsedUser = JSON.parse(userStr);
         console.log("파싱된 사용자 정보:", parsedUser);
+        
+        // 토큰이 있다면 사용자 상태를 서버에서 확인
+        const token = localStorage.getItem("token");
+        if (token) {
+          try {
+            // 사용자 상태 정보 가져오기
+            const userStatusResponse = await apiClient.get("/api/users/status");
+            if (userStatusResponse.data && userStatusResponse.data.status) {
+              // 사용자 정보에 상태 추가
+              parsedUser.status = userStatusResponse.data.status;
+              
+              // 로컬 스토리지에 업데이트된 정보 저장
+              localStorage.setItem("user", JSON.stringify(parsedUser));
+            }
+          } catch (error) {
+            console.error("사용자 상태 정보 로드 실패:", error);
+          }
+        }
+        
         return parsedUser;
       } catch (e) {
         console.error("사용자 정보 파싱 오류:", e);
@@ -497,7 +519,7 @@ export const authApi = {
   checkEmail: async (email: string): Promise<boolean> => {
     try {
       const response = await apiClient.get<{ available: boolean }>(
-        `/api/auth/check-email?email=${encodeURIComponent(email)}`
+        `/api/auth/public/check-email?email=${encodeURIComponent(email)}`
       );
       return response.data.available;
     } catch (error) {

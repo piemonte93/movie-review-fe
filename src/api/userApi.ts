@@ -119,7 +119,7 @@ export const getFollowRecommendations = async () => {
 
 // 프로필 이미지 업로드 함수
 export const uploadProfileImage = async (
-  file: File
+    file: File
 ): Promise<{ profileImageUrl: string }> => {
   try {
     const formData = new FormData();
@@ -328,44 +328,107 @@ export const getUsernameFromUserId = async (
   userId: string
 ): Promise<string> => {
   try {
-    // 로컬에서 먼저 시도
-    const localUsername = await getLocalUsername(userId);
-    if (localUsername) {
-      return localUsername;
-    }
-
-    // 프로필 API로 사용자 정보 요청
-    console.log(`사용자 ID ${userId}의 프로필 정보 요청`);
-    const profileResponse = await apiClient.get(`/api/profile/id/${userId}`);
-
-    if (profileResponse.data && profileResponse.data.username) {
-      const username = profileResponse.data.username;
-      console.log(`사용자 ID ${userId}의 유저명 찾음:`, username);
-
-      // 캐시에 사용자 ID-유저명 매핑 저장
+    console.log(`[디버그] 사용자 ID ${userId}의 유저명 조회 시작`);
+    
+    // 1. 본인 ID인지 확인 (로컬 스토리지)
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
       try {
-        const userMappingStr = localStorage.getItem("user_id_mapping") || "{}";
-        const userMapping: Record<string, string> = JSON.parse(userMappingStr);
-        userMapping[userId] = username;
-        localStorage.setItem("user_id_mapping", JSON.stringify(userMapping));
+        const localUser = JSON.parse(userStr);
+        if (localUser.id === parseInt(userId)) {
+          console.log(`[디버그] 현재 로그인한 사용자의 ID(${userId}). 로컬 유저명 사용:`, localUser.username);
+          return localUser.username;
+        }
       } catch (e) {
-        console.error("사용자 매핑 캐시 업데이트 실패:", e);
+        console.error("[디버그] 로컬 스토리지 사용자 정보 파싱 오류:", e);
       }
-
-      return username;
     }
 
-    // 기본값 반환
-    return `user${userId}`;
+    // 2. 캐싱된 사용자 매핑 확인
+    const userMappingStr = localStorage.getItem("user_id_mapping");
+    if (userMappingStr) {
+      try {
+        const userMapping = JSON.parse(userMappingStr);
+        if (userMapping[userId]) {
+          console.log(`[디버그] 캐싱된 매핑에서 사용자 ID ${userId}의 유저명 찾음:`, userMapping[userId]);
+          return userMapping[userId];
+        }
+      } catch (e) {
+        console.error("[디버그] 사용자 매핑 캐시 파싱 실패:", e);
+      }
+    }
+
+    // 3. 직접 API 호출로 프로필 정보 조회 (ID 기반)
+    console.log(`[디버그] ID 기반 프로필 API 직접 호출: 사용자 ID ${userId}`);
+    
+    try {
+      // 명시적인 타임아웃 설정하여 빠른 실패 처리
+      const profileResponse = await apiClient.get(`/api/profile/id/${userId}`, {
+        timeout: 3000 // 3초 타임아웃
+      });
+      
+      console.log(`[디버그] 프로필 응답 데이터:`, profileResponse.data);
+      
+      if (profileResponse.data && profileResponse.data.username) {
+        const username = profileResponse.data.username;
+        console.log(`[디버그] API에서 사용자 ID ${userId}의 유저명 찾음:`, username);
+        
+        // 캐시에 사용자 ID-유저명 매핑 저장
+        try {
+          const userMappingStr = localStorage.getItem("user_id_mapping") || "{}";
+          const userMapping: Record<string, string> = JSON.parse(userMappingStr);
+          userMapping[userId] = username;
+          localStorage.setItem("user_id_mapping", JSON.stringify(userMapping));
+          console.log(`[디버그] 사용자 ID ${userId}와 유저명 ${username} 매핑 캐시 저장 완료`);
+        } catch (e) {
+          console.error("[디버그] 사용자 매핑 캐시 업데이트 실패:", e);
+        }
+        
+        return username;
+      } else {
+        console.warn(`[디버그] 응답에 username이 없음:`, profileResponse.data);
+      }
+    } catch (apiError) {
+      console.error(`[디버그] /api/profile/id/${userId} API 호출 실패:`, apiError);
+      // 실패 시 fetch API로 한 번 더 시도
+      try {
+        console.log(`[디버그] fetch API로 재시도: /api/profile/id/${userId}`);
+        const response = await fetch(`http://localhost:8080/api/profile/id/${userId}`);
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`[디버그] fetch API 응답:`, data);
+          if (data && data.username) {
+            // 캐시에 저장
+            try {
+              const userMappingStr = localStorage.getItem("user_id_mapping") || "{}";
+              const userMapping: Record<string, string> = JSON.parse(userMappingStr);
+              userMapping[userId] = data.username;
+              localStorage.setItem("user_id_mapping", JSON.stringify(userMapping));
+            } catch (e) {
+              console.error("[디버그] 사용자 매핑 캐시 업데이트 실패:", e);
+            }
+            return data.username;
+          }
+        } else {
+          console.error(`[디버그] fetch API 호출 실패:`, response.status);
+        }
+      } catch (fetchError) {
+        console.error(`[디버그] fetch API 호출 중 오류:`, fetchError);
+      }
+    }
+
+    // 4. 기본값 반환 (모든 시도 실패 시)
+    console.warn(`[디버그] 사용자 ID ${userId}에 대한 유저명을 찾을 수 없음, 기본값 사용`);
+    return `사용자${userId}`;
   } catch (error) {
-    console.error(`사용자 ID ${userId}의 유저명 조회 실패:`, error);
-    return `user${userId}`;
+    console.error(`[디버그] 사용자 ID ${userId}의 유저명 조회 중 예외 발생:`, error);
+    return `사용자${userId}`;
   }
 };
 
 // 다른 사용자의 프로필 정보 가져오기
 export const getOtherUserProfile = async (
-  userId: string
+    userId: string
 ): Promise<UserProfile> => {
   try {
     console.log(`사용자 ID: ${userId}의 프로필 데이터 요청 시작`);
@@ -458,7 +521,7 @@ export const getOtherUserProfile = async (
 
 // 다른 사용자의 활동 정보 가져오기
 export const getOtherUserActivity = async (
-  userId: string
+    userId: string
 ): Promise<UserActivity> => {
   try {
     console.log(`사용자 ID: ${userId}의 활동 데이터 요청 시작`);
@@ -559,11 +622,16 @@ export const getOtherUserScraps = async (userId: string) => {
 export const toggleFollow = async (userId: string): Promise<any> => {
   try {
     console.log(`팔로우 토글 API 호출: ${userId}`);
+    
+    // 명확한 API 엔드포인트 경로로 요청
     const response = await apiClient.post(`/api/users/follow/${userId}`);
+    
     console.log("팔로우 토글 API 응답:", response.data);
     return response.data;
   } catch (error) {
     console.error("팔로우 토글 API 오류:", error);
+    
+    // 오류를 상위로 전파
     throw error;
   }
 };

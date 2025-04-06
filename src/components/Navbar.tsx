@@ -230,7 +230,7 @@ const Navbar: React.FC = () => {
             </div>
           )}
 
-          {isLoggedIn ? (
+{isLoggedIn ? (
             <div className="relative user-menu">
               <button
                 className="user-icon relative rounded-full p-2 hover:bg-gray-100"
@@ -264,15 +264,15 @@ const Navbar: React.FC = () => {
                     onClick={() => setIsUserMenuOpen(false)}
                   >
                     <FaUser className="mr-2 text-gray-400" />
-                    마이페이지
+                    프로필
                   </Link>
                   <Link
-                    to="/settings"
+                    to="/profile/edit"
                     className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     onClick={() => setIsUserMenuOpen(false)}
                   >
                     <FaCog className="mr-2 text-gray-400" />
-                    설정
+                    프로필 수정
                   </Link>
                   {user?.roles?.includes("ROLE_ADMIN") && (
                     <Link

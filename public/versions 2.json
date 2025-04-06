@@ -1,0 +1,14 @@
+{
+  "versions": [
+    {
+      "version": 1,
+      "title": "Initial Movie Social App Setup",
+      "changelog": [
+        "Created React+Vite frontend with TypeScript and Tailwind CSS",
+        "Implemented responsive movie grid display with mock data",
+        "Created TMDB API service structure",
+        "Added Spring Boot backend structure"
+      ]
+    }
+  ]
+}

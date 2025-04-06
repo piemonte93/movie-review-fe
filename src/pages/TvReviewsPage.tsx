@@ -14,6 +14,8 @@ import {
   FaArrowUp,
   FaEdit,
   FaTrash,
+  FaBell,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import { FaStarHalfStroke, FaTv } from "react-icons/fa6";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -193,7 +195,7 @@ const convertBackendDateToISO = (date: string | null | undefined): string => {
 };
 
 const TvReviewsPage: React.FC = () => {
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, user, isUserBlocked } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [title, setTitle] = useState("");
@@ -236,6 +238,28 @@ const TvReviewsPage: React.FC = () => {
 
   // TMDB API 키 (실제 환경에서는 환경 변수로 관리)
   const TMDB_API_KEY = "a95a7823323dd52f66d0dc776498a8a1";
+
+  // 신고 관련 상태 추가
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportContent, setReportContent] = useState("");
+  const [reportTargetId, setReportTargetId] = useState<number | null>(null);
+  const [reportTargetType, setReportTargetType] = useState<"comment" | "review" | null>(null);
+
+  // 글쓰기 버튼 클릭 처리 핸들러
+  const handleWriteButtonClick = async () => {
+    try {
+      if (isUserBlocked()) {
+        toast.error("현재 글쓰기 기능이 제한되었습니다. 관리자에게 문의해주세요.");
+        return;
+      }
+      
+      // 정상 상태인 경우 글쓰기 폼 표시
+      setShowWriteForm(true);
+    } catch (error) {
+      console.error("사용자 상태 확인 실패:", error);
+      toast.error("사용자 정보를 확인할 수 없습니다. 다시 시도해주세요.");
+    }
+  };
 
   // TV 쇼 검색 함수
   const searchTvShows = async (query: string) => {
@@ -1158,12 +1182,20 @@ const TvReviewsPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 댓글 제출 핸들러
+  // 댓글 제출 처리
   const handleCommentSubmit = async (reviewId: number) => {
     if (!isLoggedIn || !commentContent.trim()) {
       return;
     }
-
+    
+    // 차단된 사용자인 경우 댓글 작성 불가
+    if (isUserBlocked()) {
+      toast.error("현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.");
+      return;
+    }
+    
+    setSubmitting(true);
+    
     try {
       const newComment = await backendApi.addReviewComment(
         reviewId,
@@ -1211,6 +1243,8 @@ const TvReviewsPage: React.FC = () => {
     } catch (error) {
       console.error("댓글 작성 실패:", error);
       toast.error("댓글 작성에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -1270,6 +1304,58 @@ const TvReviewsPage: React.FC = () => {
     return isUserAdmin;
   }, [isLoggedIn, user]);
 
+  // 신고 모달 열기 함수
+  const openReportModal = (id: number, type: "comment" | "review") => {
+    setReportTargetId(id);
+    setReportTargetType(type);
+    setReportContent("");
+    setShowReportModal(true);
+  };
+
+  // 신고 제출 처리 함수
+  const handleReportSubmit = async () => {
+    if (!reportContent.trim()) {
+      toast.error("신고 내용을 자세히 입력해주세요.");
+      return;
+    }
+
+    try {
+      // 댓글 찾기
+      let targetUserId = 0;
+      
+      if (reportTargetType === "review") {
+        // 리뷰인 경우 user.id를 사용
+        const review = reviews.find(r => r.id === reportTargetId);
+        targetUserId = review?.user?.id || 0;
+      } else if (reportTargetType === "comment") {
+        // 댓글인 경우 comments 배열에서 찾아 userId를 사용
+        const comment = reviews.flatMap(r => r.comments).find(c => c.id === reportTargetId);
+        targetUserId = comment?.userId || 0;
+        
+        // 디버깅 로그
+        console.log("댓글 정보:", comment);
+        console.log("댓글 작성자 ID:", targetUserId);
+      }
+      
+      // 신고 생성 요청
+      await backendApi.createReport({
+        targetId: reportTargetId!,
+        targetUserId: targetUserId,
+        reportType: reportTargetType === "review" ? "review" : "comment",
+        content: reportContent,
+      });
+      
+      toast.success("신고가 접수되었습니다.");
+      setShowReportModal(false);
+      setReportContent("");
+      setReportTargetId(null);
+      setReportTargetType(null);
+    } catch (error) {
+      console.error("신고 접수 실패:", error);
+      toast.error("신고 접수에 실패했습니다. 다시 시도해주세요.");
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6">TV 쇼 리뷰</h1>
@@ -1286,11 +1372,10 @@ const TvReviewsPage: React.FC = () => {
         </div>
         {isLoggedIn && (
           <button
-            onClick={() => setShowWriteForm(true)}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors flex items-center gap-1"
+            onClick={handleWriteButtonClick}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
           >
-            <FaPen className="text-sm" />
-            <span>리뷰 작성</span>
+            리뷰 작성
           </button>
         )}
       </div>
@@ -1539,6 +1624,15 @@ const TvReviewsPage: React.FC = () => {
                   })()}
                 </div>
                 <div className="flex items-center space-x-4">
+                  {isLoggedIn && user?.id !== review.user.id && (
+                    <button
+                      className="flex items-center space-x-1"
+                      title="리뷰 신고하기"
+                      onClick={() => openReportModal(review.id, "review")}
+                    >
+                      <FaBell className="text-red-500" />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleReviewLike(review.id)}
                     className="flex items-center space-x-1"
@@ -1624,6 +1718,15 @@ const TvReviewsPage: React.FC = () => {
                                 {comment.username || "알 수 없는 사용자"}
                               </Link>
                               <div className="flex items-center gap-2">
+                                {isLoggedIn && user?.id !== comment.userId && (
+                                  <button 
+                                    className="p-1 hover:bg-gray-100 rounded-full"
+                                    title="댓글 신고하기"
+                                    onClick={() => openReportModal(comment.id, "comment")}
+                                  >
+                                    <FaBell className="text-red-500 text-xs" />
+                                  </button>
+                                )}
                                 <span className="text-sm text-gray-500">
                                   {(() => {
                                     console.log(
@@ -1675,17 +1778,21 @@ const TvReviewsPage: React.FC = () => {
                         type="text"
                         value={commentContent}
                         onChange={(e) => setCommentContent(e.target.value)}
-                        placeholder="댓글을 입력하세요..."
+                        placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
                         className="w-full p-2 text-sm focus:outline-none flex-1"
+                        disabled={!isLoggedIn || isUserBlocked()}
                       />
                       <button
                         onClick={() => handleCommentSubmit(review.id)}
                         className="px-4 bg-blue-500 text-white text-sm hover:bg-blue-600 transition-colors"
-                        disabled={!isLoggedIn || !commentContent.trim()}
+                        disabled={!isLoggedIn || !commentContent.trim() || isUserBlocked()}
                       >
                         등록
                       </button>
                     </div>
+                    {isLoggedIn && isUserBlocked() && (
+                      <p className="text-xs text-red-500 mt-1">현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -1944,6 +2051,48 @@ const TvReviewsPage: React.FC = () => {
         >
           <FaArrowUp />
         </button>
+      )}
+
+      {/* 신고 모달 */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="relative w-full max-w-md bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center mb-4">
+              <FaExclamationTriangle className="text-red-500 mr-2" />
+              <h2 className="text-xl font-bold">
+                {reportTargetType === "comment" ? "댓글 신고" : "리뷰 신고"}
+              </h2>
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="absolute right-4 top-4 text-gray-500 hover:text-gray-700"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <textarea
+              value={reportContent}
+              onChange={(e) => setReportContent(e.target.value)}
+              placeholder="신고 내용을 자세히 입력해주세요..."
+              className="w-full h-32 p-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
+            ></textarea>
+
+            <div className="mt-4 flex justify-end space-x-2">
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleReportSubmit}
+                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+              >
+                신고
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
