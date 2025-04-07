@@ -973,6 +973,90 @@ const CommunityPage: React.FC = () => {
     }
   };
 
+  const handleCommentLike = async (commentId: number) => {
+    if (!isLoggedIn) {
+      toast.error("로그인이 필요합니다.");
+      return;
+    }
+    
+    try {
+      const response = await backendApi.likeComment(commentId);
+      
+      // 현재 게시글의 댓글 목록 업데이트
+      const updatedPosts = posts.map((post) => {
+        if (post.id === expandedPostId) {
+          const updatedComments = post.comments.map((comment) => {
+            if (comment.id === commentId) {
+              return {
+                ...comment,
+                likeCount: response.likeCount,
+                dislikeCount: response.dislikeCount,
+                liked: response.liked,
+                disliked: response.disliked
+              };
+            }
+            return comment;
+          });
+          
+          return { ...post, comments: updatedComments };
+        }
+        return post;
+      });
+      
+      setPosts(updatedPosts);
+      setVisiblePosts(
+        updatedPosts.slice(0, (page + 1) * postsPerPage)
+      );
+      
+      toast.success(response.liked ? "댓글에 좋아요를 표시했습니다." : "댓글에 좋아요를 취소했습니다.");
+    } catch (error) {
+      console.error("댓글 좋아요 처리 실패:", error);
+      toast.error("댓글 좋아요 처리에 실패했습니다.");
+    }
+  };
+  
+  const handleCommentDislike = async (commentId: number) => {
+    if (!isLoggedIn) {
+      toast.error("로그인이 필요합니다.");
+      return;
+    }
+    
+    try {
+      const response = await backendApi.dislikeComment(commentId);
+      
+      // 현재 게시글의 댓글 목록 업데이트
+      const updatedPosts = posts.map((post) => {
+        if (post.id === expandedPostId) {
+          const updatedComments = post.comments.map((comment) => {
+            if (comment.id === commentId) {
+              return {
+                ...comment,
+                likeCount: response.likeCount,
+                dislikeCount: response.dislikeCount,
+                liked: response.liked,
+                disliked: response.disliked
+              };
+            }
+            return comment;
+          });
+          
+          return { ...post, comments: updatedComments };
+        }
+        return post;
+      });
+      
+      setPosts(updatedPosts);
+      setVisiblePosts(
+        updatedPosts.slice(0, (page + 1) * postsPerPage)
+      );
+      
+      toast.success(response.disliked ? "댓글에 싫어요를 표시했습니다." : "댓글에 싫어요를 취소했습니다.");
+    } catch (error) {
+      console.error("댓글 싫어요 처리 실패:", error);
+      toast.error("댓글 싫어요 처리에 실패했습니다.");
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-2">
       {/* 상단 검색 및 버튼 영역 - 고정 헤더로 변경 */}
@@ -1524,7 +1608,7 @@ const CommunityPage: React.FC = () => {
                               />
                               <div className="mt-1 flex items-center space-x-4">
                                 <button
-                                  onClick={() => handlePostLike(comment.id)}
+                                  onClick={() => handleCommentLike(comment.id)}
                                   className={`flex items-center text-xs space-x-1 ${
                                     comment.liked
                                       ? "text-blue-500"
@@ -1535,7 +1619,7 @@ const CommunityPage: React.FC = () => {
                                   <span>{comment.likeCount || 0}</span>
                                 </button>
                                 <button
-                                  onClick={() => handlePostDislike(comment.id)}
+                                  onClick={() => handleCommentDislike(comment.id)}
                                   className={`flex items-center text-xs space-x-1 ${
                                     comment.disliked
                                       ? "text-red-500"
@@ -1713,14 +1797,14 @@ const CommunityPage: React.FC = () => {
                         {isLoggedIn &&
                           ((user?.id === post.user.id && !isUserBlocked()) ||
                             isAdminOrModerator()) && (
-                            <button
-                              onClick={() => handleDeletePost(post.id)}
-                              className="text-gray-500 hover:text-red-500"
-                              title="삭제"
-                            >
-                              <FaTrash />
-                            </button>
-                          )}
+                              <button
+                                onClick={() => handleDeletePost(post.id)}
+                                className="text-gray-500 hover:text-red-500"
+                                title="삭제"
+                              >
+                                <FaTrash />
+                              </button>
+                            )}
                       </div>
                     </div>
                     <p
@@ -1767,7 +1851,9 @@ const CommunityPage: React.FC = () => {
                           >
                             <FaThumbsUp size={14} />
                           </button>
-                          <span className="text-sm">{post.likeCount || 0}</span>
+                          <span className="text-sm">
+                            {post.likeCount || 0}
+                          </span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <button
@@ -1872,7 +1958,7 @@ const CommunityPage: React.FC = () => {
                             />
                             <div className="mt-1 flex items-center space-x-4">
                               <button
-                                onClick={() => handlePostLike(comment.id)}
+                                onClick={() => handleCommentLike(comment.id)}
                                 className={`flex items-center text-xs space-x-1 ${
                                   comment.liked
                                     ? "text-blue-500"
@@ -1883,7 +1969,7 @@ const CommunityPage: React.FC = () => {
                                 <span>{comment.likeCount || 0}</span>
                               </button>
                               <button
-                                onClick={() => handlePostDislike(comment.id)}
+                                onClick={() => handleCommentDislike(comment.id)}
                                 className={`flex items-center text-xs space-x-1 ${
                                   comment.disliked
                                     ? "text-red-500"
