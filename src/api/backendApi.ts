@@ -218,43 +218,47 @@ export const getUsernameById = async (
 
   try {
     console.log(`사용자 ID ${userId}의 사용자명 조회 시작`);
-    
+
     // 1. 로컬 스토리지에서 먼저 확인
     const userMappingStr = localStorage.getItem("user_id_mapping");
     if (userMappingStr) {
       try {
         const userMapping = JSON.parse(userMappingStr);
         if (userMapping[userId]) {
-          console.log(`캐시된 매핑에서 사용자 ID ${userId}의 유저명 찾음:`, userMapping[userId]);
+          console.log(
+            `캐시된 매핑에서 사용자 ID ${userId}의 유저명 찾음:`,
+            userMapping[userId]
+          );
           return userMapping[userId];
         }
       } catch (e) {
         console.error("사용자 매핑 캐시 파싱 실패:", e);
       }
     }
-    
+
     // 2. 프로필 API 호출
     try {
       const response = await apiClient.get(`/api/profile/id/${userId}`);
 
       if (response.data && response.data.username) {
         const username = response.data.username;
-        console.log(
-          `사용자 ID ${userId}의 사용자명 조회 성공:`,
-          username
-        );
-        
+        console.log(`사용자 ID ${userId}의 사용자명 조회 성공:`, username);
+
         // 캐시에 사용자 ID-유저명 매핑 저장
         try {
-          const userMappingStr = localStorage.getItem("user_id_mapping") || "{}";
-          const userMapping: Record<string, string> = JSON.parse(userMappingStr);
+          const userMappingStr =
+            localStorage.getItem("user_id_mapping") || "{}";
+          const userMapping: Record<string, string> =
+            JSON.parse(userMappingStr);
           userMapping[String(userId)] = username;
           localStorage.setItem("user_id_mapping", JSON.stringify(userMapping));
-          console.log(`사용자 ID ${userId}와 유저명 ${username} 매핑 캐시 저장 완료`);
+          console.log(
+            `사용자 ID ${userId}와 유저명 ${username} 매핑 캐시 저장 완료`
+          );
         } catch (e) {
           console.error("사용자 매핑 캐시 업데이트 실패:", e);
         }
-        
+
         return username;
       }
     } catch (apiError) {
@@ -355,12 +359,12 @@ const cacheUserIdMapping = (userId: string, username: string) => {
 };
 
 // 사용자 상태 확인 API 함수 추가
-export const checkUserStatus = async (): Promise<{status: string}> => {
+export const checkUserStatus = async (): Promise<{ status: string }> => {
   try {
-    const response = await apiClient.get('/api/users/status');
+    const response = await apiClient.get("/api/users/status");
     return response.data;
   } catch (error) {
-    console.error('사용자 상태 확인 실패:', error);
+    console.error("사용자 상태 확인 실패:", error);
     throw error;
   }
 };
@@ -797,12 +801,10 @@ export const backendApi = {
     }
   },
 
-  createPost: async (
-    postData: {
-      title: string;
-      content: string;
-    }
-  ): Promise<{
+  createPost: async (postData: {
+    title: string;
+    content: string;
+  }): Promise<{
     id: number;
     title: string;
     content: string;
@@ -815,21 +817,24 @@ export const backendApi = {
   }> => {
     try {
       const token = localStorage.getItem("token");
-      
+
       console.log("현재 토큰 확인:", token ? "토큰 있음" : "토큰 없음");
 
       // 토큰 디코딩을 통한 디버깅 정보 추가
       if (token) {
         try {
           // JWT 토큰 디코딩 (header.payload.signature)
-          const base64Url = token.split('.')[1]; // 페이로드 부분만 추출
-          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const base64Url = token.split(".")[1]; // 페이로드 부분만 추출
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
           const payload = JSON.parse(atob(base64));
-          
+
           console.log("토큰 페이로드:", payload);
           console.log("사용자 역할:", payload.roles || "역할 정보 없음");
-          console.log("토큰 만료 시간:", new Date(payload.exp * 1000).toLocaleString());
-          
+          console.log(
+            "토큰 만료 시간:",
+            new Date(payload.exp * 1000).toLocaleString()
+          );
+
           // 로컬 스토리지에 저장된 사용자 정보와 비교
           try {
             const userStr = localStorage.getItem("user");
@@ -847,31 +852,33 @@ export const backendApi = {
       }
 
       console.log("게시글 작성 요청 데이터:", postData);
-      
+
       // 명시적으로 헤더 설정
       const response = await apiClient.post("/api/community/posts", postData, {
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : ''
-        }
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
       });
-      
+
       console.log("게시글 작성 성공 응답:", response.data);
       return response.data;
     } catch (error) {
       console.error("게시글 작성 실패:", error);
-      
+
       // 상세 오류 정보 로깅
       if (axios.isAxiosError(error)) {
         console.error("오류 상태 코드:", error.response?.status);
         console.error("오류 응답 데이터:", error.response?.data);
-        
+
         // 403 오류 상세 분석
         if (error.response?.status === 403) {
-          console.error("권한 오류: 사용자가 필요한 역할이 없거나 토큰이 유효하지 않습니다.");
+          console.error(
+            "권한 오류: 사용자가 필요한 역할이 없거나 토큰이 유효하지 않습니다."
+          );
         }
       }
-      
+
       throw new Error("게시글 작성에 실패했습니다.");
     }
   },
@@ -2050,13 +2057,13 @@ export const backendApi = {
   createReport: async (reportData: ReportRequest): Promise<Report> => {
     try {
       // 백엔드 API 호출
-      const response = await apiClient.post('/api/reports', {
+      const response = await apiClient.post("/api/reports", {
         targetId: reportData.targetId,
         targetUserId: reportData.targetUserId, // 신고 대상 사용자 ID
         reportType: reportData.reportType.toUpperCase(), // 대문자로 변환 (POST, COMMENT, REVIEW)
-        content: reportData.content
+        content: reportData.content,
       });
-      
+
       console.log("신고 처리 완료:", response.data);
       return response.data;
     } catch (error) {
@@ -2068,9 +2075,9 @@ export const backendApi = {
   getReports: async (): Promise<Report[]> => {
     try {
       // 백엔드 API 호출
-      const response = await apiClient.get('/api/reports');
+      const response = await apiClient.get("/api/reports");
       console.log("신고 목록 조회 완료:", response.data);
-      
+
       if (response.data && response.data.content) {
         return response.data.content;
       } else {
@@ -2083,12 +2090,14 @@ export const backendApi = {
   },
 
   updateReportStatus: async (
-    reportId: number, 
+    reportId: number,
     status: "PROCESSED" | "REJECTED"
   ): Promise<Report> => {
     try {
       // 백엔드 API 호출
-      const response = await apiClient.put(`/api/reports/${reportId}/status?status=${status}`);
+      const response = await apiClient.put(
+        `/api/reports/${reportId}/status?status=${status}`
+      );
       console.log("신고 상태 업데이트 완료:", response.data);
       return response.data;
     } catch (error) {
@@ -2100,8 +2109,8 @@ export const backendApi = {
   // 관리자용: 모든 사용자 목록 조회
   getAllUsers: async (page = 0, size = 20): Promise<Page<User>> => {
     try {
-      const response = await apiClient.get('/api/admin/users', {
-        params: { page, size }
+      const response = await apiClient.get("/api/admin/users", {
+        params: { page, size },
       });
       console.log("전체 사용자 목록 조회 완료:", response.data);
       return response.data;
@@ -2110,14 +2119,21 @@ export const backendApi = {
       throw error;
     }
   },
-  
+
   // 관리자용: 사용자 차단/차단해제
-  updateUserStatus: async (userId: number, status: "ACTIVE" | "BLOCKED", reason?: string): Promise<User> => {
+  updateUserStatus: async (
+    userId: number,
+    status: "ACTIVE" | "BLOCKED",
+    reason?: string
+  ): Promise<User> => {
     try {
-      const response = await apiClient.put(`/api/admin/users/${userId}/status`, {
-        status,
-        reason
-      });
+      const response = await apiClient.put(
+        `/api/admin/users/${userId}/status`,
+        {
+          status,
+          reason,
+        }
+      );
       console.log("사용자 상태 업데이트 완료:", response.data);
       return response.data;
     } catch (error) {

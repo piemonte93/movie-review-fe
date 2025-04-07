@@ -727,7 +727,7 @@ const MovieReviewsPage: React.FC = () => {
   // 리뷰 댓글 작성 처리
   const handleCommentSubmit = async (reviewId: number) => {
     if (!commentContent.trim()) return;
-    
+
     // 차단된 사용자인 경우 댓글 작성 불가
     if (isUserBlocked()) {
       toast.error("현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.");
@@ -735,7 +735,7 @@ const MovieReviewsPage: React.FC = () => {
     }
 
     setSubmitting(true);
-    
+
     try {
       const response = await backendApi.addReviewComment(
         reviewId,
@@ -1026,7 +1026,10 @@ const MovieReviewsPage: React.FC = () => {
             user: {
               id: comment.user?.userId || 0,
               username: comment.user?.username || comment.username || "",
-              profileImageUrl: comment.user?.profileUrl || comment.user_profile_image_url || null,
+              profileImageUrl:
+                comment.user?.profileUrl ||
+                comment.user_profile_image_url ||
+                null,
             },
           };
         }
@@ -1111,7 +1114,10 @@ const MovieReviewsPage: React.FC = () => {
             user: {
               id: comment.user?.userId || 0,
               username: comment.user?.username || comment.username || "",
-              profileImageUrl: comment.user?.profileUrl || comment.user_profile_image_url || null,
+              profileImageUrl:
+                comment.user?.profileUrl ||
+                comment.user_profile_image_url ||
+                null,
             },
           };
         }
@@ -1438,7 +1444,9 @@ const MovieReviewsPage: React.FC = () => {
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportContent, setReportContent] = useState("");
   const [reportTargetId, setReportTargetId] = useState<number | null>(null);
-  const [reportTargetType, setReportTargetType] = useState<"comment" | "review" | null>(null);
+  const [reportTargetType, setReportTargetType] = useState<
+    "comment" | "review" | null
+  >(null);
 
   // 신고 모달 열기 함수
   const openReportModal = (id: number, type: "comment" | "review") => {
@@ -1457,45 +1465,52 @@ const MovieReviewsPage: React.FC = () => {
 
     try {
       let targetUserId = 0;
-      
+
       if (reportTargetType === "review") {
         // 리뷰 신고인 경우
-        const targetReview = reviews.find(r => r.id === reportTargetId);
+        const targetReview = reviews.find((r) => r.id === reportTargetId);
         targetUserId = targetReview?.user?.id || 0;
       } else if (reportTargetType === "comment") {
         // 댓글 신고인 경우 - 모든 리뷰의 모든 댓글을 확인
         for (const review of reviews) {
           if (review.comments) {
-            const targetComment = review.comments.find(c => c.id === reportTargetId);
+            const targetComment = review.comments.find(
+              (c) => c.id === reportTargetId
+            );
             if (targetComment) {
               // userId 필드를 우선적으로 사용하고, 없으면 user.id를 시도
-              targetUserId = targetComment.userId || targetComment.user?.id || 0;
-              console.log(`댓글 ID ${reportTargetId}에 대한 사용자 ID를 찾았습니다: ${targetUserId}`);
+              targetUserId =
+                targetComment.userId || targetComment.user?.id || 0;
+              console.log(
+                `댓글 ID ${reportTargetId}에 대한 사용자 ID를 찾았습니다: ${targetUserId}`
+              );
               break;
             }
           }
         }
       }
-      
+
       // 대상 사용자 ID가 없는 경우 로그
       if (targetUserId === 0) {
-        console.warn(`신고 대상의 사용자 ID를 찾을 수 없습니다. 타입: ${reportTargetType}, 대상 ID: ${reportTargetId}`);
+        console.warn(
+          `신고 대상의 사용자 ID를 찾을 수 없습니다. 타입: ${reportTargetType}, 대상 ID: ${reportTargetId}`
+        );
       }
-      
+
       console.log(`신고 요청 데이터:`, {
         targetId: reportTargetId,
         targetUserId: targetUserId,
         reportType: reportTargetType === "review" ? "review" : "comment",
         content: reportContent,
       });
-      
+
       await backendApi.createReport({
         targetId: reportTargetId!,
         targetUserId: targetUserId,
         reportType: reportTargetType === "review" ? "review" : "comment",
         content: reportContent,
       });
-      
+
       toast.success("신고가 접수되었습니다.");
       setShowReportModal(false);
       setReportContent("");
@@ -1516,10 +1531,12 @@ const MovieReviewsPage: React.FC = () => {
   const handleWriteButtonClick = async () => {
     try {
       if (isUserBlocked()) {
-        toast.error("현재 글쓰기 기능이 제한되었습니다. 관리자에게 문의해주세요.");
+        toast.error(
+          "현재 글쓰기 기능이 제한되었습니다. 관리자에게 문의해주세요."
+        );
         return;
       }
-      
+
       // 정상 상태인 경우 글쓰기 폼 표시
       setShowWriteForm(true);
     } catch (error) {
@@ -1692,26 +1709,29 @@ const MovieReviewsPage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  {isLoggedIn && (user?.id === review.user.id || isAdmin()) && (
-                    <div className="flex space-x-2">
-                      {user?.id === review.user.id && !isUserBlocked() && (
+                  {isLoggedIn &&
+                    (user?.id === review.user.id ||
+                      user?.roles?.includes("ROLE_ADMIN") ||
+                      false) && (
+                      <div className="flex space-x-2">
+                        {user?.id === review.user.id && (
+                          <button
+                            onClick={() => handleEditReview(review)}
+                            className="text-gray-500 hover:text-blue-500"
+                            title="수정"
+                          >
+                            <FaEdit />
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleEditReview(review)}
-                          className="text-gray-500 hover:text-blue-500"
-                          title="수정"
+                          onClick={() => handleDeleteReview(review.id)}
+                          className="text-gray-500 hover:text-red-500"
+                          title="삭제"
                         >
-                          <FaEdit />
+                          <FaTrash />
                         </button>
-                      )}
-                      <button
-                        onClick={() => handleDeleteReview(review.id)}
-                        className="text-gray-500 hover:text-red-500"
-                        title="삭제"
-                      >
-                        <FaTrash />
-                      </button>
-                    </div>
-                  )}
+                      </div>
+                    )}
                 </div>
               </div>
 
@@ -1889,25 +1909,39 @@ const MovieReviewsPage: React.FC = () => {
                                     <span className="text-xs text-gray-500">
                                       {formatDate(comment.createdAt)}
                                     </span>
-                                    {isLoggedIn && user?.id !== comment.userId && (
-                                      <button 
-                                        className="p-1 hover:bg-gray-100 rounded-full"
-                                        title="댓글 신고하기"
-                                        onClick={() => openReportModal(comment.id, "comment")}
+                                    {isLoggedIn &&
+                                      user?.id !== comment.userId && (
+                                        <button
+                                          className="p-1 hover:bg-gray-100 rounded-full"
+                                          title="댓글 신고하기"
+                                          onClick={() =>
+                                            openReportModal(
+                                              comment.id,
+                                              "comment"
+                                            )
+                                          }
+                                        >
+                                          <FaBell className="text-red-500 text-xs" />
+                                        </button>
+                                      )}
+                                  </div>
+                                  {isLoggedIn &&
+                                    (user?.id === comment.userId ||
+                                      user?.roles?.includes("ROLE_ADMIN") ||
+                                      false) && (
+                                      <button
+                                        onClick={() =>
+                                          handleDeleteComment(
+                                            review.id,
+                                            comment.id
+                                          )
+                                        }
+                                        className="text-xs text-gray-500 hover:text-red-500"
+                                        title="삭제"
                                       >
-                                        <FaBell className="text-red-500 text-xs" />
+                                        <FaTrash />
                                       </button>
                                     )}
-                                  </div>
-                                  {isLoggedIn && ((user?.id === comment.userId && !isUserBlocked()) || isAdmin()) && (
-                                    <button
-                                      onClick={() => handleDeleteComment(review.id, comment.id)}
-                                      className="text-xs text-gray-500 hover:text-red-500"
-                                      title="삭제"
-                                    >
-                                      <FaTrash />
-                                    </button>
-                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1928,20 +1962,31 @@ const MovieReviewsPage: React.FC = () => {
                         type="text"
                         value={commentContent}
                         onChange={(e) => setCommentContent(e.target.value)}
-                        placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
+                        placeholder={
+                          isUserBlocked()
+                            ? "댓글 작성이 제한되었습니다"
+                            : "댓글을 입력하세요..."
+                        }
                         className="w-full p-2 text-sm focus:outline-none flex-1"
                         disabled={!isLoggedIn || isUserBlocked()}
                       />
                       <button
                         onClick={() => handleCommentSubmit(review.id)}
                         className="px-4 bg-blue-500 text-white text-sm hover:bg-blue-600 transition-colors"
-                        disabled={!isLoggedIn || !commentContent.trim() || isUserBlocked()}
+                        disabled={
+                          !isLoggedIn ||
+                          !commentContent.trim() ||
+                          isUserBlocked()
+                        }
                       >
                         등록
                       </button>
                     </div>
                     {isLoggedIn && isUserBlocked() && (
-                      <p className="text-xs text-red-500 mt-1">현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.</p>
+                      <p className="text-xs text-red-500 mt-1">
+                        현재 댓글 기능이 제한되었습니다. 관리자에게
+                        문의해주세요.
+                      </p>
                     )}
                   </div>
                 </div>

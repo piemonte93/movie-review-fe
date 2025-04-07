@@ -230,7 +230,7 @@ const Navbar: React.FC = () => {
             </div>
           )}
 
-          {isLoggedIn ? (
+{isLoggedIn ? (
             <div className="relative user-menu">
               <button
                 className="user-icon relative rounded-full p-2 hover:bg-gray-100"
@@ -248,38 +248,48 @@ const Navbar: React.FC = () => {
                 )}
               </button>
 
-              {/* 사용자 메뉴 드롭다운 */}
               {isUserMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 rounded-md bg-white py-2 shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                  <div className="border-b border-gray-100 px-4 py-2 mb-1">
+                    <div className="font-medium text-sm">
+                      {user?.username || "사용자"}
+                    </div>
+                    <div className="text-xs text-gray-500 truncate">
+                      {user?.email || "email@example.com"}
+                    </div>
+                  </div>
                   <Link
                     to="/profile"
-                    className="block px-4 py-2 text-gray-800 hover:bg-gray-200"
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     onClick={() => setIsUserMenuOpen(false)}
                   >
+                    <FaUser className="mr-2 text-gray-400" />
                     프로필
                   </Link>
                   <Link
                     to="/profile/edit"
-                    className="block px-4 py-2 text-gray-800 hover:bg-gray-200"
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     onClick={() => setIsUserMenuOpen(false)}
                   >
+                    <FaCog className="mr-2 text-gray-400" />
                     프로필 수정
                   </Link>
-                  
                   {user?.roles?.includes("ROLE_ADMIN") && (
                     <Link
                       to="/admin"
-                      className="block px-4 py-2 text-gray-800 hover:bg-gray-200"
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       onClick={() => setIsUserMenuOpen(false)}
                     >
+                      <FaCog className="mr-2 text-gray-400" />
                       관리자 페이지
                     </Link>
                   )}
-                  
+                  <div className="border-t border-gray-100"></div>
                   <button
-                    className="block w-full px-4 py-2 text-left text-gray-800 hover:bg-gray-200"
                     onClick={handleLogout}
+                    className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                   >
+                    <FaSignOutAlt className="mr-2 text-red-500" />
                     로그아웃
                   </button>
                 </div>
