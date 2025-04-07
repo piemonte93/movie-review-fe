@@ -1357,7 +1357,7 @@ const CommunityPage: React.FC = () => {
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="text-lg font-semibold">{post.title}</h3>
                         <div className="flex gap-2">
-                          {isLoggedIn && user?.id === post.user.id && (
+                          {isLoggedIn && user?.id === post.user.id && !isUserBlocked() && (
                             <button
                               onClick={() => handleEditPost(post)}
                               className="text-gray-500 hover:text-blue-500"
@@ -1366,7 +1366,7 @@ const CommunityPage: React.FC = () => {
                               <FaEdit />
                             </button>
                           )}
-                          {isLoggedIn && (user?.id === post.user.id || isAdminOrModerator()) && (
+                          {isLoggedIn && ((user?.id === post.user.id && !isUserBlocked()) || isAdminOrModerator()) && (
                             <button
                               onClick={() => handleDeletePost(post.id)}
                               className="text-gray-500 hover:text-red-500"
@@ -1501,7 +1501,7 @@ const CommunityPage: React.FC = () => {
                                       </button>
                                     )}
                                 </div>
-                                {isLoggedIn && user?.id === comment.user.id && (
+                                {isLoggedIn && user?.id === comment.user.id && !isUserBlocked() && (
                                   <button
                                     onClick={() =>
                                       handleDeleteComment(post.id, comment.id)
@@ -1694,7 +1694,7 @@ const CommunityPage: React.FC = () => {
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="text-lg font-semibold">{post.title}</h3>
                       <div className="flex gap-2">
-                        {isLoggedIn && user?.id === post.user.id && (
+                        {isLoggedIn && user?.id === post.user.id && !isUserBlocked() && (
                           <button
                             onClick={() => handleEditPost(post)}
                             className="text-gray-500 hover:text-blue-500"
@@ -1703,7 +1703,7 @@ const CommunityPage: React.FC = () => {
                             <FaEdit />
                           </button>
                         )}
-                        {isLoggedIn && (user?.id === post.user.id || isAdminOrModerator()) && (
+                        {isLoggedIn && ((user?.id === post.user.id && !isUserBlocked()) || isAdminOrModerator()) && (
                           <button
                             onClick={() => handleDeletePost(post.id)}
                             className="text-gray-500 hover:text-red-500"
@@ -1838,7 +1838,7 @@ const CommunityPage: React.FC = () => {
                                     </button>
                                   )}
                               </div>
-                              {isLoggedIn && user?.id === comment.user.id && (
+                              {isLoggedIn && user?.id === comment.user.id && !isUserBlocked() && (
                                 <button
                                   onClick={() =>
                                     handleDeleteComment(post.id, comment.id)
