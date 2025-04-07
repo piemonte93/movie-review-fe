@@ -1,4 +1,5 @@
 import axios from "axios";
+import { TMDB_API_BASE_URL, TMDB_API_KEY } from "../constants";
 import {
   Content,
   ContentDetail,
@@ -558,13 +559,50 @@ export const backendApi = {
           total_results: response.data.totalElements,
         };
 
-        // 결과가 비어있으면 인기 TV 쇼 가져오기
+        // 결과가 비어있고 필터링이 적용된 경우 TMDB API 직접 호출
+        if (result.results.length === 0 && (genres || year || voteAvgMin)) {
+          console.log(
+            "백엔드 필터링 결과가 비어있어 TMDB API를 직접 호출합니다."
+          );
+          const genreParamValue = Array.isArray(genres)
+            ? genres.join(",")
+            : genres;
+          return await backendApi.getTmdbFilteredTvShows(
+            genreParamValue,
+            year,
+            sortBy,
+            page,
+            voteAvgMin
+          );
+        }
+
+        // 필터링이 없는 경우 인기 TV 쇼 가져오기
         if (result.results.length === 0 && !query && !genres && !year) {
           console.log("필터링된 결과가 비어있어 인기 TV 쇼를 가져옵니다.");
           return await backendApi.getPopularTvShows(page);
         }
 
         return result;
+      }
+
+      // 결과가 비어있고 필터링이 적용된 경우 TMDB API 직접 호출
+      if (
+        (!response.data.results || response.data.results.length === 0) &&
+        (genres || year || voteAvgMin)
+      ) {
+        console.log(
+          "백엔드 필터링 결과가 비어있어 TMDB API를 직접 호출합니다."
+        );
+        const genreParamValue = Array.isArray(genres)
+          ? genres.join(",")
+          : genres;
+        return await backendApi.getTmdbFilteredTvShows(
+          genreParamValue,
+          year,
+          sortBy,
+          page,
+          voteAvgMin
+        );
       }
 
       // 결과가 비어있으면 인기 TV 쇼 가져오기
@@ -590,6 +628,21 @@ export const backendApi = {
           data: error.response?.data,
         });
 
+        // 오류가 발생하고 필터링이 적용된 경우 TMDB API 직접 호출
+        if (genres || year || voteAvgMin) {
+          console.log("API 오류로 인해 TMDB API를 직접 호출합니다.");
+          const genreParamValue = Array.isArray(genres)
+            ? genres.join(",")
+            : genres;
+          return await backendApi.getTmdbFilteredTvShows(
+            genreParamValue,
+            year,
+            sortBy,
+            page,
+            voteAvgMin
+          );
+        }
+
         if (error.code === "ECONNABORTED") {
           throw new Error("요청 시간이 초과되었습니다. 다시 시도해 주세요.");
         } else if (!error.response) {
@@ -608,6 +661,71 @@ export const backendApi = {
 
       // 오류 발생 시 인기 TV 쇼 가져오기
       console.log("오류로 인해 인기 TV 쇼를 가져옵니다.");
+      try {
+        return await backendApi.getPopularTvShows(page);
+      } catch (popError) {
+        console.error("인기 TV 쇼를 가져오는데 실패했습니다:", popError);
+        return emptyContentResponse();
+      }
+    }
+  },
+
+  // TMDB API를 직접 호출하여 TV 쇼 필터링 결과를 가져오는 함수
+  getTmdbFilteredTvShows: async (
+    genres?: number | string,
+    year?: number,
+    sortBy = "popularity.desc",
+    page = 1,
+    voteMin?: number,
+    isKorean?: boolean,
+    isForeign?: boolean,
+    network?: string
+  ): Promise<ContentResponse> => {
+    try {
+      // 백엔드 API를 통해 필터링된 TV 쇼 가져오기
+      const url = `/api/contents/discover/tv`;
+
+      const params: Record<string, any> = {
+        page,
+        sort_by: sortBy,
+      };
+
+      // 장르 파라미터 설정
+      if (genres) {
+        params.genres = genres;
+      }
+
+      // 연도 파라미터 설정
+      if (year) {
+        params.year = year;
+      }
+
+      // 최소 평점 파라미터 설정
+      if (voteMin) {
+        params.voteAvgMin = voteMin;
+      }
+
+      // 한국/외국 필터 설정
+      if (isKorean !== undefined) {
+        params.isKorean = isKorean;
+      }
+
+      if (isForeign !== undefined) {
+        params.isForeign = isForeign;
+      }
+
+      // 방송사 필터 설정
+      if (network) {
+        params.network = network;
+      }
+
+      const response = await apiClient.get(url, { params });
+
+      return response.data;
+    } catch (error) {
+      console.error("TV 쇼 필터링 API 요청 실패:", error);
+
+      // 오류 발생 시 인기 TV 쇼 가져오기
       try {
         return await backendApi.getPopularTvShows(page);
       } catch (popError) {

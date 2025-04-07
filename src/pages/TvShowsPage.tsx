@@ -133,17 +133,14 @@ const TvShowsPage: React.FC = () => {
   }, [location.search]);
 
   // 필터링된 TV 쇼 목록을 가져오는 함수
-  const { contents, loading, error, totalPages, totalResults } =
+  const { tvShows, loading, error, totalPages, totalResults } =
     useFilteredTvShows(
       selectedGenres.length > 0 ? selectedGenres : undefined,
       selectedYear,
       selectedSort,
-      currentPage,
       searchQuery,
       voteRange > 0 ? voteRange : undefined,
-      isKoreanShow,
-      isForeignShow,
-      selectedNetwork || undefined
+      currentPage
     );
 
   // 장르 토글 함수
@@ -256,15 +253,15 @@ const TvShowsPage: React.FC = () => {
 
   // contents가 변경될 때마다 allShows 업데이트
   useEffect(() => {
-    if (!loading && contents.length > 0) {
+    if (!loading && tvShows.length > 0) {
       if (currentPage === 1) {
         // 첫 페이지는 기존 목록을 대체
-        setAllShows(contents);
+        setAllShows(tvShows);
       } else {
         // 이후 페이지는 기존 목록에 추가
         setAllShows((prev) => {
           // 중복 항목 제거를 위해 ID 기준으로 필터링
-          const uniqueShows = contents.filter(
+          const uniqueShows = tvShows.filter(
             (newShow) =>
               !prev.some((existingShow) => existingShow.id === newShow.id)
           );
@@ -274,7 +271,7 @@ const TvShowsPage: React.FC = () => {
       setHasMore(currentPage < totalPages);
       setLoadingMore(false);
     }
-  }, [contents, loading, currentPage, totalPages]);
+  }, [tvShows, loading, currentPage, totalPages]);
 
   // 페이지 로드 완료 시 로딩 상태 제거
   useEffect(() => {

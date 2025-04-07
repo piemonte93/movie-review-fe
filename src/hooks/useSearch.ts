@@ -122,77 +122,67 @@ export const useFilteredMovies = (
   return { contents, loading, error, totalPages, totalResults };
 };
 
+// 필터된 TV 쇼 데이터를 가져오는 훅
 export const useFilteredTvShows = (
   genres?: number[],
   year?: number,
   sortBy = "popularity.desc",
+  searchQuery = "",
+  voteAvgMin?: number,
   page = 1,
-  query?: string,
-  voteMin?: number,
   isKorean?: boolean,
   isForeign?: boolean,
   network?: string
 ) => {
-  const [contents, setContents] = useState<TvShow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [totalPages, setTotalPages] = useState(1);
+  const [tvShows, setTvShows] = useState<TvShow[]>([]);
+  const [totalPages, setTotalPages] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
 
   useEffect(() => {
     const fetchTvShows = async () => {
+      setLoading(true);
+      setError(null);
+
       try {
-        setLoading(true);
-        setError(null);
+        let result;
+        if (searchQuery.trim()) {
+          result = await backendApi.searchTvShowsByTitle(searchQuery);
+        } else {
+          // 장르를 콤마로 구분된 문자열로 변환
+          const genreParam =
+            genres && genres.length > 0 ? genres.join(",") : undefined;
 
-        console.log("TV 쇼 필터링 요청:", {
-          genres,
-          year,
-          sortBy,
-          page,
-          query,
-          voteMin,
-          isKorean,
-          isForeign,
-          network,
-        });
+          // 백엔드 API 호출
+          result = await backendApi.getTmdbFilteredTvShows(
+            genreParam,
+            year,
+            sortBy,
+            page,
+            voteAvgMin,
+            isKorean,
+            isForeign,
+            network
+          );
+        }
 
-        const response = await backendApi.getFilteredTvShows(
-          genres,
-          year,
-          sortBy,
-          page,
-          query,
-          voteMin,
-          isKorean,
-          isForeign,
-          network
-        );
-
-        console.log("TV 쇼 필터링 응답:", response);
-
-        // TV 프로그램 데이터를 올바른 형식으로 변환
-        const tvShows: TvShow[] = (response.results || []).map((show: any) => ({
+        const tvShowsWithType = result.results.map((show) => ({
           ...show,
-          id: show.id,
-          media_type: "tv", // 명시적으로 media_type 설정
           type: "tv",
-          title: show.name || show.title || "제목 없음", // name이 있으면 name을, 없으면 title을, 둘 다 없으면 "제목 없음"을 사용
-          release_date: show.first_air_date || show.release_date,
-          first_air_date: show.first_air_date || show.release_date,
-          poster_path: show.poster_path || "",
-          backdrop_path: show.backdrop_path || "",
-          vote_average: show.vote_average || 0,
         }));
 
-        setContents(tvShows);
-        setTotalPages(response.total_pages || 1);
-        setTotalResults(response.total_results || 0);
+        setTvShows(tvShowsWithType);
+        setTotalPages(result.total_pages || 0);
+        setTotalResults(result.total_results || 0);
       } catch (err) {
-        setError("TV 쇼 정보를 불러오는데 실패했습니다.");
-        console.error("Error fetching TV shows:", err);
-        // 에러 발생시 빈 배열 설정하여 UI 깨짐 방지
-        setContents([]);
+        console.error("TV 쇼 데이터 로딩 중 오류:", err);
+        setError(
+          err instanceof Error ? err.message : "TV 쇼를 불러오는데 실패했습니다"
+        );
+        setTvShows([]);
+        setTotalPages(0);
+        setTotalResults(0);
       } finally {
         setLoading(false);
       }
@@ -203,13 +193,13 @@ export const useFilteredTvShows = (
     genres,
     year,
     sortBy,
+    searchQuery,
+    voteAvgMin,
     page,
-    query,
-    voteMin,
     isKorean,
     isForeign,
     network,
   ]);
 
-  return { contents, loading, error, totalPages, totalResults };
+  return { tvShows, loading, error, totalPages, totalResults };
 };
