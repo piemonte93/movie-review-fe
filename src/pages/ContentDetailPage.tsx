@@ -268,11 +268,19 @@ const ContentDetailPage = () => {
       setLoading(true);
       try {
         if (id) {
+          console.log(
+            "콘텐츠 상세 정보 요청: ID =",
+            id,
+            "미디어 타입 =",
+            mediaType
+          );
+
           // 미디어 타입에 따라 API 호출 결정
           if (mediaType === "tv") {
             // TV 프로그램인 경우
             setIsTV(true);
             const tvResponse = await backendApi.getTvDetails(parseInt(id));
+            console.log("TV 쇼 상세 응답:", tvResponse);
             setContent(tvResponse);
 
             // TV 출연진 정보 가져오기
@@ -284,19 +292,15 @@ const ContentDetailPage = () => {
             setReviews(reviewsResponse.results || []);
 
             // TV 비디오 가져오기
-            try {
-              const videosResponse = await backendApi.getTvVideos(parseInt(id));
-              setVideos(videosResponse.results || []);
-            } catch (videoError) {
-              console.error("Error fetching TV videos:", videoError);
-              setVideos([]);
-            }
+            const videosResponse = await backendApi.getTvVideos(parseInt(id));
+            setVideos(videosResponse.results || []);
           } else {
             // 영화인 경우
             setIsTV(false);
             const movieResponse = await backendApi.getMovieDetails(
               parseInt(id)
             );
+            console.log("영화 상세 응답:", movieResponse);
             setContent(movieResponse);
 
             // 영화 출연진 정보 가져오기
@@ -305,29 +309,25 @@ const ContentDetailPage = () => {
             );
             setCast(creditsResponse.cast || []);
 
-            // 리뷰 정보 가져오기
+            // 영화 리뷰 가져오기
             const reviewsResponse = await backendApi.getMovieReviews(
               parseInt(id)
             );
             setReviews(reviewsResponse.results || []);
 
-            // 비디오 정보 가져오기
-            try {
-              const videosResponse = await backendApi.getMovieVideos(
-                parseInt(id)
-              );
-              setVideos(videosResponse.results || []);
-            } catch (videoError) {
-              console.error("Error fetching videos:", videoError);
-              setVideos([]);
-            }
+            // 영화 비디오 가져오기
+            const videosResponse = await backendApi.getMovieVideos(
+              parseInt(id)
+            );
+            setVideos(videosResponse.results || []);
           }
         }
       } catch (error) {
-        console.error(`Error fetching ${mediaType} details:`, error);
-        setError(
-          `${isTV ? "TV 프로그램" : "영화"} 정보를 가져오는 중 오류가 발생했습니다.`
+        console.error(
+          `콘텐츠 상세 정보 가져오기 실패 (타입: ${mediaType}, ID: ${id}):`,
+          error
         );
+        setError("콘텐츠 정보를 불러오는데 실패했습니다.");
       } finally {
         setLoading(false);
       }

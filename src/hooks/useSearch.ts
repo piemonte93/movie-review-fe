@@ -8,12 +8,23 @@ import { TMDB_API_BASE_URL, TMDB_API_KEY } from "../constants";
  * 단순 검색 기능을 위한 훅
  * 검색어와 페이지를 받아 검색 결과를 반환합니다.
  */
-export const useSearch = (query: string, page = 1) => {
+export const useSearch = (
+  query: string,
+  page = 1,
+  genres?: number[],
+  year?: number,
+  sortBy?: string,
+  voteAvgMin?: number,
+  isKorean?: boolean,
+  isForeign?: boolean,
+  network?: string
+) => {
   const [contents, setContents] = useState<Content[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [totalPages, setTotalPages] = useState<number>(0);
   const [totalResults, setTotalResults] = useState<number>(0);
+  const [filterKey, setFilterKey] = useState(0);
 
   useEffect(() => {
     const fetchSearchResults = async () => {
@@ -31,8 +42,22 @@ export const useSearch = (query: string, page = 1) => {
         setLoading(true);
         setError(null);
 
-        // 실제 API 호출
-        const response = await backendApi.searchContents(query, page);
+        // 장르가 배열인 경우 comma-separated string으로 변환
+        const genreParam =
+          genres && genres.length > 0 ? genres.join(",") : undefined;
+
+        // 실제 API 호출 - 필터링된 검색 결과 가져오기
+        const response = await backendApi.getTmdbFilteredTvShows(
+          genreParam,
+          year,
+          sortBy,
+          page,
+          voteAvgMin,
+          isKorean,
+          isForeign,
+          network,
+          query
+        );
 
         // 응답에서 컨텐츠 목록 및 페이지 정보 추출
         setContents(response.results || []);
@@ -48,9 +73,24 @@ export const useSearch = (query: string, page = 1) => {
     };
 
     fetchSearchResults();
-  }, [query, page]); // 검색어나 페이지가 변경되면 재검색
+  }, [
+    query,
+    page,
+    genres,
+    year,
+    sortBy,
+    voteAvgMin,
+    isKorean,
+    isForeign,
+    network,
+    filterKey,
+  ]);
 
-  return { contents, loading, error, totalPages, totalResults };
+  const updateFilters = () => {
+    setFilterKey((prev) => prev + 1);
+  };
+
+  return { contents, loading, error, totalPages, totalResults, updateFilters };
 };
 
 /**
@@ -122,62 +162,87 @@ export const useFilteredMovies = (
   return { contents, loading, error, totalPages, totalResults };
 };
 
+// 필터된 TV 쇼 데이터를 가져오는 훅
 export const useFilteredTvShows = (
   genres?: number[],
   year?: number,
   sortBy = "popularity.desc",
+  searchQuery = "",
+  voteAvgMin?: number,
   page = 1,
-  query?: string,
-  voteMin?: number,
   isKorean?: boolean,
   isForeign?: boolean,
   network?: string
 ) => {
-  const [contents, setContents] = useState<TvShow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [totalPages, setTotalPages] = useState(1);
+  const [tvShows, setTvShows] = useState<TvShow[]>([]);
+  const [totalPages, setTotalPages] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
+  const [filterKey, setFilterKey] = useState(0);
 
   useEffect(() => {
     const fetchTvShows = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+      setLoading(true);
+      setError(null);
 
-        const response = await backendApi.getFilteredTvShows(
-          genres,
+      try {
+        // 장르가 배열인 경우 comma-separated string으로 변환
+        const genreParam =
+          genres && genres.length > 0 ? genres.join(",") : undefined;
+
+        // 검색어가 있든 없든 동일한 API를 사용하여 필터링된 결과 가져오기
+        const result = await backendApi.getTmdbFilteredTvShows(
+          genreParam,
           year,
           sortBy,
           page,
-          query,
-          voteMin,
+          voteAvgMin,
           isKorean,
           isForeign,
-          network
+          network,
+          searchQuery.trim() || undefined
         );
 
-        // TV 프로그램 데이터를 올바른 형식으로 변환
-        const tvShows: TvShow[] = (response.results || []).map((show: any) => ({
+        const tvShowsWithType = result.results.map((show) => ({
           ...show,
           type: "tv",
-          title: show.name || show.title || "제목 없음", // name이 있으면 name을, 없으면 title을, 둘 다 없으면 "제목 없음"을 사용
-          release_date: show.first_air_date || show.release_date,
+          media_type: "tv",
         }));
 
-        setContents(tvShows);
-        setTotalPages(response.total_pages || 1);
-        setTotalResults(response.total_results || 0);
+        setTvShows(tvShowsWithType);
+        setTotalPages(result.total_pages || 0);
+        setTotalResults(result.total_results || 0);
       } catch (err) {
-        setError("TV 쇼 정보를 불러오는데 실패했습니다.");
-        console.error("Error fetching TV shows:", err);
+        console.error("TV 쇼 데이터 로딩 중 오류:", err);
+        setError(
+          err instanceof Error ? err.message : "TV 쇼를 불러오는데 실패했습니다"
+        );
+        setTvShows([]);
+        setTotalPages(0);
+        setTotalResults(0);
       } finally {
         setLoading(false);
       }
     };
 
     fetchTvShows();
-  }, [genres, year, sortBy, page, query, voteMin, isKorean, isForeign, network]);
+  }, [
+    genres,
+    year,
+    sortBy,
+    searchQuery,
+    voteAvgMin,
+    page,
+    isKorean,
+    isForeign,
+    network,
+    filterKey,
+  ]);
 
-  return { contents, loading, error, totalPages, totalResults };
+  const updateFilters = () => {
+    setFilterKey((prev) => prev + 1);
+  };
+
+  return { tvShows, loading, error, totalPages, totalResults, updateFilters };
 };

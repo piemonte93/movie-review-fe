@@ -32,6 +32,9 @@ const Navbar: React.FC = () => {
   // 검색어 상태
   const [searchQuery, setSearchQuery] = useState("");
 
+  // TV 메뉴 열림/닫힘 상태
+  const [isTvMenuOpen, setIsTvMenuOpen] = useState(false);
+
   // 사용자 아이콘 클릭 핸들러
   const handleUserIconClick = () => {
     if (isLoggedIn) {
@@ -121,7 +124,7 @@ const Navbar: React.FC = () => {
               </li>
               <li>
                 <Link to="/movies" className="hover:text-blue-600">
-                  Movie
+                  Movies
                 </Link>
               </li>
               <li>
@@ -230,7 +233,7 @@ const Navbar: React.FC = () => {
             </div>
           )}
 
-{isLoggedIn ? (
+          {isLoggedIn ? (
             <div className="relative user-menu">
               <button
                 className="user-icon relative rounded-full p-2 hover:bg-gray-100"

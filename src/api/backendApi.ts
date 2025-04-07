@@ -1,4 +1,5 @@
 import axios from "axios";
+import { TMDB_API_BASE_URL, TMDB_API_KEY } from "../constants";
 import {
   Content,
   ContentDetail,
@@ -501,6 +502,260 @@ export const backendApi = {
     }
   },
 
+  // TV 쇼 필터링 API
+  getFilteredTvShows: async (
+    genres?: number | number[],
+    year?: number,
+    sortBy?: string,
+    page = 1,
+    query?: string,
+    voteAvgMin?: number,
+    isKoreanTv?: boolean,
+    isForeignTv?: boolean,
+    network?: string
+  ): Promise<ContentResponse> => {
+    try {
+      // genres가 배열인 경우 comma-separated string으로 변환
+      const genreParam = Array.isArray(genres) ? genres.join(",") : genres;
+
+      // 요청 파라미터 정리 - 불필요한 항목 제거
+      const params: Record<string, any> = {};
+      if (genreParam) params.genres = genreParam;
+      if (year) params.year = year;
+      if (sortBy) params.sort_by = sortBy;
+      if (page) params.page = page;
+      if (query) params.query = query;
+      if (voteAvgMin) params.voteMin = voteAvgMin;
+      if (isKoreanTv) params.isKorean = isKoreanTv;
+      if (isForeignTv) params.isForeign = isForeignTv;
+      if (network) params.network = network;
+
+      console.log("TV 쇼 필터링 API 요청 파라미터:", params);
+
+      // 검색어가 있을 경우, 검색 API를 사용
+      if (query && query.trim() !== "") {
+        console.log("검색어가 있어 searchTvShowsByTitle 사용:", query);
+        return await backendApi.searchTvShowsByTitle(query);
+      }
+
+      const response = await apiClient.get("/api/tv", {
+        params: params,
+      });
+
+      console.log("TV 쇼 필터링 API 응답:", response.data);
+
+      // 응답 데이터 형식이 백엔드에서 반환하는 페이지 형식인 경우 ContentResponse 형식으로 변환
+      if (response.data.content && Array.isArray(response.data.content)) {
+        // 백엔드에서 반환한 페이지 형식 데이터를 ContentResponse 형식으로 변환
+        const result = {
+          page: response.data.number + 1, // 스프링의 페이지는 0-기반, 프론트엔드는 1-기반
+          results: response.data.content.map((item: any) => ({
+            ...item,
+            type: "tv",
+            title: item.name || item.title || "제목 없음",
+            release_date: item.first_air_date || item.release_date,
+          })),
+          total_pages: response.data.totalPages,
+          total_results: response.data.totalElements,
+        };
+
+        // 결과가 비어있고 필터링이 적용된 경우 TMDB API 직접 호출
+        if (result.results.length === 0 && (genres || year || voteAvgMin)) {
+          console.log(
+            "백엔드 필터링 결과가 비어있어 TMDB API를 직접 호출합니다."
+          );
+          const genreParamValue = Array.isArray(genres)
+            ? genres.join(",")
+            : genres;
+          return await backendApi.getTmdbFilteredTvShows(
+            genreParamValue,
+            year,
+            sortBy,
+            page,
+            voteAvgMin
+          );
+        }
+
+        // 필터링이 없는 경우 인기 TV 쇼 가져오기
+        if (result.results.length === 0 && !query && !genres && !year) {
+          console.log("필터링된 결과가 비어있어 인기 TV 쇼를 가져옵니다.");
+          return await backendApi.getPopularTvShows(page);
+        }
+
+        return result;
+      }
+
+      // 결과가 비어있고 필터링이 적용된 경우 TMDB API 직접 호출
+      if (
+        (!response.data.results || response.data.results.length === 0) &&
+        (genres || year || voteAvgMin)
+      ) {
+        console.log(
+          "백엔드 필터링 결과가 비어있어 TMDB API를 직접 호출합니다."
+        );
+        const genreParamValue = Array.isArray(genres)
+          ? genres.join(",")
+          : genres;
+        return await backendApi.getTmdbFilteredTvShows(
+          genreParamValue,
+          year,
+          sortBy,
+          page,
+          voteAvgMin
+        );
+      }
+
+      // 결과가 비어있으면 인기 TV 쇼 가져오기
+      if (
+        (!response.data.results || response.data.results.length === 0) &&
+        !query &&
+        !genres &&
+        !year
+      ) {
+        console.log("결과가 비어있어 인기 TV 쇼를 가져옵니다.");
+        return await backendApi.getPopularTvShows(page);
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error("TV 쇼 필터링 API 요청 실패:", error);
+
+      if (axios.isAxiosError(error)) {
+        console.error("API 오류 상세:", {
+          url: error.config?.url,
+          params: error.config?.params,
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+
+        // 오류가 발생하고 필터링이 적용된 경우 TMDB API 직접 호출
+        if (genres || year || voteAvgMin) {
+          console.log("API 오류로 인해 TMDB API를 직접 호출합니다.");
+          const genreParamValue = Array.isArray(genres)
+            ? genres.join(",")
+            : genres;
+          return await backendApi.getTmdbFilteredTvShows(
+            genreParamValue,
+            year,
+            sortBy,
+            page,
+            voteAvgMin
+          );
+        }
+
+        if (error.code === "ECONNABORTED") {
+          throw new Error("요청 시간이 초과되었습니다. 다시 시도해 주세요.");
+        } else if (!error.response) {
+          throw new Error(
+            "백엔드 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해 주세요."
+          );
+        } else if (error.response.status === 404) {
+          console.log("TV 쇼를 찾을 수 없어 인기 TV 쇼를 가져옵니다.");
+          return await backendApi.getPopularTvShows(page);
+        } else if (error.response.status >= 500) {
+          throw new Error(
+            "백엔드 서버에 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+          );
+        }
+      }
+
+      // 오류 발생 시 인기 TV 쇼 가져오기
+      console.log("오류로 인해 인기 TV 쇼를 가져옵니다.");
+      try {
+        return await backendApi.getPopularTvShows(page);
+      } catch (popError) {
+        console.error("인기 TV 쇼를 가져오는데 실패했습니다:", popError);
+        return emptyContentResponse();
+      }
+    }
+  },
+
+  // TMDB API를 직접 호출하여 TV 쇼 필터링 결과를 가져오는 함수
+  getTmdbFilteredTvShows: async (
+    genres?: number | string,
+    year?: number,
+    sortBy = "popularity.desc",
+    page = 1,
+    voteMin?: number,
+    isKorean?: boolean,
+    isForeign?: boolean,
+    network?: string,
+    searchQuery?: string
+  ): Promise<ContentResponse> => {
+    try {
+      // 백엔드 API를 통해 필터링된 TV 쇼 가져오기
+      const url = `/api/contents/discover/tv`;
+
+      const params: Record<string, any> = {
+        page,
+        sort_by: sortBy,
+      };
+
+      // 장르 파라미터 설정
+      if (genres) {
+        params.genres = genres;
+      }
+
+      // 연도 파라미터 설정
+      if (year) {
+        params.year = year;
+      }
+
+      // 최소 평점 파라미터 설정
+      if (voteMin) {
+        params.voteAvgMin = voteMin;
+      }
+
+      // 한국/외국 필터 설정
+      if (isKorean !== undefined) {
+        params.isKorean = isKorean;
+      }
+
+      if (isForeign !== undefined) {
+        params.isForeign = isForeign;
+      }
+
+      // 방송사 필터 설정
+      if (network) {
+        params.network = network;
+      }
+
+      // 검색어 파라미터 설정
+      if (searchQuery && searchQuery.trim()) {
+        params.query = searchQuery.trim();
+      }
+
+      const response = await apiClient.get(url, { params });
+
+      return response.data;
+    } catch (error) {
+      console.error("TV 쇼 필터링 API 요청 실패:", error);
+
+      // 오류 발생 시 인기 TV 쇼 가져오기
+      try {
+        return await backendApi.getPopularTvShows(page);
+      } catch (popError) {
+        console.error("인기 TV 쇼를 가져오는데 실패했습니다:", popError);
+        return emptyContentResponse();
+      }
+    }
+  },
+
+  // 인기 TV 쇼 가져오기
+  getPopularTvShows: async (page = 1): Promise<ContentResponse> => {
+    try {
+      console.log("인기 TV 쇼 요청, 페이지:", page);
+      const response = await apiClient.get("/api/tv/popular", {
+        params: { page },
+      });
+      console.log("인기 TV 쇼 응답:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("인기 TV 쇼 요청 실패:", error);
+      return emptyContentResponse();
+    }
+  },
+
   // 영화 출연진 정보 가져오기
   getMovieCredits: async (movieId: number) => {
     try {
@@ -588,6 +843,93 @@ export const backendApi = {
       } else {
         throw new Error("검색 결과를 불러오는데 실패했습니다.");
       }
+    }
+  },
+
+  // TV 쇼 제목으로 검색하는 함수
+  searchTvShowsByTitle: async (query: string): Promise<ContentResponse> => {
+    try {
+      // 빈 검색어인 경우 인기 TV 쇼 목록 반환
+      if (!query || query.trim() === "") {
+        console.log("검색어가 비어있어 인기 TV 쇼를 반환합니다.");
+        return await backendApi.getPopularTvShows(1);
+      }
+
+      console.log("TV 쇼 검색 요청:", query);
+
+      // 더 빠른 응답을 위해 짧은 타임아웃 설정 (2초로 줄임)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const response = await apiClient.get("/api/contents/search", {
+        params: {
+          query,
+          page: 1,
+          mediaType: "tv", // TV 쇼만 검색하도록 mediaType 파라미터 추가
+          includeAdult: false, // 성인 콘텐츠 제외
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      console.log("TV 쇼 검색 결과:", response.data);
+
+      // 검색 결과가 있는지 확인
+      if (
+        response.data &&
+        response.data.results &&
+        response.data.results.length > 0
+      ) {
+        // media_type이 tv인 항목만 필터링
+        const filteredResults = response.data.results.filter(
+          (item: any) =>
+            item.media_type === "tv" ||
+            (!item.media_type && item.first_air_date) // media_type 없지만 first_air_date가 있으면 TV쇼로 간주
+        );
+
+        // 필터링된 결과가 있는지 확인
+        if (filteredResults.length > 0) {
+          // 모든 결과에 type과 title 필드 확실히 추가
+          const tvShows = filteredResults.map((item: any) => ({
+            ...item,
+            media_type: "tv", // media_type 명시적 설정
+            type: "tv",
+            title: item.name || item.title || "제목 없음",
+            // first_air_date가 없는 경우 release_date 사용
+            first_air_date: item.first_air_date || item.release_date,
+          }));
+
+          return {
+            ...response.data,
+            results: tvShows,
+          };
+        }
+      }
+
+      // 검색 결과가 없거나 TV 쇼가 없으면 빈 결과 반환
+      console.log("TV 쇼 검색 결과가 없습니다.");
+      return {
+        page: 1,
+        results: [],
+        total_pages: 0,
+        total_results: 0,
+      };
+    } catch (error) {
+      console.error("TV 쇼 검색 API 요청 실패:", error);
+
+      if (error instanceof DOMException && error.name === "AbortError") {
+        console.log("검색 요청 시간 초과, 빈 결과 반환");
+      }
+
+      // 모든 에러에 대해 빈 결과 반환
+      console.log("오류 발생, 빈 결과 반환");
+      return {
+        page: 1,
+        results: [],
+        total_pages: 0,
+        total_results: 0,
+      };
     }
   },
 
@@ -1689,7 +2031,9 @@ export const backendApi = {
           if (errorMessage.includes("리뷰 작성 권한이 없습니다")) {
             throw new Error("리뷰 작성 권한이 없습니다.");
           } else if (
-            errorMessage.includes("이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다")
+            errorMessage.includes(
+              "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다"
+            )
           ) {
             throw new Error(
               "이미 이 TV 프로그램에 대한 리뷰를 작성하셨습니다. 기존 리뷰를 수정하시겠습니까?"

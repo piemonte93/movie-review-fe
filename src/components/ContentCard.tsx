@@ -1,7 +1,8 @@
 import React from "react";
 import { FaStar } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { Content } from "../types/content";
+import { Content, TvShow } from "../types/content";
+import defaultPoster from "../assets/default-poster.jpg";
 
 interface ContentCardProps {
   content: Content;
@@ -17,7 +18,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
   const navigate = useNavigate();
   const imageUrl = content.poster_path
     ? `https://image.tmdb.org/t/p/w500${content.poster_path}`
-    : "https://via.placeholder.com/500x750?text=No+Poster";
+    : defaultPoster;
 
   const displayTitle =
     content.media_type === "tv"
@@ -58,8 +59,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
           alt={displayTitle}
           className="h-full w-full object-cover"
           onError={(e) => {
-            e.currentTarget.src =
-              "https://via.placeholder.com/500x750?text=No+Poster";
+            e.currentTarget.src = defaultPoster;
           }}
         />
         <div className="absolute right-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-white">
