@@ -147,14 +147,25 @@ export const useFilteredTvShows = (
 
       try {
         let result;
-        if (searchQuery.trim()) {
-          result = await backendApi.searchTvShowsByTitle(searchQuery);
-        } else {
-          // 장르를 콤마로 구분된 문자열로 변환
-          const genreParam =
-            genres && genres.length > 0 ? genres.join(",") : undefined;
+        // 장르를 콤마로 구분된 문자열로 변환
+        const genreParam =
+          genres && genres.length > 0 ? genres.join(",") : undefined;
 
-          // 백엔드 API 호출
+        if (searchQuery.trim()) {
+          // 검색어가 있는 경우에도 필터 적용
+          result = await backendApi.getTmdbFilteredTvShows(
+            genreParam,
+            year,
+            sortBy,
+            page,
+            voteAvgMin,
+            isKorean,
+            isForeign,
+            network,
+            searchQuery // 검색어를 파라미터로 추가
+          );
+        } else {
+          // 필터링만 적용
           result = await backendApi.getTmdbFilteredTvShows(
             genreParam,
             year,
@@ -170,6 +181,7 @@ export const useFilteredTvShows = (
         const tvShowsWithType = result.results.map((show) => ({
           ...show,
           type: "tv",
+          media_type: "tv",
         }));
 
         setTvShows(tvShowsWithType);

@@ -679,7 +679,8 @@ export const backendApi = {
     voteMin?: number,
     isKorean?: boolean,
     isForeign?: boolean,
-    network?: string
+    network?: string,
+    searchQuery?: string
   ): Promise<ContentResponse> => {
     try {
       // 백엔드 API를 통해 필터링된 TV 쇼 가져오기
@@ -717,6 +718,11 @@ export const backendApi = {
       // 방송사 필터 설정
       if (network) {
         params.network = network;
+      }
+
+      // 검색어 파라미터 설정
+      if (searchQuery && searchQuery.trim()) {
+        params.query = searchQuery.trim();
       }
 
       const response = await apiClient.get(url, { params });
