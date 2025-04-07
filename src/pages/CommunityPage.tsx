@@ -16,6 +16,7 @@ import {
   FaTrash,
   FaAt,
   FaBell,
+  FaExclamationTriangle
 } from "react-icons/fa";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
@@ -93,6 +94,101 @@ const CommunityPage: React.FC = () => {
   const [reportTargetType, setReportTargetType] = useState<
     "comment" | "post" | null
   >(null);
+
+  // 개발 모드 확인 (실제 배포 환경에서는 false로 설정해야 함)
+  const isDevelopmentMode = true;
+
+  // 이미 신고한 항목인지 확인하는 함수
+  const isAlreadyReported = (id: number, type: "comment" | "post"): boolean => {
+    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const key = `${type}_${id}`;
+    return !!reportedItems[key];
+  };
+
+  // 신고 내역 초기화 함수 (개발 전용)
+  const clearReportRecords = () => {
+    localStorage.removeItem('reportedItems');
+    toast.info("신고 내역이 초기화되었습니다.");
+  };
+
+  // 신고 기록을 저장하는 함수
+  const saveReportRecord = (id: number, type: "comment" | "post"): void => {
+    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const key = `${type}_${id}`;
+    reportedItems[key] = true;
+    localStorage.setItem('reportedItems', JSON.stringify(reportedItems));
+  };
+
+  // 신고 모달 열기 함수
+  const openReportModal = (id: number, type: "comment" | "post") => {
+    // 이미 신고한 항목인지 확인
+    if (isAlreadyReported(id, type)) {
+      toast.warning("이미 신고한 항목입니다.");
+      return;
+    }
+    
+    setReportTargetId(id);
+    setReportTargetType(type);
+    setReportContent("");
+    setShowReportModal(true);
+  };
+
+  // 신고 제출 처리 함수
+  const handleReportSubmit = async () => {
+    if (!reportContent.trim()) {
+      toast.error("신고 내용을 자세히 입력해주세요.");
+      return;
+    }
+
+    try {
+      const targetUserId = getReportTargetUserId();
+      
+      await backendApi.createReport({
+        targetId: reportTargetId!,
+        targetUserId,
+        reportType: reportTargetType === "post" ? "post" : "comment",
+        content: reportContent,
+      });
+      
+      // 신고 성공 시 로컬 스토리지에 기록
+      if (reportTargetId && reportTargetType) {
+        saveReportRecord(reportTargetId, reportTargetType);
+      }
+      
+      toast.success("신고가 접수되었습니다.");
+      setShowReportModal(false);
+      setReportContent("");
+      setReportTargetId(null);
+      setReportTargetType(null);
+    } catch (error) {
+      console.error("신고 접수 실패:", error);
+      toast.error("신고 접수에 실패했습니다. 다시 시도해주세요.");
+    }
+  };
+
+  // 신고 대상의 사용자 ID를 가져오는 함수
+  const getReportTargetUserId = (): number => {
+    let targetUserId = 0;
+    
+    if (reportTargetType === "post") {
+      // 게시글인 경우 user.id를 사용
+      const post = posts.find(p => p.id === reportTargetId);
+      targetUserId = post?.user?.id || 0;
+    } else if (reportTargetType === "comment") {
+      // 댓글인 경우 모든 게시글의 모든 댓글을 검색
+      for (const post of posts) {
+        if (post.comments) {
+          const comment = post.comments.find(c => c.id === reportTargetId);
+          if (comment) {
+            targetUserId = comment.user.id;
+            break;
+          }
+        }
+      }
+    }
+    
+    return targetUserId;
+  };
 
   // 글쓰기 버튼 클릭 처리 핸들러
   const handleWriteButtonClick = async () => {
@@ -819,43 +915,6 @@ const CommunityPage: React.FC = () => {
     } catch (error) {
       console.error("게시글 더 불러오기 실패:", error);
       toast.error("게시글을 더 불러오는데 실패했습니다.");
-    }
-  };
-
-  // 신고 모달 열기 함수
-  const openReportModal = (id: number, type: "comment" | "post") => {
-    setReportTargetId(id);
-    setReportTargetType(type);
-    setReportContent("");
-    setShowReportModal(true);
-  };
-
-  // 신고 제출 처리 함수
-  const handleReportSubmit = async () => {
-    if (!reportContent.trim()) {
-      toast.error("신고 내용을 입력해주세요.");
-      return;
-    }
-
-    try {
-      // targetUserId 추가
-      await backendApi.createReport({
-        targetId: reportTargetId!,
-        targetUserId: reportTargetType === "post" 
-          ? posts.find(p => p.id === reportTargetId)?.user.id || 0
-          : posts.flatMap(p => p.comments).find(c => c.id === reportTargetId)?.user.id || 0,
-        reportType: reportTargetType,
-        content: reportContent,
-      });
-      
-      toast.success("신고가 접수되었습니다.");
-      setShowReportModal(false);
-      setReportContent("");
-      setReportTargetId(null);
-      setReportTargetType(null);
-    } catch (error) {
-      console.error("신고 접수 실패:", error);
-      toast.error("신고 접수에 실패했습니다. 다시 시도해주세요.");
     }
   };
 
@@ -1827,16 +1886,16 @@ const CommunityPage: React.FC = () => {
                                 </span>
                                 {isLoggedIn && !isUserBlocked() &&
                                   user?.id !== comment.user.id && (
-                                    <button
-                                      className="p-1 hover:bg-gray-100 rounded-full"
-                                      title="댓글 신고하기"
-                                      onClick={() =>
-                                        openReportModal(comment.id, "comment")
-                                      }
-                                    >
-                                      <FaBell className="text-red-500 text-xs" />
-                                    </button>
-                                  )}
+                                      <button
+                                        className="p-1 hover:bg-gray-100 rounded-full"
+                                        title="댓글 신고하기"
+                                        onClick={() =>
+                                          openReportModal(comment.id, "comment")
+                                        }
+                                      >
+                                        <FaBell className="text-red-500 text-xs" />
+                                      </button>
+                                    )}
                               </div>
                               {isLoggedIn && user?.id === comment.user.id && !isUserBlocked() && (
                                 <button
@@ -1968,6 +2027,48 @@ const CommunityPage: React.FC = () => {
         >
           <FaArrowUp />
         </button>
+      )}
+
+      {/* 신고 모달 */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="relative w-full max-w-md bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center mb-4">
+              <FaExclamationTriangle className="text-red-500 mr-2" />
+              <h2 className="text-xl font-bold">
+                {reportTargetType === "comment" ? "댓글 신고" : "게시글 신고"}
+              </h2>
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="absolute right-4 top-4 text-gray-500 hover:text-gray-700"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <textarea
+              value={reportContent}
+              onChange={(e) => setReportContent(e.target.value)}
+              placeholder="신고 내용을 자세히 입력해주세요..."
+              className="w-full h-32 p-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
+            ></textarea>
+
+            <div className="mt-4 flex justify-end space-x-2">
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleReportSubmit}
+                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+              >
+                신고
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

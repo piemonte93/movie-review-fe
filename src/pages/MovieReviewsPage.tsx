@@ -1448,8 +1448,29 @@ const MovieReviewsPage: React.FC = () => {
     "comment" | "review" | null
   >(null);
 
+  // 이미 신고한 항목인지 확인하는 함수
+  const isAlreadyReported = (id: number, type: "comment" | "review"): boolean => {
+    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const key = `${type}_${id}`;
+    return !!reportedItems[key];
+  };
+
+  // 신고 기록을 저장하는 함수
+  const saveReportRecord = (id: number, type: "comment" | "review"): void => {
+    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const key = `${type}_${id}`;
+    reportedItems[key] = true;
+    localStorage.setItem('reportedItems', JSON.stringify(reportedItems));
+  };
+
   // 신고 모달 열기 함수
   const openReportModal = (id: number, type: "comment" | "review") => {
+    // 이미 신고한 항목인지 확인
+    if (isAlreadyReported(id, type)) {
+      toast.warning("이미 신고한 항목입니다.");
+      return;
+    }
+
     setReportTargetId(id);
     setReportTargetType(type);
     setReportContent("");
@@ -1510,6 +1531,11 @@ const MovieReviewsPage: React.FC = () => {
         reportType: reportTargetType === "review" ? "review" : "comment",
         content: reportContent,
       });
+
+      // 신고 성공 시 로컬 스토리지에 기록
+      if (reportTargetId && reportTargetType) {
+        saveReportRecord(reportTargetId, reportTargetType);
+      }
 
       toast.success("신고가 접수되었습니다.");
       setShowReportModal(false);
