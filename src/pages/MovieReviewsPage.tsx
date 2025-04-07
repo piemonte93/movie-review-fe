@@ -1448,8 +1448,29 @@ const MovieReviewsPage: React.FC = () => {
     "comment" | "review" | null
   >(null);
 
+  // 이미 신고한 항목인지 확인하는 함수
+  const isAlreadyReported = (id: number, type: "comment" | "review"): boolean => {
+    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const key = `${type}_${id}`;
+    return !!reportedItems[key];
+  };
+
+  // 신고 기록을 저장하는 함수
+  const saveReportRecord = (id: number, type: "comment" | "review"): void => {
+    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const key = `${type}_${id}`;
+    reportedItems[key] = true;
+    localStorage.setItem('reportedItems', JSON.stringify(reportedItems));
+  };
+
   // 신고 모달 열기 함수
   const openReportModal = (id: number, type: "comment" | "review") => {
+    // 이미 신고한 항목인지 확인
+    if (isAlreadyReported(id, type)) {
+      toast.warning("이미 신고한 항목입니다.");
+      return;
+    }
+
     setReportTargetId(id);
     setReportTargetType(type);
     setReportContent("");
@@ -1510,6 +1531,11 @@ const MovieReviewsPage: React.FC = () => {
         reportType: reportTargetType === "review" ? "review" : "comment",
         content: reportContent,
       });
+
+      // 신고 성공 시 로컬 스토리지에 기록
+      if (reportTargetId && reportTargetType) {
+        saveReportRecord(reportTargetId, reportTargetType);
+      }
 
       toast.success("신고가 접수되었습니다.");
       setShowReportModal(false);
@@ -1714,7 +1740,7 @@ const MovieReviewsPage: React.FC = () => {
                       user?.roles?.includes("ROLE_ADMIN") ||
                       false) && (
                       <div className="flex space-x-2">
-                        {user?.id === review.user.id && (
+                        {user?.id === review.user.id && !isUserBlocked() && (
                           <button
                             onClick={() => handleEditReview(review)}
                             className="text-gray-500 hover:text-blue-500"
@@ -1723,13 +1749,16 @@ const MovieReviewsPage: React.FC = () => {
                             <FaEdit />
                           </button>
                         )}
-                        <button
-                          onClick={() => handleDeleteReview(review.id)}
-                          className="text-gray-500 hover:text-red-500"
-                          title="삭제"
-                        >
-                          <FaTrash />
-                        </button>
+                        {(user?.id === review.user.id && !isUserBlocked() || 
+                          user?.roles?.includes("ROLE_ADMIN") || false) && (
+                          <button
+                            onClick={() => handleDeleteReview(review.id)}
+                            className="text-gray-500 hover:text-red-500"
+                            title="삭제"
+                          >
+                            <FaTrash />
+                          </button>
+                        )}
                       </div>
                     )}
                 </div>
@@ -1809,7 +1838,7 @@ const MovieReviewsPage: React.FC = () => {
                   })()}
                 </div>
                 <div className="flex items-center space-x-4">
-                  {isLoggedIn && user?.id !== review.user.id && (
+                  {isLoggedIn && !isUserBlocked() && user?.id !== review.user.id && (
                     <button
                       className="flex items-center space-x-1"
                       title="리뷰 신고하기"
@@ -1909,7 +1938,7 @@ const MovieReviewsPage: React.FC = () => {
                                     <span className="text-xs text-gray-500">
                                       {formatDate(comment.createdAt)}
                                     </span>
-                                    {isLoggedIn &&
+                                    {isLoggedIn && !isUserBlocked() &&
                                       user?.id !== comment.userId && (
                                         <button
                                           className="p-1 hover:bg-gray-100 rounded-full"
@@ -1926,7 +1955,7 @@ const MovieReviewsPage: React.FC = () => {
                                       )}
                                   </div>
                                   {isLoggedIn &&
-                                    (user?.id === comment.userId ||
+                                    ((user?.id === comment.userId && !isUserBlocked()) ||
                                       user?.roles?.includes("ROLE_ADMIN") ||
                                       false) && (
                                       <button

@@ -15,6 +15,8 @@ import {
   FaEdit,
   FaTrash,
   FaAt,
+  FaBell,
+  FaExclamationTriangle
 } from "react-icons/fa";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
@@ -92,6 +94,101 @@ const CommunityPage: React.FC = () => {
   const [reportTargetType, setReportTargetType] = useState<
     "comment" | "post" | null
   >(null);
+
+  // 개발 모드 확인 (실제 배포 환경에서는 false로 설정해야 함)
+  const isDevelopmentMode = true;
+
+  // 이미 신고한 항목인지 확인하는 함수
+  const isAlreadyReported = (id: number, type: "comment" | "post"): boolean => {
+    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const key = `${type}_${id}`;
+    return !!reportedItems[key];
+  };
+
+  // 신고 내역 초기화 함수 (개발 전용)
+  const clearReportRecords = () => {
+    localStorage.removeItem('reportedItems');
+    toast.info("신고 내역이 초기화되었습니다.");
+  };
+
+  // 신고 기록을 저장하는 함수
+  const saveReportRecord = (id: number, type: "comment" | "post"): void => {
+    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const key = `${type}_${id}`;
+    reportedItems[key] = true;
+    localStorage.setItem('reportedItems', JSON.stringify(reportedItems));
+  };
+
+  // 신고 모달 열기 함수
+  const openReportModal = (id: number, type: "comment" | "post") => {
+    // 이미 신고한 항목인지 확인
+    if (isAlreadyReported(id, type)) {
+      toast.warning("이미 신고한 항목입니다.");
+      return;
+    }
+    
+    setReportTargetId(id);
+    setReportTargetType(type);
+    setReportContent("");
+    setShowReportModal(true);
+  };
+
+  // 신고 제출 처리 함수
+  const handleReportSubmit = async () => {
+    if (!reportContent.trim()) {
+      toast.error("신고 내용을 자세히 입력해주세요.");
+      return;
+    }
+
+    try {
+      const targetUserId = getReportTargetUserId();
+      
+      await backendApi.createReport({
+        targetId: reportTargetId!,
+        targetUserId,
+        reportType: reportTargetType === "post" ? "post" : "comment",
+        content: reportContent,
+      });
+      
+      // 신고 성공 시 로컬 스토리지에 기록
+      if (reportTargetId && reportTargetType) {
+        saveReportRecord(reportTargetId, reportTargetType);
+      }
+      
+      toast.success("신고가 접수되었습니다.");
+      setShowReportModal(false);
+      setReportContent("");
+      setReportTargetId(null);
+      setReportTargetType(null);
+    } catch (error) {
+      console.error("신고 접수 실패:", error);
+      toast.error("신고 접수에 실패했습니다. 다시 시도해주세요.");
+    }
+  };
+
+  // 신고 대상의 사용자 ID를 가져오는 함수
+  const getReportTargetUserId = (): number => {
+    let targetUserId = 0;
+    
+    if (reportTargetType === "post") {
+      // 게시글인 경우 user.id를 사용
+      const post = posts.find(p => p.id === reportTargetId);
+      targetUserId = post?.user?.id || 0;
+    } else if (reportTargetType === "comment") {
+      // 댓글인 경우 모든 게시글의 모든 댓글을 검색
+      for (const post of posts) {
+        if (post.comments) {
+          const comment = post.comments.find(c => c.id === reportTargetId);
+          if (comment) {
+            targetUserId = comment.user.id;
+            break;
+          }
+        }
+      }
+    }
+    
+    return targetUserId;
+  };
 
   // 글쓰기 버튼 클릭 처리 핸들러
   const handleWriteButtonClick = async () => {
@@ -725,6 +822,102 @@ const CommunityPage: React.FC = () => {
     }
   };
 
+  // 검색 처리
+  const handleSearch = async (query: string, category: string) => {
+    try {
+      setLoading(true);
+      const response = await backendApi.searchPosts(query, category);
+      setSearchResults(response.content);
+      setShowSearch(true);
+    } catch (error) {
+      console.error("검색 실패:", error);
+      toast.error("검색에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 검색 카테고리를 표시하는 텍스트 반환
+  const getCategoryText = () => {
+    switch (searchCategory) {
+      case "title":
+        return "제목";
+      case "content":
+        return "내용";
+      case "author":
+        return "작성자";
+      default:
+        return "제목";
+    }
+  };
+
+  // 검색 초기화
+  const resetSearch = () => {
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearchCategory("title");
+    setShowSearch(false);
+    setShowSearchModal(false);
+  };
+
+  // 스크롤 이벤트 핸들러
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY;
+      const showScrollButton = scrollY > 300; // 스크롤이 300px 이상 내려갔을 때 버튼 표시
+      setShowScrollTop(showScrollButton);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // 최상단으로 스크롤하는 함수
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
+
+  // 다음 페이지 게시글을 불러오는 함수
+  const fetchMorePosts = async () => {
+    if (page + 1 >= totalPages) {
+      setHasMore(false);
+      return;
+    }
+
+    try {
+      const nextPage = page + 1;
+      let response;
+
+      if (showSearch && searchQuery) {
+        // 검색 결과 더 불러오기
+        response = await backendApi.searchPosts(
+          searchQuery,
+          searchCategory,
+          nextPage,
+          postsPerPage
+        );
+      } else {
+        // 일반 게시글 더 불러오기
+        response = await backendApi.getPosts(nextPage, postsPerPage);
+      }
+
+      // 기존 게시글에 새로 불러온 게시글 추가
+      setVisiblePosts((prevPosts) => [...prevPosts, ...response.content]);
+      setPage(nextPage);
+
+      // 더 불러올 게시글이 없는 경우 hasMore를 false로 설정
+      if (nextPage + 1 >= response.totalPages) {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error("게시글 더 불러오기 실패:", error);
+      toast.error("게시글을 더 불러오는데 실패했습니다.");
+    }
+  };
+
   // 댓글 좋아요 처리
   const handleCommentLike = async (commentId: number) => {
     if (!isLoggedIn) {
@@ -849,139 +1042,6 @@ const CommunityPage: React.FC = () => {
     }
   };
 
-  // 검색 처리
-  const handleSearch = async (query: string, category: string) => {
-    try {
-      setLoading(true);
-      const response = await backendApi.searchPosts(query, category);
-      setSearchResults(response.content);
-      setShowSearch(true);
-    } catch (error) {
-      console.error("검색 실패:", error);
-      toast.error("검색에 실패했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 검색 카테고리를 표시하는 텍스트 반환
-  const getCategoryText = () => {
-    switch (searchCategory) {
-      case "title":
-        return "제목";
-      case "content":
-        return "내용";
-      case "author":
-        return "작성자";
-      default:
-        return "제목";
-    }
-  };
-
-  // 검색 초기화
-  const resetSearch = () => {
-    setSearchQuery("");
-    setSearchResults([]);
-    setSearchCategory("title");
-    setShowSearch(false);
-    setShowSearchModal(false);
-  };
-
-  // 스크롤 이벤트 핸들러
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollY = window.scrollY;
-      const showScrollButton = scrollY > 300; // 스크롤이 300px 이상 내려갔을 때 버튼 표시
-      setShowScrollTop(showScrollButton);
-    };
-
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  // 최상단으로 스크롤하는 함수
-  const scrollToTop = () => {
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  };
-
-  // 다음 페이지 게시글을 불러오는 함수
-  const fetchMorePosts = async () => {
-    if (page + 1 >= totalPages) {
-      setHasMore(false);
-      return;
-    }
-
-    try {
-      const nextPage = page + 1;
-      let response;
-
-      if (showSearch && searchQuery) {
-        // 검색 결과 더 불러오기
-        response = await backendApi.searchPosts(
-          searchQuery,
-          searchCategory,
-          nextPage,
-          postsPerPage
-        );
-      } else {
-        // 일반 게시글 더 불러오기
-        response = await backendApi.getPosts(nextPage, postsPerPage);
-      }
-
-      // 기존 게시글에 새로 불러온 게시글 추가
-      setVisiblePosts((prevPosts) => [...prevPosts, ...response.content]);
-      setPage(nextPage);
-
-      // 더 불러올 게시글이 없는 경우 hasMore를 false로 설정
-      if (nextPage + 1 >= response.totalPages) {
-        setHasMore(false);
-      }
-    } catch (error) {
-      console.error("게시글 더 불러오기 실패:", error);
-      toast.error("게시글을 더 불러오는데 실패했습니다.");
-    }
-  };
-
-  // 신고 모달 열기 함수
-  const openReportModal = (id: number, type: "comment" | "post") => {
-    setReportTargetId(id);
-    setReportTargetType(type);
-    setReportContent("");
-    setShowReportModal(true);
-  };
-
-  // 신고 제출 처리 함수
-  const handleReportSubmit = async () => {
-    if (!reportContent.trim()) {
-      toast.error("신고 내용을 입력해주세요.");
-      return;
-    }
-
-    try {
-      // targetUserId 추가
-      await backendApi.createReport({
-        targetId: reportTargetId!,
-        targetUserId: reportTargetType === "post" 
-          ? posts.find(p => p.id === reportTargetId)?.user.id || 0
-          : posts.flatMap(p => p.comments).find(c => c.id === reportTargetId)?.user.id || 0,
-        reportType: reportTargetType,
-        content: reportContent,
-      });
-      
-      toast.success("신고가 접수되었습니다.");
-      setShowReportModal(false);
-      setReportContent("");
-      setReportTargetId(null);
-      setReportTargetType(null);
-    } catch (error) {
-      console.error("신고 접수 실패:", error);
-      toast.error("신고 접수에 실패했습니다. 다시 시도해주세요.");
-    }
-  };
-
   return (
     <div className="container mx-auto px-4 py-2">
       {/* 상단 검색 및 버튼 영역 - 고정 헤더로 변경 */}
@@ -1002,6 +1062,12 @@ const CommunityPage: React.FC = () => {
             </button>
             <button
               onClick={() => {
+                if (isUserBlocked()) {
+                  toast.error(
+                    "현재 글쓰기 기능이 제한되었습니다. 관리자에게 문의해주세요."
+                  );
+                  return;
+                }
                 setShowWriteForm(true);
                 setShowSearch(false);
                 setShowSearchModal(false);
@@ -1350,7 +1416,7 @@ const CommunityPage: React.FC = () => {
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="text-lg font-semibold">{post.title}</h3>
                         <div className="flex gap-2">
-                          {isLoggedIn && user?.id === post.user.id && (
+                          {isLoggedIn && user?.id === post.user.id && !isUserBlocked() && (
                             <button
                               onClick={() => handleEditPost(post)}
                               className="text-gray-500 hover:text-blue-500"
@@ -1359,7 +1425,7 @@ const CommunityPage: React.FC = () => {
                               <FaEdit />
                             </button>
                           )}
-                          {isLoggedIn && (user?.id === post.user.id || isAdminOrModerator()) && (
+                          {isLoggedIn && ((user?.id === post.user.id && !isUserBlocked()) || isAdminOrModerator()) && (
                             <button
                               onClick={() => handleDeletePost(post.id)}
                               className="text-gray-500 hover:text-red-500"
@@ -1394,7 +1460,7 @@ const CommunityPage: React.FC = () => {
                       <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
                         <span>{formatDate(post.createdAt)}</span>
                         <div className="flex items-center space-x-3">
-                          {isLoggedIn && user?.id !== post.user.id && (
+                          {isLoggedIn && !isUserBlocked() && user?.id !== post.user.id && (
                             <button
                               className="p-1 rounded-md text-red-500"
                               title="게시글 신고하기"
@@ -1479,11 +1545,9 @@ const CommunityPage: React.FC = () => {
                               <div className="flex justify-between items-center mb-1">
                                 <div className="flex items-center gap-1">
                                   <span className="text-xs text-gray-500">
-                                    {new Date(
-                                      comment.createdAt
-                                    ).toLocaleString()}
+                                    {new Date(comment.createdAt).toLocaleString()}
                                   </span>
-                                  {isLoggedIn &&
+                                  {isLoggedIn && !isUserBlocked() &&
                                     user?.id !== comment.user.id && (
                                       <button
                                         className="p-1 hover:bg-gray-100 rounded-full"
@@ -1496,7 +1560,7 @@ const CommunityPage: React.FC = () => {
                                       </button>
                                     )}
                                 </div>
-                                {isLoggedIn && user?.id === comment.user.id && (
+                                {isLoggedIn && user?.id === comment.user.id && !isUserBlocked() && (
                                   <button
                                     onClick={() =>
                                       handleDeleteComment(post.id, comment.id)
@@ -1572,18 +1636,18 @@ const CommunityPage: React.FC = () => {
                           <div className="flex-1 flex">
                             <input
                               type="text"
-                              placeholder={
-                                isUserBlocked()
-                                  ? "댓글 작성이 제한되었습니다"
-                                  : "댓글을 입력하세요..."
-                              }
+                              placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
                               className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
                               value={newComment}
                               onChange={(e) => setNewComment(e.target.value)}
+                              disabled={isUserBlocked()}
                             />
                             <button
-                              className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
+                              className={`rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white ${
+                                isUserBlocked() ? "opacity-50 cursor-not-allowed" : ""
+                              }`}
                               onClick={() => handleCommentSubmit(post.id)}
+                              disabled={isUserBlocked()}
                             >
                               <FaReply />
                             </button>
@@ -1689,7 +1753,7 @@ const CommunityPage: React.FC = () => {
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="text-lg font-semibold">{post.title}</h3>
                       <div className="flex gap-2">
-                        {isLoggedIn && user?.id === post.user.id && (
+                        {isLoggedIn && user?.id === post.user.id && !isUserBlocked() && (
                           <button
                             onClick={() => handleEditPost(post)}
                             className="text-gray-500 hover:text-blue-500"
@@ -1698,7 +1762,7 @@ const CommunityPage: React.FC = () => {
                             <FaEdit />
                           </button>
                         )}
-                        {isLoggedIn && (user?.id === post.user.id || isAdminOrModerator()) && (
+                        {isLoggedIn && ((user?.id === post.user.id && !isUserBlocked()) || isAdminOrModerator()) && (
                           <button
                             onClick={() => handleDeletePost(post.id)}
                             className="text-gray-500 hover:text-red-500"
@@ -1733,7 +1797,7 @@ const CommunityPage: React.FC = () => {
                     <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
                       <span>{formatDate(post.createdAt)}</span>
                       <div className="flex items-center space-x-3">
-                        {isLoggedIn && user?.id !== post.user.id && (
+                        {isLoggedIn && !isUserBlocked() && user?.id !== post.user.id && (
                           <button
                             className="p-1 rounded-md text-red-500"
                             title="게시글 신고하기"
@@ -1751,7 +1815,9 @@ const CommunityPage: React.FC = () => {
                           >
                             <FaThumbsUp size={14} />
                           </button>
-                          <span className="text-sm">{post.likeCount || 0}</span>
+                          <span className="text-sm">
+                            {post.likeCount || 0}
+                          </span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <button
@@ -1818,19 +1884,20 @@ const CommunityPage: React.FC = () => {
                                 <span className="text-xs text-gray-500">
                                   {new Date(comment.createdAt).toLocaleString()}
                                 </span>
-                                {isLoggedIn && user?.id !== comment.user.id && (
-                                  <button
-                                    className="p-1 hover:bg-gray-100 rounded-full"
-                                    title="댓글 신고하기"
-                                    onClick={() =>
-                                      openReportModal(comment.id, "comment")
-                                    }
-                                  >
-                                    <FaBell className="text-red-500 text-xs" />
-                                  </button>
-                                )}
+                                {isLoggedIn && !isUserBlocked() &&
+                                  user?.id !== comment.user.id && (
+                                      <button
+                                        className="p-1 hover:bg-gray-100 rounded-full"
+                                        title="댓글 신고하기"
+                                        onClick={() =>
+                                          openReportModal(comment.id, "comment")
+                                        }
+                                      >
+                                        <FaBell className="text-red-500 text-xs" />
+                                      </button>
+                                    )}
                               </div>
-                              {isLoggedIn && user?.id === comment.user.id && (
+                              {isLoggedIn && user?.id === comment.user.id && !isUserBlocked() && (
                                 <button
                                   onClick={() =>
                                     handleDeleteComment(post.id, comment.id)
@@ -1863,7 +1930,9 @@ const CommunityPage: React.FC = () => {
                                 <span>{comment.likeCount || 0}</span>
                               </button>
                               <button
-                                onClick={() => handleCommentDislike(comment.id)}
+                                onClick={() =>
+                                  handleCommentDislike(comment.id)
+                                }
                                 className={`flex items-center text-xs space-x-1 ${
                                   comment.disliked
                                     ? "text-red-500"
@@ -1908,10 +1977,14 @@ const CommunityPage: React.FC = () => {
                             className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
                             value={newComment}
                             onChange={(e) => setNewComment(e.target.value)}
+                            disabled={isUserBlocked()}
                           />
                           <button
-                            className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
+                            className={`rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white ${
+                              isUserBlocked() ? "opacity-50 cursor-not-allowed" : ""
+                            }`}
                             onClick={() => handleCommentSubmit(post.id)}
+                            disabled={isUserBlocked()}
                           >
                             <FaReply />
                           </button>
@@ -1954,6 +2027,48 @@ const CommunityPage: React.FC = () => {
         >
           <FaArrowUp />
         </button>
+      )}
+
+      {/* 신고 모달 */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="relative w-full max-w-md bg-white rounded-lg shadow-lg p-6">
+            <div className="flex items-center mb-4">
+              <FaExclamationTriangle className="text-red-500 mr-2" />
+              <h2 className="text-xl font-bold">
+                {reportTargetType === "comment" ? "댓글 신고" : "게시글 신고"}
+              </h2>
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="absolute right-4 top-4 text-gray-500 hover:text-gray-700"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <textarea
+              value={reportContent}
+              onChange={(e) => setReportContent(e.target.value)}
+              placeholder="신고 내용을 자세히 입력해주세요..."
+              className="w-full h-32 p-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
+            ></textarea>
+
+            <div className="mt-4 flex justify-end space-x-2">
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleReportSubmit}
+                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+              >
+                신고
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

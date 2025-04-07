@@ -1279,8 +1279,29 @@ const TvReviewsPage: React.FC = () => {
     return user?.roles?.includes("ROLE_ADMIN") || user?.roles?.includes("ROLE_MODERATOR") || false;
   }, [user]);
 
+  // 이미 신고한 항목인지 확인하는 함수
+  const isAlreadyReported = (id: number, type: "comment" | "review"): boolean => {
+    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const key = `${type}_${id}`;
+    return !!reportedItems[key];
+  };
+
+  // 신고 기록을 저장하는 함수
+  const saveReportRecord = (id: number, type: "comment" | "review"): void => {
+    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const key = `${type}_${id}`;
+    reportedItems[key] = true;
+    localStorage.setItem('reportedItems', JSON.stringify(reportedItems));
+  };
+
   // 신고 모달 열기 함수
   const openReportModal = (id: number, type: "comment" | "review") => {
+    // 이미 신고한 항목인지 확인
+    if (isAlreadyReported(id, type)) {
+      toast.warning("이미 신고한 항목입니다.");
+      return;
+    }
+    
     setReportTargetId(id);
     setReportTargetType(type);
     setReportContent("");
@@ -1319,6 +1340,11 @@ const TvReviewsPage: React.FC = () => {
         reportType: reportTargetType === "review" ? "review" : "comment",
         content: reportContent,
       });
+      
+      // 신고 성공 시 로컬 스토리지에 기록
+      if (reportTargetId && reportTargetType) {
+        saveReportRecord(reportTargetId, reportTargetType);
+      }
       
       toast.success("신고가 접수되었습니다.");
       setShowReportModal(false);
@@ -1603,7 +1629,7 @@ const TvReviewsPage: React.FC = () => {
                   })()}
                 </div>
                 <div className="flex items-center space-x-4">
-                  {isLoggedIn && user?.id !== review.user.id && (
+                  {isLoggedIn && !isUserBlocked() && user?.id !== review.user.id && (
                     <button
                       className="flex items-center space-x-1"
                       title="리뷰 신고하기"
@@ -1697,7 +1723,7 @@ const TvReviewsPage: React.FC = () => {
                                 {comment.username || "알 수 없는 사용자"}
                               </Link>
                               <div className="flex items-center gap-2">
-                                {isLoggedIn && user?.id !== comment.userId && (
+                                {isLoggedIn && !isUserBlocked() && user?.id !== comment.userId && (
                                   <button 
                                     className="p-1 hover:bg-gray-100 rounded-full"
                                     title="댓글 신고하기"
