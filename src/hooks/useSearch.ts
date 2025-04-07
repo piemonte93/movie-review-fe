@@ -8,7 +8,17 @@ import { TMDB_API_BASE_URL, TMDB_API_KEY } from "../constants";
  * 단순 검색 기능을 위한 훅
  * 검색어와 페이지를 받아 검색 결과를 반환합니다.
  */
-export const useSearch = (query: string, page = 1) => {
+export const useSearch = (
+  query: string,
+  page = 1,
+  genres?: number[],
+  year?: number,
+  sortBy?: string,
+  voteAvgMin?: number,
+  isKorean?: boolean,
+  isForeign?: boolean,
+  network?: string
+) => {
   const [contents, setContents] = useState<Content[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,8 +42,22 @@ export const useSearch = (query: string, page = 1) => {
         setLoading(true);
         setError(null);
 
-        // 실제 API 호출
-        const response = await backendApi.searchContents(query, page);
+        // 장르가 배열인 경우 comma-separated string으로 변환
+        const genreParam =
+          genres && genres.length > 0 ? genres.join(",") : undefined;
+
+        // 실제 API 호출 - 필터링된 검색 결과 가져오기
+        const response = await backendApi.getTmdbFilteredTvShows(
+          genreParam,
+          year,
+          sortBy,
+          page,
+          voteAvgMin,
+          isKorean,
+          isForeign,
+          network,
+          query
+        );
 
         // 응답에서 컨텐츠 목록 및 페이지 정보 추출
         setContents(response.results || []);
@@ -49,7 +73,18 @@ export const useSearch = (query: string, page = 1) => {
     };
 
     fetchSearchResults();
-  }, [query, page, filterKey]); // filterKey를 의존성 배열에 추가
+  }, [
+    query,
+    page,
+    genres,
+    year,
+    sortBy,
+    voteAvgMin,
+    isKorean,
+    isForeign,
+    network,
+    filterKey,
+  ]);
 
   const updateFilters = () => {
     setFilterKey((prev) => prev + 1);
@@ -152,34 +187,22 @@ export const useFilteredTvShows = (
       setError(null);
 
       try {
-        let result;
+        // 장르가 배열인 경우 comma-separated string으로 변환
         const genreParam =
           genres && genres.length > 0 ? genres.join(",") : undefined;
 
-        if (searchQuery.trim()) {
-          result = await backendApi.getTmdbFilteredTvShows(
-            genreParam,
-            year,
-            sortBy,
-            page,
-            voteAvgMin,
-            isKorean,
-            isForeign,
-            network,
-            searchQuery
-          );
-        } else {
-          result = await backendApi.getTmdbFilteredTvShows(
-            genreParam,
-            year,
-            sortBy,
-            page,
-            voteAvgMin,
-            isKorean,
-            isForeign,
-            network
-          );
-        }
+        // 검색어가 있든 없든 동일한 API를 사용하여 필터링된 결과 가져오기
+        const result = await backendApi.getTmdbFilteredTvShows(
+          genreParam,
+          year,
+          sortBy,
+          page,
+          voteAvgMin,
+          isKorean,
+          isForeign,
+          network,
+          searchQuery.trim() || undefined
+        );
 
         const tvShowsWithType = result.results.map((show) => ({
           ...show,
