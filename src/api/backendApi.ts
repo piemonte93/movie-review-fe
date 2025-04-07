@@ -1483,6 +1483,10 @@ export const backendApi = {
             id: responseData.content[0].id,
             title: responseData.content[0].title,
             username: responseData.content[0].username,
+            isLiked: responseData.content[0].isLiked,
+            isDisliked: responseData.content[0].isDisliked,
+            likeCount: responseData.content[0].likeCount,
+            dislikeCount: responseData.content[0].dislikeCount,
           });
         }
       } else {
@@ -2207,6 +2211,10 @@ export const backendApi = {
             title: responseData.content[0].title,
             username: responseData.content[0].username,
             contentType: responseData.content[0].contentType || "tv",
+            isLiked: responseData.content[0].isLiked,
+            isDisliked: responseData.content[0].isDisliked,
+            likeCount: responseData.content[0].likeCount,
+            dislikeCount: responseData.content[0].dislikeCount
           });
         }
       } else {

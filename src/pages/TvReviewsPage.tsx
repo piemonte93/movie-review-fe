@@ -243,16 +243,20 @@ const TvReviewsPage: React.FC = () => {
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportContent, setReportContent] = useState("");
   const [reportTargetId, setReportTargetId] = useState<number | null>(null);
-  const [reportTargetType, setReportTargetType] = useState<"comment" | "review" | null>(null);
+  const [reportTargetType, setReportTargetType] = useState<
+    "comment" | "review" | null
+  >(null);
 
   // 글쓰기 버튼 클릭 처리 핸들러
   const handleWriteButtonClick = async () => {
     try {
       if (isUserBlocked()) {
-        toast.error("현재 글쓰기 기능이 제한되었습니다. 관리자에게 문의해주세요.");
+        toast.error(
+          "현재 글쓰기 기능이 제한되었습니다. 관리자에게 문의해주세요."
+        );
         return;
       }
-      
+
       // 정상 상태인 경우 글쓰기 폼 표시
       setShowWriteForm(true);
     } catch (error) {
@@ -421,6 +425,14 @@ const TvReviewsPage: React.FC = () => {
           moviePosterPath: review.moviePosterPath,
         });
 
+        // 좋아요/싫어요 상태 디버깅
+        console.log(`리뷰 ID ${review.id}의 좋아요/싫어요 상태:`, {
+          isLiked: review.isLiked,
+          isDisliked: review.isDisliked,
+          likeCount: review.likeCount,
+          dislikeCount: review.dislikeCount,
+        });
+
         // 포스터 경로 처리: 백엔드에서 여러 가지 필드명으로 올 수 있음
         const posterPath = review.moviePoster || review.moviePosterPath || "";
         console.log(`리뷰 ID ${review.id}의 최종 포스터 경로:`, posterPath);
@@ -434,8 +446,8 @@ const TvReviewsPage: React.FC = () => {
           movieTitle: review.movieTitle,
           moviePoster: posterPath,
           isSpoiler: review.isSpoiler,
-          isLiked: false, // 기본값으로 설정
-          isDisliked: false, // 기본값으로 설정
+          isLiked: review.isLiked || false,
+          isDisliked: review.isDisliked || false,
           likeCount: review.likeCount,
           dislikeCount: review.dislikeCount,
           commentCount: review.commentCount,
@@ -448,7 +460,7 @@ const TvReviewsPage: React.FC = () => {
             username: review.user?.username || review.username || "알 수 없음",
             profileImageUrl:
               review.user?.profileImageUrl || review.userProfileUrl || null,
-            reviewCount: 0, // 백엔드에서 제공하지 않는 정보, 필요하면 추가 요청 필요
+            reviewCount: 0,
           },
         };
       });
@@ -804,15 +816,22 @@ const TvReviewsPage: React.FC = () => {
     }
 
     try {
+      // 현재 리뷰 상태 확인
+      const currentReview = reviews.find((r) => r.id === reviewId);
+      const wasLiked = currentReview?.isLiked || false;
+
       // 실제 API 호출
       const updatedReview = await backendApi.likeReview(reviewId);
       console.log("서버 응답 (좋아요):", updatedReview);
+
+      // isLiked 상태를 수동으로 계산
+      const nowLiked = !wasLiked;
 
       const updateReviewState = (review: TvShowReview) =>
         review.id === reviewId
           ? {
               ...review,
-              isLiked: updatedReview.isLiked,
+              isLiked: nowLiked,
               likeCount: updatedReview.likeCount,
               isDisliked: false,
               dislikeCount: updatedReview.dislikeCount,
@@ -825,9 +844,7 @@ const TvReviewsPage: React.FC = () => {
       setSearchResults((prevResults) => prevResults.map(updateReviewState));
 
       toast.success(
-        updatedReview.isLiked
-          ? "좋아요가 추가되었습니다."
-          : "좋아요가 취소되었습니다."
+        nowLiked ? "좋아요가 추가되었습니다." : "좋아요가 취소되었습니다."
       );
     } catch (error) {
       console.error("좋아요 처리 실패:", error);
@@ -843,15 +860,22 @@ const TvReviewsPage: React.FC = () => {
     }
 
     try {
+      // 현재 리뷰 상태 확인
+      const currentReview = reviews.find((r) => r.id === reviewId);
+      const wasDisliked = currentReview?.isDisliked || false;
+
       // 실제 API 호출
       const updatedReview = await backendApi.dislikeReview(reviewId);
       console.log("서버 응답 (싫어요):", updatedReview);
+
+      // isDisliked 상태를 수동으로 계산
+      const nowDisliked = !wasDisliked;
 
       const updateReviewState = (review: TvShowReview) =>
         review.id === reviewId
           ? {
               ...review,
-              isDisliked: updatedReview.isDisliked,
+              isDisliked: nowDisliked,
               dislikeCount: updatedReview.dislikeCount,
               isLiked: false,
               likeCount: updatedReview.likeCount,
@@ -864,9 +888,7 @@ const TvReviewsPage: React.FC = () => {
       setSearchResults((prevResults) => prevResults.map(updateReviewState));
 
       toast.success(
-        updatedReview.isDisliked
-          ? "싫어요가 추가되었습니다."
-          : "싫어요가 취소되었습니다."
+        nowDisliked ? "싫어요가 추가되었습니다." : "싫어요가 취소되었습니다."
       );
     } catch (error) {
       console.error("싫어요 처리 실패:", error);
@@ -1168,15 +1190,15 @@ const TvReviewsPage: React.FC = () => {
     if (!isLoggedIn || !commentContent.trim()) {
       return;
     }
-    
+
     // 차단된 사용자인 경우 댓글 작성 불가
     if (isUserBlocked()) {
       toast.error("현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.");
       return;
     }
-    
+
     setSubmitting(true);
-    
+
     try {
       const newComment = await backendApi.addReviewComment(
         reviewId,
@@ -1276,22 +1298,33 @@ const TvReviewsPage: React.FC = () => {
 
   // 로그인한 사용자가 관리자인지 확인하는 함수
   const isAdmin = useCallback(() => {
-    return user?.roles?.includes("ROLE_ADMIN") || user?.roles?.includes("ROLE_MODERATOR") || false;
+    return (
+      user?.roles?.includes("ROLE_ADMIN") ||
+      user?.roles?.includes("ROLE_MODERATOR") ||
+      false
+    );
   }, [user]);
 
   // 이미 신고한 항목인지 확인하는 함수
-  const isAlreadyReported = (id: number, type: "comment" | "review"): boolean => {
-    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+  const isAlreadyReported = (
+    id: number,
+    type: "comment" | "review"
+  ): boolean => {
+    const reportedItems = JSON.parse(
+      localStorage.getItem("reportedItems") || "{}"
+    );
     const key = `${type}_${id}`;
     return !!reportedItems[key];
   };
 
   // 신고 기록을 저장하는 함수
   const saveReportRecord = (id: number, type: "comment" | "review"): void => {
-    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const reportedItems = JSON.parse(
+      localStorage.getItem("reportedItems") || "{}"
+    );
     const key = `${type}_${id}`;
     reportedItems[key] = true;
-    localStorage.setItem('reportedItems', JSON.stringify(reportedItems));
+    localStorage.setItem("reportedItems", JSON.stringify(reportedItems));
   };
 
   // 신고 모달 열기 함수
@@ -1301,7 +1334,7 @@ const TvReviewsPage: React.FC = () => {
       toast.warning("이미 신고한 항목입니다.");
       return;
     }
-    
+
     setReportTargetId(id);
     setReportTargetType(type);
     setReportContent("");
@@ -1318,21 +1351,23 @@ const TvReviewsPage: React.FC = () => {
     try {
       // 댓글 찾기
       let targetUserId = 0;
-      
+
       if (reportTargetType === "review") {
         // 리뷰인 경우 user.id를 사용
-        const review = reviews.find(r => r.id === reportTargetId);
+        const review = reviews.find((r) => r.id === reportTargetId);
         targetUserId = review?.user?.id || 0;
       } else if (reportTargetType === "comment") {
         // 댓글인 경우 comments 배열에서 찾아 userId를 사용
-        const comment = reviews.flatMap(r => r.comments).find(c => c.id === reportTargetId);
+        const comment = reviews
+          .flatMap((r) => r.comments)
+          .find((c) => c.id === reportTargetId);
         targetUserId = comment?.userId || 0;
-        
+
         // 디버깅 로그
         console.log("댓글 정보:", comment);
         console.log("댓글 작성자 ID:", targetUserId);
       }
-      
+
       // 신고 생성 요청
       await backendApi.createReport({
         targetId: reportTargetId!,
@@ -1340,12 +1375,12 @@ const TvReviewsPage: React.FC = () => {
         reportType: reportTargetType === "review" ? "review" : "comment",
         content: reportContent,
       });
-      
+
       // 신고 성공 시 로컬 스토리지에 기록
       if (reportTargetId && reportTargetType) {
         saveReportRecord(reportTargetId, reportTargetType);
       }
-      
+
       toast.success("신고가 접수되었습니다.");
       setShowReportModal(false);
       setReportContent("");
@@ -1541,7 +1576,8 @@ const TvReviewsPage: React.FC = () => {
                           <FaEdit />
                         </button>
                       )}
-                      {(user?.id === review.user.id && !isUserBlocked() || isAdmin()) && (
+                      {((user?.id === review.user.id && !isUserBlocked()) ||
+                        isAdmin()) && (
                         <button
                           onClick={() => handleDeleteReview(review.id)}
                           className="text-gray-500 hover:text-red-500"
@@ -1629,15 +1665,17 @@ const TvReviewsPage: React.FC = () => {
                   })()}
                 </div>
                 <div className="flex items-center space-x-4">
-                  {isLoggedIn && !isUserBlocked() && user?.id !== review.user.id && (
-                    <button
-                      className="flex items-center space-x-1"
-                      title="리뷰 신고하기"
-                      onClick={() => openReportModal(review.id, "review")}
-                    >
-                      <FaBell className="text-red-500" />
-                    </button>
-                  )}
+                  {isLoggedIn &&
+                    !isUserBlocked() &&
+                    user?.id !== review.user.id && (
+                      <button
+                        className="flex items-center space-x-1"
+                        title="리뷰 신고하기"
+                        onClick={() => openReportModal(review.id, "review")}
+                      >
+                        <FaBell className="text-red-500" />
+                      </button>
+                    )}
                   <button
                     onClick={() => handleReviewLike(review.id)}
                     className="flex items-center space-x-1"
@@ -1723,15 +1761,19 @@ const TvReviewsPage: React.FC = () => {
                                 {comment.username || "알 수 없는 사용자"}
                               </Link>
                               <div className="flex items-center gap-2">
-                                {isLoggedIn && !isUserBlocked() && user?.id !== comment.userId && (
-                                  <button 
-                                    className="p-1 hover:bg-gray-100 rounded-full"
-                                    title="댓글 신고하기"
-                                    onClick={() => openReportModal(comment.id, "comment")}
-                                  >
-                                    <FaBell className="text-red-500 text-xs" />
-                                  </button>
-                                )}
+                                {isLoggedIn &&
+                                  !isUserBlocked() &&
+                                  user?.id !== comment.userId && (
+                                    <button
+                                      className="p-1 hover:bg-gray-100 rounded-full"
+                                      title="댓글 신고하기"
+                                      onClick={() =>
+                                        openReportModal(comment.id, "comment")
+                                      }
+                                    >
+                                      <FaBell className="text-red-500 text-xs" />
+                                    </button>
+                                  )}
                                 <span className="text-sm text-gray-500">
                                   {(() => {
                                     console.log(
@@ -1750,7 +1792,8 @@ const TvReviewsPage: React.FC = () => {
                                 </span>
                                 {isLoggedIn &&
                                   (isCommentAuthor(comment.userId) ||
-                                    isAdmin()) && !isUserBlocked() && (
+                                    isAdmin()) &&
+                                  !isUserBlocked() && (
                                     <button
                                       onClick={() =>
                                         handleDeleteComment(
@@ -1783,20 +1826,31 @@ const TvReviewsPage: React.FC = () => {
                         type="text"
                         value={commentContent}
                         onChange={(e) => setCommentContent(e.target.value)}
-                        placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
+                        placeholder={
+                          isUserBlocked()
+                            ? "댓글 작성이 제한되었습니다"
+                            : "댓글을 입력하세요..."
+                        }
                         className="w-full p-2 text-sm focus:outline-none flex-1"
                         disabled={!isLoggedIn || isUserBlocked()}
                       />
                       <button
                         onClick={() => handleCommentSubmit(review.id)}
                         className="px-4 bg-blue-500 text-white text-sm hover:bg-blue-600 transition-colors"
-                        disabled={!isLoggedIn || !commentContent.trim() || isUserBlocked()}
+                        disabled={
+                          !isLoggedIn ||
+                          !commentContent.trim() ||
+                          isUserBlocked()
+                        }
                       >
                         등록
                       </button>
                     </div>
                     {isLoggedIn && isUserBlocked() && (
-                      <p className="text-xs text-red-500 mt-1">현재 댓글 기능이 제한되었습니다. 관리자에게 문의해주세요.</p>
+                      <p className="text-xs text-red-500 mt-1">
+                        현재 댓글 기능이 제한되었습니다. 관리자에게
+                        문의해주세요.
+                      </p>
                     )}
                   </div>
                 </div>
