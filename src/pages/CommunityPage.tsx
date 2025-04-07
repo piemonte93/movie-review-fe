@@ -1401,7 +1401,7 @@ const CommunityPage: React.FC = () => {
                       <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
                         <span>{formatDate(post.createdAt)}</span>
                         <div className="flex items-center space-x-3">
-                          {isLoggedIn && user?.id !== post.user.id && (
+                          {isLoggedIn && !isUserBlocked() && user?.id !== post.user.id && (
                             <button
                               className="p-1 rounded-md text-red-500"
                               title="게시글 신고하기"
@@ -1486,11 +1486,9 @@ const CommunityPage: React.FC = () => {
                               <div className="flex justify-between items-center mb-1">
                                 <div className="flex items-center gap-1">
                                   <span className="text-xs text-gray-500">
-                                    {new Date(
-                                      comment.createdAt
-                                    ).toLocaleString()}
+                                    {new Date(comment.createdAt).toLocaleString()}
                                   </span>
-                                  {isLoggedIn &&
+                                  {isLoggedIn && !isUserBlocked() &&
                                     user?.id !== comment.user.id && (
                                       <button
                                         className="p-1 hover:bg-gray-100 rounded-full"
@@ -1740,7 +1738,7 @@ const CommunityPage: React.FC = () => {
                     <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
                       <span>{formatDate(post.createdAt)}</span>
                       <div className="flex items-center space-x-3">
-                        {isLoggedIn && user?.id !== post.user.id && (
+                        {isLoggedIn && !isUserBlocked() && user?.id !== post.user.id && (
                           <button
                             className="p-1 rounded-md text-red-500"
                             title="게시글 신고하기"
@@ -1827,7 +1825,7 @@ const CommunityPage: React.FC = () => {
                                 <span className="text-xs text-gray-500">
                                   {new Date(comment.createdAt).toLocaleString()}
                                 </span>
-                                {isLoggedIn &&
+                                {isLoggedIn && !isUserBlocked() &&
                                   user?.id !== comment.user.id && (
                                     <button
                                       className="p-1 hover:bg-gray-100 rounded-full"
