@@ -713,15 +713,29 @@ const CommunityPage: React.FC = () => {
       const comments = await backendApi.getComments(postId);
       console.log(`게시글 ID ${postId}의 댓글 목록:`, comments);
 
+      // 댓글 데이터 검증 및 가공
+      const processedComments = comments.map((comment) => ({
+        ...comment,
+        likeCount:
+          typeof comment.likeCount === "number" ? comment.likeCount : 0,
+        dislikeCount:
+          typeof comment.dislikeCount === "number" ? comment.dislikeCount : 0,
+        // 다른 필드도 검증이 필요한 경우 추가
+        liked: Boolean(comment.liked),
+        disliked: Boolean(comment.disliked),
+      }));
+
+      console.log(`가공된 댓글 데이터:`, processedComments);
+
       // 게시글 목록에서 해당 게시글의 댓글 목록 업데이트
       setPosts((prevPosts) =>
         prevPosts.map((post) =>
-          post.id === postId ? { ...post, comments } : post
+          post.id === postId ? { ...post, comments: processedComments } : post
         )
       );
       setVisiblePosts((prevPosts) =>
         prevPosts.map((post) =>
-          post.id === postId ? { ...post, comments } : post
+          post.id === postId ? { ...post, comments: processedComments } : post
         )
       );
       setExpandedPostId(postId);
@@ -978,10 +992,11 @@ const CommunityPage: React.FC = () => {
       toast.error("로그인이 필요합니다.");
       return;
     }
-    
+
     try {
       const response = await backendApi.likeComment(commentId);
-      
+      console.log("댓글 좋아요 응답:", response);
+
       // 현재 게시글의 댓글 목록 업데이트
       const updatedPosts = posts.map((post) => {
         if (post.id === expandedPostId) {
@@ -992,38 +1007,41 @@ const CommunityPage: React.FC = () => {
                 likeCount: response.likeCount,
                 dislikeCount: response.dislikeCount,
                 liked: response.liked,
-                disliked: response.disliked
+                disliked: response.disliked,
               };
             }
             return comment;
           });
-          
+
           return { ...post, comments: updatedComments };
         }
         return post;
       });
-      
+
       setPosts(updatedPosts);
-      setVisiblePosts(
-        updatedPosts.slice(0, (page + 1) * postsPerPage)
+      setVisiblePosts(updatedPosts.slice(0, (page + 1) * postsPerPage));
+
+      toast.success(
+        response.liked
+          ? "댓글에 좋아요를 표시했습니다."
+          : "댓글에 좋아요를 취소했습니다."
       );
-      
-      toast.success(response.liked ? "댓글에 좋아요를 표시했습니다." : "댓글에 좋아요를 취소했습니다.");
     } catch (error) {
       console.error("댓글 좋아요 처리 실패:", error);
       toast.error("댓글 좋아요 처리에 실패했습니다.");
     }
   };
-  
+
   const handleCommentDislike = async (commentId: number) => {
     if (!isLoggedIn) {
       toast.error("로그인이 필요합니다.");
       return;
     }
-    
+
     try {
       const response = await backendApi.dislikeComment(commentId);
-      
+      console.log("댓글 싫어요 응답:", response);
+
       // 현재 게시글의 댓글 목록 업데이트
       const updatedPosts = posts.map((post) => {
         if (post.id === expandedPostId) {
@@ -1034,23 +1052,25 @@ const CommunityPage: React.FC = () => {
                 likeCount: response.likeCount,
                 dislikeCount: response.dislikeCount,
                 liked: response.liked,
-                disliked: response.disliked
+                disliked: response.disliked,
               };
             }
             return comment;
           });
-          
+
           return { ...post, comments: updatedComments };
         }
         return post;
       });
-      
+
       setPosts(updatedPosts);
-      setVisiblePosts(
-        updatedPosts.slice(0, (page + 1) * postsPerPage)
+      setVisiblePosts(updatedPosts.slice(0, (page + 1) * postsPerPage));
+
+      toast.success(
+        response.disliked
+          ? "댓글에 싫어요를 표시했습니다."
+          : "댓글에 싫어요를 취소했습니다."
       );
-      
-      toast.success(response.disliked ? "댓글에 싫어요를 표시했습니다." : "댓글에 싫어요를 취소했습니다.");
     } catch (error) {
       console.error("댓글 싫어요 처리 실패:", error);
       toast.error("댓글 싫어요 처리에 실패했습니다.");
@@ -1616,10 +1636,16 @@ const CommunityPage: React.FC = () => {
                                   }`}
                                 >
                                   <FaThumbsUp />
-                                  <span>{comment.likeCount || 0}</span>
+                                  <span>
+                                    {typeof comment.likeCount === "number"
+                                      ? comment.likeCount
+                                      : 0}
+                                  </span>
                                 </button>
                                 <button
-                                  onClick={() => handleCommentDislike(comment.id)}
+                                  onClick={() =>
+                                    handleCommentDislike(comment.id)
+                                  }
                                   className={`flex items-center text-xs space-x-1 ${
                                     comment.disliked
                                       ? "text-red-500"
@@ -1627,7 +1653,11 @@ const CommunityPage: React.FC = () => {
                                   }`}
                                 >
                                   <FaThumbsDown />
-                                  <span>{comment.dislikeCount || 0}</span>
+                                  <span>
+                                    {typeof comment.dislikeCount === "number"
+                                      ? comment.dislikeCount
+                                      : 0}
+                                  </span>
                                 </button>
                               </div>
                             </div>
@@ -1797,14 +1827,14 @@ const CommunityPage: React.FC = () => {
                         {isLoggedIn &&
                           ((user?.id === post.user.id && !isUserBlocked()) ||
                             isAdminOrModerator()) && (
-                              <button
-                                onClick={() => handleDeletePost(post.id)}
-                                className="text-gray-500 hover:text-red-500"
-                                title="삭제"
-                              >
-                                <FaTrash />
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleDeletePost(post.id)}
+                              className="text-gray-500 hover:text-red-500"
+                              title="삭제"
+                            >
+                              <FaTrash />
+                            </button>
+                          )}
                       </div>
                     </div>
                     <p
@@ -1851,9 +1881,7 @@ const CommunityPage: React.FC = () => {
                           >
                             <FaThumbsUp size={14} />
                           </button>
-                          <span className="text-sm">
-                            {post.likeCount || 0}
-                          </span>
+                          <span className="text-sm">{post.likeCount || 0}</span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <button
@@ -1966,7 +1994,11 @@ const CommunityPage: React.FC = () => {
                                 }`}
                               >
                                 <FaThumbsUp />
-                                <span>{comment.likeCount || 0}</span>
+                                <span>
+                                  {typeof comment.likeCount === "number"
+                                    ? comment.likeCount
+                                    : 0}
+                                </span>
                               </button>
                               <button
                                 onClick={() => handleCommentDislike(comment.id)}
@@ -1977,7 +2009,11 @@ const CommunityPage: React.FC = () => {
                                 }`}
                               >
                                 <FaThumbsDown />
-                                <span>{comment.dislikeCount || 0}</span>
+                                <span>
+                                  {typeof comment.dislikeCount === "number"
+                                    ? comment.dislikeCount
+                                    : 0}
+                                </span>
                               </button>
                             </div>
                           </div>

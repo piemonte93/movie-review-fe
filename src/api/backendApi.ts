@@ -1438,7 +1438,38 @@ export const backendApi = {
         `/api/community/posts/${postId}/comments`
       );
       console.log(`게시글 ID ${postId}의 댓글 목록 응답:`, response.data);
-      return response.data;
+
+      // 각 댓글의 좋아요/싫어요 상태와 개수를 상세 로깅
+      response.data.forEach((comment: any, index: number) => {
+        console.log(`댓글 ${index + 1} (ID: ${comment.id})의 상세 정보:`);
+        console.log(`- 내용: ${comment.content}`);
+        console.log(
+          `- 좋아요 수: ${comment.likeCount} (타입: ${typeof comment.likeCount})`
+        );
+        console.log(
+          `- 싫어요 수: ${comment.dislikeCount} (타입: ${typeof comment.dislikeCount})`
+        );
+        console.log(
+          `- 좋아요 상태: ${comment.liked} (타입: ${typeof comment.liked})`
+        );
+        console.log(
+          `- 싫어요 상태: ${comment.disliked} (타입: ${typeof comment.disliked})`
+        );
+      });
+
+      // 댓글 데이터 가공: 좋아요/싫어요 수 확인 및 숫자로 변환
+      const processedComments = response.data.map((comment: any) => ({
+        ...comment,
+        likeCount:
+          typeof comment.likeCount === "number" ? comment.likeCount : 0,
+        dislikeCount:
+          typeof comment.dislikeCount === "number" ? comment.dislikeCount : 0,
+        liked: Boolean(comment.liked),
+        disliked: Boolean(comment.disliked),
+      }));
+
+      console.log(`가공된 댓글 데이터:`, processedComments);
+      return processedComments;
     } catch (error) {
       console.error(`게시글 ID ${postId}의 댓글 목록 가져오기 실패:`, error);
       throw error;
