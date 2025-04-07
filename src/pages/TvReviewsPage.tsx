@@ -1603,7 +1603,7 @@ const TvReviewsPage: React.FC = () => {
                   })()}
                 </div>
                 <div className="flex items-center space-x-4">
-                  {isLoggedIn && user?.id !== review.user.id && (
+                  {isLoggedIn && !isUserBlocked() && user?.id !== review.user.id && (
                     <button
                       className="flex items-center space-x-1"
                       title="리뷰 신고하기"
@@ -1697,7 +1697,7 @@ const TvReviewsPage: React.FC = () => {
                                 {comment.username || "알 수 없는 사용자"}
                               </Link>
                               <div className="flex items-center gap-2">
-                                {isLoggedIn && user?.id !== comment.userId && (
+                                {isLoggedIn && !isUserBlocked() && user?.id !== comment.userId && (
                                   <button 
                                     className="p-1 hover:bg-gray-100 rounded-full"
                                     title="댓글 신고하기"

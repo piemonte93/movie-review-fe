@@ -1809,7 +1809,7 @@ const MovieReviewsPage: React.FC = () => {
                   })()}
                 </div>
                 <div className="flex items-center space-x-4">
-                  {isLoggedIn && user?.id !== review.user.id && (
+                  {isLoggedIn && !isUserBlocked() && user?.id !== review.user.id && (
                     <button
                       className="flex items-center space-x-1"
                       title="리뷰 신고하기"
@@ -1909,7 +1909,7 @@ const MovieReviewsPage: React.FC = () => {
                                     <span className="text-xs text-gray-500">
                                       {formatDate(comment.createdAt)}
                                     </span>
-                                    {isLoggedIn &&
+                                    {isLoggedIn && !isUserBlocked() &&
                                       user?.id !== comment.userId && (
                                         <button
                                           className="p-1 hover:bg-gray-100 rounded-full"
