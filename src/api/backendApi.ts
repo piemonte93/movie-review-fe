@@ -1123,6 +1123,28 @@ export const backendApi = {
           JSON.stringify(firstPost, null, 2)
         );
 
+        // 좋아요/싫어요 상태 상세 확인
+        console.log(
+          "백엔드 응답 첫 번째 게시글의 좋아요 수:",
+          firstPost.likeCount,
+          typeof firstPost.likeCount
+        );
+        console.log(
+          "백엔드 응답 첫 번째 게시글의 싫어요 수:",
+          firstPost.dislikeCount,
+          typeof firstPost.dislikeCount
+        );
+        console.log(
+          "백엔드 응답 첫 번째 게시글의 좋아요 상태:",
+          firstPost.liked,
+          typeof firstPost.liked
+        );
+        console.log(
+          "백엔드 응답 첫 번째 게시글의 싫어요 상태:",
+          firstPost.disliked,
+          typeof firstPost.disliked
+        );
+
         // 댓글 확인
         if (firstPost.comments && firstPost.comments.length > 0) {
           console.log(
@@ -1133,7 +1155,49 @@ export const backendApi = {
             "첫 번째 댓글 전체 데이터:",
             JSON.stringify(firstPost.comments[0], null, 2)
           );
+
+          // 댓글 좋아요/싫어요 상태 상세 확인
+          console.log(
+            "백엔드 응답 첫 번째 댓글의 좋아요 수:",
+            firstPost.comments[0].likeCount,
+            typeof firstPost.comments[0].likeCount
+          );
+          console.log(
+            "백엔드 응답 첫 번째 댓글의 싫어요 수:",
+            firstPost.comments[0].dislikeCount,
+            typeof firstPost.comments[0].dislikeCount
+          );
+          console.log(
+            "백엔드 응답 첫 번째 댓글의 좋아요 상태:",
+            firstPost.comments[0].liked,
+            typeof firstPost.comments[0].liked
+          );
+          console.log(
+            "백엔드 응답 첫 번째 댓글의 싫어요 상태:",
+            firstPost.comments[0].disliked,
+            typeof firstPost.comments[0].disliked
+          );
         }
+      }
+
+      // 게시글과 댓글의 좋아요/싫어요 수와 상태를 확인하고 처리
+      if (response.data.content) {
+        response.data.content = response.data.content.map((post: Post) => ({
+          ...post,
+          likeCount: post.likeCount ?? 0,
+          dislikeCount: post.dislikeCount ?? 0,
+          commentCount: post.commentCount ?? 0,
+          liked: Boolean(post.liked),
+          disliked: Boolean(post.disliked),
+          comments:
+            post.comments?.map((comment) => ({
+              ...comment,
+              likeCount: comment.likeCount ?? 0,
+              dislikeCount: comment.dislikeCount ?? 0,
+              liked: Boolean(comment.liked),
+              disliked: Boolean(comment.disliked),
+            })) || [],
+        }));
       }
 
       return response.data;
@@ -1263,36 +1327,56 @@ export const backendApi = {
     }
   },
 
-  likePost: async (
-    postId: number
-  ): Promise<{
-    id: number;
-    likeCount: number;
-    liked: boolean;
-  }> => {
+  likePost: async (postId: number): Promise<Post> => {
     try {
       const response = await apiClient.post(
         `/api/community/posts/${postId}/like`
       );
-      return response.data;
+      console.log("게시글 좋아요 응답:", response.data);
+      console.log("게시글 좋아요 수:", response.data.likeCount);
+      console.log("게시글 싫어요 수:", response.data.dislikeCount);
+      console.log("게시글 좋아요 상태:", response.data.liked);
+
+      // 응답 데이터에 likeCount/dislikeCount가 없거나 잘못된 경우 처리
+      const processedResponse = {
+        ...response.data,
+        likeCount: response.data.likeCount ?? 0,
+        dislikeCount: response.data.dislikeCount ?? 0,
+        commentCount: response.data.commentCount ?? 0,
+        liked: Boolean(response.data.liked),
+        disliked: Boolean(response.data.disliked),
+      };
+
+      console.log("가공된 게시글 좋아요 응답:", processedResponse);
+      return processedResponse;
     } catch (error) {
       console.error("게시글 좋아요 실패:", error);
       throw new Error("게시글 좋아요에 실패했습니다.");
     }
   },
 
-  dislikePost: async (
-    postId: number
-  ): Promise<{
-    id: number;
-    dislikeCount: number;
-    disliked: boolean;
-  }> => {
+  dislikePost: async (postId: number): Promise<Post> => {
     try {
       const response = await apiClient.post(
         `/api/community/posts/${postId}/dislike`
       );
-      return response.data;
+      console.log("게시글 싫어요 응답:", response.data);
+      console.log("게시글 좋아요 수:", response.data.likeCount);
+      console.log("게시글 싫어요 수:", response.data.dislikeCount);
+      console.log("게시글 싫어요 상태:", response.data.disliked);
+
+      // 응답 데이터에 likeCount/dislikeCount가 없거나 잘못된 경우 처리
+      const processedResponse = {
+        ...response.data,
+        likeCount: response.data.likeCount ?? 0,
+        dislikeCount: response.data.dislikeCount ?? 0,
+        commentCount: response.data.commentCount ?? 0,
+        liked: Boolean(response.data.liked),
+        disliked: Boolean(response.data.disliked),
+      };
+
+      console.log("가공된 게시글 싫어요 응답:", processedResponse);
+      return processedResponse;
     } catch (error) {
       console.error("게시글 싫어요 실패:", error);
       throw new Error("게시글 싫어요에 실패했습니다.");
@@ -1362,9 +1446,26 @@ export const backendApi = {
   },
 
   // 댓글 좋아요
-  likeComment: async (commentId: number): Promise<void> => {
+  likeComment: async (
+    commentId: number
+  ): Promise<{
+    id: number;
+    content: string;
+    createdAt: string;
+    postId: number;
+    user: {
+      id: number;
+      username: string;
+      profileImageUrl: string | null;
+    };
+    likeCount: number;
+    dislikeCount: number;
+    liked: boolean;
+    disliked: boolean;
+  }> => {
     try {
-      await apiClient.post(
+      console.log(`댓글 ID ${commentId} 좋아요 요청`);
+      const response = await apiClient.post(
         `/api/community/comments/${commentId}/like`,
         {},
         {
@@ -1373,6 +1474,20 @@ export const backendApi = {
           },
         }
       );
+      console.log("댓글 좋아요 응답:", response.data);
+      console.log("댓글 좋아요 수:", response.data.likeCount);
+      console.log("댓글 싫어요 수:", response.data.dislikeCount);
+      console.log("댓글 좋아요 상태:", response.data.liked);
+      console.log("댓글 싫어요 상태:", response.data.disliked);
+
+      // 응답 데이터에 likeCount/dislikeCount가 없는 경우 0으로 설정
+      const processedResponse = {
+        ...response.data,
+        likeCount: response.data.likeCount || 0,
+        dislikeCount: response.data.dislikeCount || 0,
+      };
+
+      return processedResponse;
     } catch (error) {
       console.error("댓글 좋아요 실패:", error);
       throw error;
@@ -1380,9 +1495,26 @@ export const backendApi = {
   },
 
   // 댓글 싫어요
-  dislikeComment: async (commentId: number): Promise<void> => {
+  dislikeComment: async (
+    commentId: number
+  ): Promise<{
+    id: number;
+    content: string;
+    createdAt: string;
+    postId: number;
+    user: {
+      id: number;
+      username: string;
+      profileImageUrl: string | null;
+    };
+    likeCount: number;
+    dislikeCount: number;
+    liked: boolean;
+    disliked: boolean;
+  }> => {
     try {
-      await apiClient.post(
+      console.log(`댓글 ID ${commentId} 싫어요 요청`);
+      const response = await apiClient.post(
         `/api/community/comments/${commentId}/dislike`,
         {},
         {
@@ -1391,6 +1523,20 @@ export const backendApi = {
           },
         }
       );
+      console.log("댓글 싫어요 응답:", response.data);
+      console.log("댓글 좋아요 수:", response.data.likeCount);
+      console.log("댓글 싫어요 수:", response.data.dislikeCount);
+      console.log("댓글 좋아요 상태:", response.data.liked);
+      console.log("댓글 싫어요 상태:", response.data.disliked);
+
+      // 응답 데이터에 likeCount/dislikeCount가 없는 경우 0으로 설정
+      const processedResponse = {
+        ...response.data,
+        likeCount: response.data.likeCount || 0,
+        dislikeCount: response.data.dislikeCount || 0,
+      };
+
+      return processedResponse;
     } catch (error) {
       console.error("댓글 싫어요 실패:", error);
       throw error;
@@ -2214,7 +2360,7 @@ export const backendApi = {
             isLiked: responseData.content[0].isLiked,
             isDisliked: responseData.content[0].isDisliked,
             likeCount: responseData.content[0].likeCount,
-            dislikeCount: responseData.content[0].dislikeCount
+            dislikeCount: responseData.content[0].dislikeCount,
           });
         }
       } else {

@@ -16,7 +16,7 @@ import {
   FaTrash,
   FaAt,
   FaBell,
-  FaExclamationTriangle
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
@@ -100,23 +100,27 @@ const CommunityPage: React.FC = () => {
 
   // 이미 신고한 항목인지 확인하는 함수
   const isAlreadyReported = (id: number, type: "comment" | "post"): boolean => {
-    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const reportedItems = JSON.parse(
+      localStorage.getItem("reportedItems") || "{}"
+    );
     const key = `${type}_${id}`;
     return !!reportedItems[key];
   };
 
   // 신고 내역 초기화 함수 (개발 전용)
   const clearReportRecords = () => {
-    localStorage.removeItem('reportedItems');
+    localStorage.removeItem("reportedItems");
     toast.info("신고 내역이 초기화되었습니다.");
   };
 
   // 신고 기록을 저장하는 함수
   const saveReportRecord = (id: number, type: "comment" | "post"): void => {
-    const reportedItems = JSON.parse(localStorage.getItem('reportedItems') || '{}');
+    const reportedItems = JSON.parse(
+      localStorage.getItem("reportedItems") || "{}"
+    );
     const key = `${type}_${id}`;
     reportedItems[key] = true;
-    localStorage.setItem('reportedItems', JSON.stringify(reportedItems));
+    localStorage.setItem("reportedItems", JSON.stringify(reportedItems));
   };
 
   // 신고 모달 열기 함수
@@ -126,7 +130,7 @@ const CommunityPage: React.FC = () => {
       toast.warning("이미 신고한 항목입니다.");
       return;
     }
-    
+
     setReportTargetId(id);
     setReportTargetType(type);
     setReportContent("");
@@ -142,19 +146,19 @@ const CommunityPage: React.FC = () => {
 
     try {
       const targetUserId = getReportTargetUserId();
-      
+
       await backendApi.createReport({
         targetId: reportTargetId!,
         targetUserId,
         reportType: reportTargetType === "post" ? "post" : "comment",
         content: reportContent,
       });
-      
+
       // 신고 성공 시 로컬 스토리지에 기록
       if (reportTargetId && reportTargetType) {
         saveReportRecord(reportTargetId, reportTargetType);
       }
-      
+
       toast.success("신고가 접수되었습니다.");
       setShowReportModal(false);
       setReportContent("");
@@ -169,16 +173,16 @@ const CommunityPage: React.FC = () => {
   // 신고 대상의 사용자 ID를 가져오는 함수
   const getReportTargetUserId = (): number => {
     let targetUserId = 0;
-    
+
     if (reportTargetType === "post") {
       // 게시글인 경우 user.id를 사용
-      const post = posts.find(p => p.id === reportTargetId);
+      const post = posts.find((p) => p.id === reportTargetId);
       targetUserId = post?.user?.id || 0;
     } else if (reportTargetType === "comment") {
       // 댓글인 경우 모든 게시글의 모든 댓글을 검색
       for (const post of posts) {
         if (post.comments) {
-          const comment = post.comments.find(c => c.id === reportTargetId);
+          const comment = post.comments.find((c) => c.id === reportTargetId);
           if (comment) {
             targetUserId = comment.user.id;
             break;
@@ -186,7 +190,7 @@ const CommunityPage: React.FC = () => {
         }
       }
     }
-    
+
     return targetUserId;
   };
 
@@ -449,7 +453,7 @@ const CommunityPage: React.FC = () => {
     try {
       await backendApi.deletePost(postId);
       toast.success("게시글이 삭제되었습니다.");
-      
+
       // 현재 보고 있는 게시글 목록에서 삭제된 게시글 제거
       setPosts(posts.filter((p) => p.id !== postId));
       setVisiblePosts(visiblePosts.filter((p) => p.id !== postId));
@@ -490,7 +494,7 @@ const CommunityPage: React.FC = () => {
     try {
       await backendApi.deleteComment(commentId);
       toast.success("댓글이 삭제되었습니다.");
-      
+
       // UI 업데이트 - 삭제된 댓글 제거
       setPosts(
         posts.map((p) => {
@@ -503,7 +507,7 @@ const CommunityPage: React.FC = () => {
           return p;
         })
       );
-      
+
       // visiblePosts도 함께 업데이트 추가
       setVisiblePosts(
         visiblePosts.map((p) => {
@@ -680,7 +684,7 @@ const CommunityPage: React.FC = () => {
             : post
         )
       );
-      
+
       // visiblePosts도 함께 업데이트 추가
       setVisiblePosts((prevPosts) =>
         prevPosts.map((post) =>
@@ -735,18 +739,31 @@ const CommunityPage: React.FC = () => {
     }
 
     try {
+      const foundPost = posts.find((p) => p.id === postId);
+      console.log(`게시글 ID ${postId} 좋아요 요청 전 UI 상태:`, {
+        likeCount: foundPost?.likeCount,
+        dislikeCount: foundPost?.dislikeCount,
+        liked: foundPost?.liked,
+        disliked: foundPost?.disliked,
+      });
+
       const updatedPost = await backendApi.likePost(postId);
-      console.log("좋아요 응답 데이터:", updatedPost);
+      console.log("좋아요 API 응답 데이터:", updatedPost);
+      console.log("API 응답의 좋아요 수:", updatedPost.likeCount);
+      console.log("API 응답의 싫어요 수:", updatedPost.dislikeCount);
+      console.log("API 응답의 좋아요 상태:", updatedPost.liked);
+      console.log("API 응답의 싫어요 상태:", updatedPost.disliked);
+
       // 게시글 목록 업데이트
       setPosts((prevPosts) =>
         prevPosts.map((post) =>
           post.id === postId
             ? {
                 ...post,
-                likeCount: updatedPost.likeCount,
-                dislikeCount: updatedPost.dislikeCount,
-                liked: updatedPost.liked,
-                disliked: updatedPost.disliked,
+                likeCount: updatedPost.likeCount ?? 0,
+                dislikeCount: updatedPost.dislikeCount ?? 0,
+                liked: Boolean(updatedPost.liked),
+                disliked: Boolean(updatedPost.disliked),
               }
             : post
         )
@@ -756,14 +773,26 @@ const CommunityPage: React.FC = () => {
           post.id === postId
             ? {
                 ...post,
-                likeCount: updatedPost.likeCount,
-                dislikeCount: updatedPost.dislikeCount,
-                liked: updatedPost.liked,
-                disliked: updatedPost.disliked,
+                likeCount: updatedPost.likeCount ?? 0,
+                dislikeCount: updatedPost.dislikeCount ?? 0,
+                liked: Boolean(updatedPost.liked),
+                disliked: Boolean(updatedPost.disliked),
               }
             : post
         )
       );
+
+      // 업데이트 후 상태 확인을 위한 setTimeout 추가
+      setTimeout(() => {
+        const updatedFoundPost = posts.find((p) => p.id === postId);
+        console.log(`게시글 ID ${postId} 좋아요 처리 후 UI 상태:`, {
+          likeCount: updatedFoundPost?.likeCount,
+          dislikeCount: updatedFoundPost?.dislikeCount,
+          liked: updatedFoundPost?.liked,
+          disliked: updatedFoundPost?.disliked,
+        });
+      }, 0);
+
       toast.success(
         updatedPost.liked
           ? "게시글을 좋아요 했습니다."
@@ -783,17 +812,31 @@ const CommunityPage: React.FC = () => {
     }
 
     try {
+      const foundPost = posts.find((p) => p.id === postId);
+      console.log(`게시글 ID ${postId} 싫어요 요청 전 UI 상태:`, {
+        likeCount: foundPost?.likeCount,
+        dislikeCount: foundPost?.dislikeCount,
+        liked: foundPost?.liked,
+        disliked: foundPost?.disliked,
+      });
+
       const updatedPost = await backendApi.dislikePost(postId);
+      console.log("싫어요 API 응답 데이터:", updatedPost);
+      console.log("API 응답의 좋아요 수:", updatedPost.likeCount);
+      console.log("API 응답의 싫어요 수:", updatedPost.dislikeCount);
+      console.log("API 응답의 좋아요 상태:", updatedPost.liked);
+      console.log("API 응답의 싫어요 상태:", updatedPost.disliked);
+
       // 게시글 목록 업데이트
       setPosts((prevPosts) =>
         prevPosts.map((post) =>
           post.id === postId
             ? {
                 ...post,
-                likeCount: updatedPost.likeCount,
-                dislikeCount: updatedPost.dislikeCount,
-                liked: updatedPost.liked,
-                disliked: updatedPost.disliked,
+                likeCount: updatedPost.likeCount ?? 0,
+                dislikeCount: updatedPost.dislikeCount ?? 0,
+                liked: Boolean(updatedPost.liked),
+                disliked: Boolean(updatedPost.disliked),
               }
             : post
         )
@@ -803,14 +846,26 @@ const CommunityPage: React.FC = () => {
           post.id === postId
             ? {
                 ...post,
-                likeCount: updatedPost.likeCount,
-                dislikeCount: updatedPost.dislikeCount,
-                liked: updatedPost.liked,
-                disliked: updatedPost.disliked,
+                likeCount: updatedPost.likeCount ?? 0,
+                dislikeCount: updatedPost.dislikeCount ?? 0,
+                liked: Boolean(updatedPost.liked),
+                disliked: Boolean(updatedPost.disliked),
               }
             : post
         )
       );
+
+      // 업데이트 후 상태 확인을 위한 setTimeout 추가
+      setTimeout(() => {
+        const updatedFoundPost = posts.find((p) => p.id === postId);
+        console.log(`게시글 ID ${postId} 싫어요 처리 후 UI 상태:`, {
+          likeCount: updatedFoundPost?.likeCount,
+          dislikeCount: updatedFoundPost?.dislikeCount,
+          liked: updatedFoundPost?.liked,
+          disliked: updatedFoundPost?.disliked,
+        });
+      }, 0);
+
       toast.success(
         updatedPost.disliked
           ? "게시글을 싫어요 했습니다."
@@ -915,130 +970,6 @@ const CommunityPage: React.FC = () => {
     } catch (error) {
       console.error("게시글 더 불러오기 실패:", error);
       toast.error("게시글을 더 불러오는데 실패했습니다.");
-    }
-  };
-
-  // 댓글 좋아요 처리
-  const handleCommentLike = async (commentId: number) => {
-    if (!isLoggedIn) {
-      navigate("/login", { state: { from: location } });
-      return;
-    }
-
-    try {
-      await backendApi.likeComment(commentId);
-
-      // API가 업데이트된 정보를 반환하지 않으므로 프론트엔드에서 직접 상태 업데이트
-      setPosts((prevPosts) =>
-        prevPosts.map((post) => ({
-          ...post,
-          comments: post.comments?.map((comment) =>
-            comment.id === commentId
-              ? {
-                  ...comment,
-                  likeCount: comment.liked
-                    ? comment.likeCount - 1
-                    : comment.likeCount + 1,
-                  liked: !comment.liked,
-                  // 좋아요를 누르면 싫어요는 해제
-                  disliked: false,
-                  dislikeCount: comment.disliked
-                    ? comment.dislikeCount - 1
-                    : comment.dislikeCount,
-                }
-              : comment
-          ),
-        }))
-      );
-
-      setVisiblePosts((prevPosts) =>
-        prevPosts.map((post) => ({
-          ...post,
-          comments: post.comments?.map((comment) =>
-            comment.id === commentId
-              ? {
-                  ...comment,
-                  likeCount: comment.liked
-                    ? comment.likeCount - 1
-                    : comment.likeCount + 1,
-                  liked: !comment.liked,
-                  // 좋아요를 누르면 싫어요는 해제
-                  disliked: false,
-                  dislikeCount: comment.disliked
-                    ? comment.dislikeCount - 1
-                    : comment.dislikeCount,
-                }
-              : comment
-          ),
-        }))
-      );
-
-      toast.success("댓글 평가가 반영되었습니다.");
-    } catch (error) {
-      console.error("댓글 좋아요 실패:", error);
-      toast.error("댓글 평가에 실패했습니다.");
-    }
-  };
-
-  // 댓글 싫어요 처리
-  const handleCommentDislike = async (commentId: number) => {
-    if (!isLoggedIn) {
-      navigate("/login", { state: { from: location } });
-      return;
-    }
-
-    try {
-      await backendApi.dislikeComment(commentId);
-
-      // API가 업데이트된 정보를 반환하지 않으므로 프론트엔드에서 직접 상태 업데이트
-      setPosts((prevPosts) =>
-        prevPosts.map((post) => ({
-          ...post,
-          comments: post.comments?.map((comment) =>
-            comment.id === commentId
-              ? {
-                  ...comment,
-                  dislikeCount: comment.disliked
-                    ? comment.dislikeCount - 1
-                    : comment.dislikeCount + 1,
-                  disliked: !comment.disliked,
-                  // 싫어요를 누르면 좋아요는 해제
-                  liked: false,
-                  likeCount: comment.liked
-                    ? comment.likeCount - 1
-                    : comment.likeCount,
-                }
-              : comment
-          ),
-        }))
-      );
-
-      setVisiblePosts((prevPosts) =>
-        prevPosts.map((post) => ({
-          ...post,
-          comments: post.comments?.map((comment) =>
-            comment.id === commentId
-              ? {
-                  ...comment,
-                  dislikeCount: comment.disliked
-                    ? comment.dislikeCount - 1
-                    : comment.dislikeCount + 1,
-                  disliked: !comment.disliked,
-                  // 싫어요를 누르면 좋아요는 해제
-                  liked: false,
-                  likeCount: comment.liked
-                    ? comment.likeCount - 1
-                    : comment.likeCount,
-                }
-              : comment
-          ),
-        }))
-      );
-
-      toast.success("댓글 평가가 반영되었습니다.");
-    } catch (error) {
-      console.error("댓글 싫어요 실패:", error);
-      toast.error("댓글 평가에 실패했습니다.");
     }
   };
 
@@ -1416,24 +1347,28 @@ const CommunityPage: React.FC = () => {
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="text-lg font-semibold">{post.title}</h3>
                         <div className="flex gap-2">
-                          {isLoggedIn && user?.id === post.user.id && !isUserBlocked() && (
-                            <button
-                              onClick={() => handleEditPost(post)}
-                              className="text-gray-500 hover:text-blue-500"
-                              title="수정"
-                            >
-                              <FaEdit />
-                            </button>
-                          )}
-                          {isLoggedIn && ((user?.id === post.user.id && !isUserBlocked()) || isAdminOrModerator()) && (
-                            <button
-                              onClick={() => handleDeletePost(post.id)}
-                              className="text-gray-500 hover:text-red-500"
-                              title="삭제"
-                            >
-                              <FaTrash />
-                            </button>
-                          )}
+                          {isLoggedIn &&
+                            user?.id === post.user.id &&
+                            !isUserBlocked() && (
+                              <button
+                                onClick={() => handleEditPost(post)}
+                                className="text-gray-500 hover:text-blue-500"
+                                title="수정"
+                              >
+                                <FaEdit />
+                              </button>
+                            )}
+                          {isLoggedIn &&
+                            ((user?.id === post.user.id && !isUserBlocked()) ||
+                              isAdminOrModerator()) && (
+                              <button
+                                onClick={() => handleDeletePost(post.id)}
+                                className="text-gray-500 hover:text-red-500"
+                                title="삭제"
+                              >
+                                <FaTrash />
+                              </button>
+                            )}
                         </div>
                       </div>
                       <p
@@ -1460,15 +1395,17 @@ const CommunityPage: React.FC = () => {
                       <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
                         <span>{formatDate(post.createdAt)}</span>
                         <div className="flex items-center space-x-3">
-                          {isLoggedIn && !isUserBlocked() && user?.id !== post.user.id && (
-                            <button
-                              className="p-1 rounded-md text-red-500"
-                              title="게시글 신고하기"
-                              onClick={() => openReportModal(post.id, "post")}
-                            >
-                              <FaBell size={14} />
-                            </button>
-                          )}
+                          {isLoggedIn &&
+                            !isUserBlocked() &&
+                            user?.id !== post.user.id && (
+                              <button
+                                className="p-1 rounded-md text-red-500"
+                                title="게시글 신고하기"
+                                onClick={() => openReportModal(post.id, "post")}
+                              >
+                                <FaBell size={14} />
+                              </button>
+                            )}
                           <div className="flex items-center space-x-1">
                             <button
                               className={`p-1 rounded-md ${post.liked ? "text-blue-600" : "text-gray-400 hover:text-blue-600"}`}
@@ -1545,9 +1482,12 @@ const CommunityPage: React.FC = () => {
                               <div className="flex justify-between items-center mb-1">
                                 <div className="flex items-center gap-1">
                                   <span className="text-xs text-gray-500">
-                                    {new Date(comment.createdAt).toLocaleString()}
+                                    {new Date(
+                                      comment.createdAt
+                                    ).toLocaleString()}
                                   </span>
-                                  {isLoggedIn && !isUserBlocked() &&
+                                  {isLoggedIn &&
+                                    !isUserBlocked() &&
                                     user?.id !== comment.user.id && (
                                       <button
                                         className="p-1 hover:bg-gray-100 rounded-full"
@@ -1560,17 +1500,19 @@ const CommunityPage: React.FC = () => {
                                       </button>
                                     )}
                                 </div>
-                                {isLoggedIn && user?.id === comment.user.id && !isUserBlocked() && (
-                                  <button
-                                    onClick={() =>
-                                      handleDeleteComment(post.id, comment.id)
-                                    }
-                                    className="text-xs text-gray-500 hover:text-red-500"
-                                    title="삭제"
-                                  >
-                                    <FaTrash />
-                                  </button>
-                                )}
+                                {isLoggedIn &&
+                                  user?.id === comment.user.id &&
+                                  !isUserBlocked() && (
+                                    <button
+                                      onClick={() =>
+                                        handleDeleteComment(post.id, comment.id)
+                                      }
+                                      className="text-xs text-gray-500 hover:text-red-500"
+                                      title="삭제"
+                                    >
+                                      <FaTrash />
+                                    </button>
+                                  )}
                               </div>
                               <div
                                 className="text-sm"
@@ -1582,7 +1524,7 @@ const CommunityPage: React.FC = () => {
                               />
                               <div className="mt-1 flex items-center space-x-4">
                                 <button
-                                  onClick={() => handleCommentLike(comment.id)}
+                                  onClick={() => handlePostLike(comment.id)}
                                   className={`flex items-center text-xs space-x-1 ${
                                     comment.liked
                                       ? "text-blue-500"
@@ -1593,9 +1535,7 @@ const CommunityPage: React.FC = () => {
                                   <span>{comment.likeCount || 0}</span>
                                 </button>
                                 <button
-                                  onClick={() =>
-                                    handleCommentDislike(comment.id)
-                                  }
+                                  onClick={() => handlePostDislike(comment.id)}
                                   className={`flex items-center text-xs space-x-1 ${
                                     comment.disliked
                                       ? "text-red-500"
@@ -1636,7 +1576,11 @@ const CommunityPage: React.FC = () => {
                           <div className="flex-1 flex">
                             <input
                               type="text"
-                              placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
+                              placeholder={
+                                isUserBlocked()
+                                  ? "댓글 작성이 제한되었습니다"
+                                  : "댓글을 입력하세요..."
+                              }
                               className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
                               value={newComment}
                               onChange={(e) => setNewComment(e.target.value)}
@@ -1644,7 +1588,9 @@ const CommunityPage: React.FC = () => {
                             />
                             <button
                               className={`rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white ${
-                                isUserBlocked() ? "opacity-50 cursor-not-allowed" : ""
+                                isUserBlocked()
+                                  ? "opacity-50 cursor-not-allowed"
+                                  : ""
                               }`}
                               onClick={() => handleCommentSubmit(post.id)}
                               disabled={isUserBlocked()}
@@ -1753,24 +1699,28 @@ const CommunityPage: React.FC = () => {
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="text-lg font-semibold">{post.title}</h3>
                       <div className="flex gap-2">
-                        {isLoggedIn && user?.id === post.user.id && !isUserBlocked() && (
-                          <button
-                            onClick={() => handleEditPost(post)}
-                            className="text-gray-500 hover:text-blue-500"
-                            title="수정"
-                          >
-                            <FaEdit />
-                          </button>
-                        )}
-                        {isLoggedIn && ((user?.id === post.user.id && !isUserBlocked()) || isAdminOrModerator()) && (
-                          <button
-                            onClick={() => handleDeletePost(post.id)}
-                            className="text-gray-500 hover:text-red-500"
-                            title="삭제"
-                          >
-                            <FaTrash />
-                          </button>
-                        )}
+                        {isLoggedIn &&
+                          user?.id === post.user.id &&
+                          !isUserBlocked() && (
+                            <button
+                              onClick={() => handleEditPost(post)}
+                              className="text-gray-500 hover:text-blue-500"
+                              title="수정"
+                            >
+                              <FaEdit />
+                            </button>
+                          )}
+                        {isLoggedIn &&
+                          ((user?.id === post.user.id && !isUserBlocked()) ||
+                            isAdminOrModerator()) && (
+                            <button
+                              onClick={() => handleDeletePost(post.id)}
+                              className="text-gray-500 hover:text-red-500"
+                              title="삭제"
+                            >
+                              <FaTrash />
+                            </button>
+                          )}
                       </div>
                     </div>
                     <p
@@ -1797,15 +1747,17 @@ const CommunityPage: React.FC = () => {
                     <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
                       <span>{formatDate(post.createdAt)}</span>
                       <div className="flex items-center space-x-3">
-                        {isLoggedIn && !isUserBlocked() && user?.id !== post.user.id && (
-                          <button
-                            className="p-1 rounded-md text-red-500"
-                            title="게시글 신고하기"
-                            onClick={() => openReportModal(post.id, "post")}
-                          >
-                            <FaBell size={14} />
-                          </button>
-                        )}
+                        {isLoggedIn &&
+                          !isUserBlocked() &&
+                          user?.id !== post.user.id && (
+                            <button
+                              className="p-1 rounded-md text-red-500"
+                              title="게시글 신고하기"
+                              onClick={() => openReportModal(post.id, "post")}
+                            >
+                              <FaBell size={14} />
+                            </button>
+                          )}
                         <div className="flex items-center space-x-1">
                           <button
                             className={`p-1 rounded-md ${post.liked ? "text-blue-600" : "text-gray-400 hover:text-blue-600"}`}
@@ -1815,9 +1767,7 @@ const CommunityPage: React.FC = () => {
                           >
                             <FaThumbsUp size={14} />
                           </button>
-                          <span className="text-sm">
-                            {post.likeCount || 0}
-                          </span>
+                          <span className="text-sm">{post.likeCount || 0}</span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <button
@@ -1884,30 +1834,33 @@ const CommunityPage: React.FC = () => {
                                 <span className="text-xs text-gray-500">
                                   {new Date(comment.createdAt).toLocaleString()}
                                 </span>
-                                {isLoggedIn && !isUserBlocked() &&
+                                {isLoggedIn &&
+                                  !isUserBlocked() &&
                                   user?.id !== comment.user.id && (
-                                      <button
-                                        className="p-1 hover:bg-gray-100 rounded-full"
-                                        title="댓글 신고하기"
-                                        onClick={() =>
-                                          openReportModal(comment.id, "comment")
-                                        }
-                                      >
-                                        <FaBell className="text-red-500 text-xs" />
-                                      </button>
-                                    )}
+                                    <button
+                                      className="p-1 hover:bg-gray-100 rounded-full"
+                                      title="댓글 신고하기"
+                                      onClick={() =>
+                                        openReportModal(comment.id, "comment")
+                                      }
+                                    >
+                                      <FaBell className="text-red-500 text-xs" />
+                                    </button>
+                                  )}
                               </div>
-                              {isLoggedIn && user?.id === comment.user.id && !isUserBlocked() && (
-                                <button
-                                  onClick={() =>
-                                    handleDeleteComment(post.id, comment.id)
-                                  }
-                                  className="text-xs text-gray-500 hover:text-red-500"
-                                  title="삭제"
-                                >
-                                  <FaTrash />
-                                </button>
-                              )}
+                              {isLoggedIn &&
+                                user?.id === comment.user.id &&
+                                !isUserBlocked() && (
+                                  <button
+                                    onClick={() =>
+                                      handleDeleteComment(post.id, comment.id)
+                                    }
+                                    className="text-xs text-gray-500 hover:text-red-500"
+                                    title="삭제"
+                                  >
+                                    <FaTrash />
+                                  </button>
+                                )}
                             </div>
                             <div
                               className="text-sm"
@@ -1919,7 +1872,7 @@ const CommunityPage: React.FC = () => {
                             />
                             <div className="mt-1 flex items-center space-x-4">
                               <button
-                                onClick={() => handleCommentLike(comment.id)}
+                                onClick={() => handlePostLike(comment.id)}
                                 className={`flex items-center text-xs space-x-1 ${
                                   comment.liked
                                     ? "text-blue-500"
@@ -1930,9 +1883,7 @@ const CommunityPage: React.FC = () => {
                                 <span>{comment.likeCount || 0}</span>
                               </button>
                               <button
-                                onClick={() =>
-                                  handleCommentDislike(comment.id)
-                                }
+                                onClick={() => handlePostDislike(comment.id)}
                                 className={`flex items-center text-xs space-x-1 ${
                                   comment.disliked
                                     ? "text-red-500"
@@ -1973,7 +1924,11 @@ const CommunityPage: React.FC = () => {
                         <div className="flex-1 flex">
                           <input
                             type="text"
-                            placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
+                            placeholder={
+                              isUserBlocked()
+                                ? "댓글 작성이 제한되었습니다"
+                                : "댓글을 입력하세요..."
+                            }
                             className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
                             value={newComment}
                             onChange={(e) => setNewComment(e.target.value)}
@@ -1981,7 +1936,9 @@ const CommunityPage: React.FC = () => {
                           />
                           <button
                             className={`rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white ${
-                              isUserBlocked() ? "opacity-50 cursor-not-allowed" : ""
+                              isUserBlocked()
+                                ? "opacity-50 cursor-not-allowed"
+                                : ""
                             }`}
                             onClick={() => handleCommentSubmit(post.id)}
                             disabled={isUserBlocked()}
