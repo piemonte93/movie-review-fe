@@ -1,7 +1,7 @@
 import React from "react";
 import { FaStar } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { Content } from "../types/content";
+import { Content, TvShow } from "../types/content";
 
 interface ContentCardProps {
   content: Content;
@@ -43,7 +43,24 @@ const ContentCard: React.FC<ContentCardProps> = ({
   const typeLabel = mediaType === "tv" ? "TV" : "영화";
 
   const handleClick = () => {
-    const mediaType = content.media_type === "tv" ? "tv" : "movie";
+    // 여러 방식으로 TV 쇼인지 확인
+    const isTvShow =
+      content.media_type === "tv" ||
+      (content as any).type === "tv" ||
+      (content as any).first_air_date !== undefined;
+
+    const mediaType = isTvShow ? "tv" : "movie";
+
+    // 디버깅을 위한 로그 추가
+    console.log("콘텐츠 정보:", {
+      id: content.id,
+      title: content.title || content.name,
+      type: isTvShow ? "tv" : "movie",
+      media_type: content.media_type,
+      content_type: (content as any).type,
+      has_first_air_date: (content as any).first_air_date !== undefined,
+    });
+
     navigate(`/${mediaType}/${content.id}`);
   };
 

@@ -122,7 +122,7 @@ const TvShowsPage: React.FC = () => {
 
     setIsKoreanShow(isKorean === "true");
     setIsForeignShow(isForeign === "true");
-    
+
     if (network) {
       setNetworkInput(network);
       setSelectedNetwork(network);
@@ -215,35 +215,45 @@ const TvShowsPage: React.FC = () => {
 
   // 누적된 TV 쇼 목록을 저장하는 상태
   const [allShows, setAllShows] = useState<TvShow[]>([]);
-  
+
   // 추가 데이터를 로드 중인지 여부
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
-  
+
   // 모든 데이터를 로드했는지 여부
   const [hasMore, setHasMore] = useState<boolean>(true);
-  
+
   // 마지막 요소를 감지하는 ref
   const observer = useRef<IntersectionObserver | null>(null);
-  
+
   // 마지막 요소를 감지하는 콜백 함수
-  const lastShowElementRef = useCallback((node: HTMLDivElement) => {
-    if (loading || loadingMore) return;
-    
-    if (observer.current) observer.current.disconnect();
-    
-    observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMore && currentPage < totalPages) {
-        // 다음 페이지로 이동
-        const nextPage = currentPage + 1;
-        const params = new URLSearchParams(location.search);
-        params.set("page", nextPage.toString());
-        navigate(`/tv?${params.toString()}`, { replace: true });
-      }
-    }, { threshold: 0.5 });
-    
-    if (node) observer.current.observe(node);
-  }, [loading, loadingMore, hasMore, currentPage, totalPages]);
-  
+  const lastShowElementRef = useCallback(
+    (node: HTMLDivElement) => {
+      if (loading || loadingMore) return;
+
+      if (observer.current) observer.current.disconnect();
+
+      observer.current = new IntersectionObserver(
+        (entries) => {
+          if (
+            entries[0].isIntersecting &&
+            hasMore &&
+            currentPage < totalPages
+          ) {
+            // 다음 페이지로 이동
+            const nextPage = currentPage + 1;
+            const params = new URLSearchParams(location.search);
+            params.set("page", nextPage.toString());
+            navigate(`/tv?${params.toString()}`, { replace: true });
+          }
+        },
+        { threshold: 0.5 }
+      );
+
+      if (node) observer.current.observe(node);
+    },
+    [loading, loadingMore, hasMore, currentPage, totalPages]
+  );
+
   // contents가 변경될 때마다 allShows 업데이트
   useEffect(() => {
     if (!loading && contents.length > 0) {
@@ -252,10 +262,11 @@ const TvShowsPage: React.FC = () => {
         setAllShows(contents);
       } else {
         // 이후 페이지는 기존 목록에 추가
-        setAllShows(prev => {
+        setAllShows((prev) => {
           // 중복 항목 제거를 위해 ID 기준으로 필터링
           const uniqueShows = contents.filter(
-            newShow => !prev.some(existingShow => existingShow.id === newShow.id)
+            (newShow) =>
+              !prev.some((existingShow) => existingShow.id === newShow.id)
           );
           return [...prev, ...uniqueShows];
         });
@@ -264,14 +275,14 @@ const TvShowsPage: React.FC = () => {
       setLoadingMore(false);
     }
   }, [contents, loading, currentPage, totalPages]);
-  
+
   // 페이지 로드 완료 시 로딩 상태 제거
   useEffect(() => {
     if (!loading) {
       setLoadingMore(false);
     }
   }, [loading]);
-  
+
   // 필터가 변경되면 모든 상태를 초기화
   useEffect(() => {
     // 필터 조건이 변경됐을 때(URL 파라미터가 변경됐을 때) 페이지가 1로 초기화되면
@@ -280,8 +291,17 @@ const TvShowsPage: React.FC = () => {
       setAllShows([]);
       setHasMore(true);
     }
-  }, [selectedGenres, selectedYear, selectedSort, searchQuery, voteRange, isKoreanShow, isForeignShow, selectedNetwork]);
-  
+  }, [
+    selectedGenres,
+    selectedYear,
+    selectedSort,
+    searchQuery,
+    voteRange,
+    isKoreanShow,
+    isForeignShow,
+    selectedNetwork,
+  ]);
+
   // 검색어 입력 핸들러
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
@@ -290,20 +310,43 @@ const TvShowsPage: React.FC = () => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
-    
+
+    // 10ms 타임아웃으로 거의 실시간 검색 구현
     searchTimeoutRef.current = setTimeout(() => {
       const params = new URLSearchParams(location.search);
 
       if (newValue.trim()) {
         params.set("query", newValue.trim());
+        setSearchQuery(newValue.trim());
       } else {
         params.delete("query");
+        setSearchQuery("");
       }
 
       params.delete("page");
+      setCurrentPage(1);
       setAllShows([]); // 검색어 변경 시 목록 초기화
       navigate(`/tv?${params.toString()}`);
-    }, 200);
+    }, 10); // 타임아웃 시간을 10ms로 줄여 즉시 검색되는 것처럼 보이게 함
+  };
+
+  // 검색 폼 제출 핸들러
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const params = new URLSearchParams(location.search);
+
+    if (searchInput.trim()) {
+      params.set("query", searchInput.trim());
+      setSearchQuery(searchInput.trim());
+    } else {
+      params.delete("query");
+      setSearchQuery("");
+    }
+
+    params.delete("page");
+    setCurrentPage(1);
+    navigate(`/tv?${params.toString()}`);
   };
 
   // 검색 타임아웃 참조
@@ -422,13 +465,13 @@ const TvShowsPage: React.FC = () => {
                   }
                 })}
               </div>
-              
+
               {loadingMore && (
                 <div className="flex justify-center items-center py-6">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
                 </div>
               )}
-              
+
               {!hasMore && allShows.length > 0 && (
                 <div className="text-center py-6 text-gray-500">
                   모든 TV 쇼를 불러왔습니다.
@@ -448,4 +491,4 @@ const TvShowsPage: React.FC = () => {
   );
 };
 
-export default TvShowsPage; 
+export default TvShowsPage;

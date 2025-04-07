@@ -145,6 +145,18 @@ export const useFilteredTvShows = (
         setLoading(true);
         setError(null);
 
+        console.log("TV 쇼 필터링 요청:", {
+          genres,
+          year,
+          sortBy,
+          page,
+          query,
+          voteMin,
+          isKorean,
+          isForeign,
+          network,
+        });
+
         const response = await backendApi.getFilteredTvShows(
           genres,
           year,
@@ -157,12 +169,20 @@ export const useFilteredTvShows = (
           network
         );
 
+        console.log("TV 쇼 필터링 응답:", response);
+
         // TV 프로그램 데이터를 올바른 형식으로 변환
         const tvShows: TvShow[] = (response.results || []).map((show: any) => ({
           ...show,
+          id: show.id,
+          media_type: "tv", // 명시적으로 media_type 설정
           type: "tv",
           title: show.name || show.title || "제목 없음", // name이 있으면 name을, 없으면 title을, 둘 다 없으면 "제목 없음"을 사용
           release_date: show.first_air_date || show.release_date,
+          first_air_date: show.first_air_date || show.release_date,
+          poster_path: show.poster_path || "",
+          backdrop_path: show.backdrop_path || "",
+          vote_average: show.vote_average || 0,
         }));
 
         setContents(tvShows);
@@ -171,13 +191,25 @@ export const useFilteredTvShows = (
       } catch (err) {
         setError("TV 쇼 정보를 불러오는데 실패했습니다.");
         console.error("Error fetching TV shows:", err);
+        // 에러 발생시 빈 배열 설정하여 UI 깨짐 방지
+        setContents([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchTvShows();
-  }, [genres, year, sortBy, page, query, voteMin, isKorean, isForeign, network]);
+  }, [
+    genres,
+    year,
+    sortBy,
+    page,
+    query,
+    voteMin,
+    isKorean,
+    isForeign,
+    network,
+  ]);
 
   return { contents, loading, error, totalPages, totalResults };
 };
