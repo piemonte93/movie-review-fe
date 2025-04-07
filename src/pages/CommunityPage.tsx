@@ -15,6 +15,7 @@ import {
   FaEdit,
   FaTrash,
   FaAt,
+  FaBell,
 } from "react-icons/fa";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
@@ -725,130 +726,6 @@ const CommunityPage: React.FC = () => {
     }
   };
 
-  // 댓글 좋아요 처리
-  const handleCommentLike = async (commentId: number) => {
-    if (!isLoggedIn) {
-      navigate("/login", { state: { from: location } });
-      return;
-    }
-
-    try {
-      await backendApi.likeComment(commentId);
-
-      // API가 업데이트된 정보를 반환하지 않으므로 프론트엔드에서 직접 상태 업데이트
-      setPosts((prevPosts) =>
-        prevPosts.map((post) => ({
-          ...post,
-          comments: post.comments?.map((comment) =>
-            comment.id === commentId
-              ? {
-                  ...comment,
-                  likeCount: comment.liked
-                    ? comment.likeCount - 1
-                    : comment.likeCount + 1,
-                  liked: !comment.liked,
-                  // 좋아요를 누르면 싫어요는 해제
-                  disliked: false,
-                  dislikeCount: comment.disliked
-                    ? comment.dislikeCount - 1
-                    : comment.dislikeCount,
-                }
-              : comment
-          ),
-        }))
-      );
-
-      setVisiblePosts((prevPosts) =>
-        prevPosts.map((post) => ({
-          ...post,
-          comments: post.comments?.map((comment) =>
-            comment.id === commentId
-              ? {
-                  ...comment,
-                  likeCount: comment.liked
-                    ? comment.likeCount - 1
-                    : comment.likeCount + 1,
-                  liked: !comment.liked,
-                  // 좋아요를 누르면 싫어요는 해제
-                  disliked: false,
-                  dislikeCount: comment.disliked
-                    ? comment.dislikeCount - 1
-                    : comment.dislikeCount,
-                }
-              : comment
-          ),
-        }))
-      );
-
-      toast.success("댓글 평가가 반영되었습니다.");
-    } catch (error) {
-      console.error("댓글 좋아요 실패:", error);
-      toast.error("댓글 평가에 실패했습니다.");
-    }
-  };
-
-  // 댓글 싫어요 처리
-  const handleCommentDislike = async (commentId: number) => {
-    if (!isLoggedIn) {
-      navigate("/login", { state: { from: location } });
-      return;
-    }
-
-    try {
-      await backendApi.dislikeComment(commentId);
-
-      // API가 업데이트된 정보를 반환하지 않으므로 프론트엔드에서 직접 상태 업데이트
-      setPosts((prevPosts) =>
-        prevPosts.map((post) => ({
-          ...post,
-          comments: post.comments?.map((comment) =>
-            comment.id === commentId
-              ? {
-                  ...comment,
-                  dislikeCount: comment.disliked
-                    ? comment.dislikeCount - 1
-                    : comment.dislikeCount + 1,
-                  disliked: !comment.disliked,
-                  // 싫어요를 누르면 좋아요는 해제
-                  liked: false,
-                  likeCount: comment.liked
-                    ? comment.likeCount - 1
-                    : comment.likeCount,
-                }
-              : comment
-          ),
-        }))
-      );
-
-      setVisiblePosts((prevPosts) =>
-        prevPosts.map((post) => ({
-          ...post,
-          comments: post.comments?.map((comment) =>
-            comment.id === commentId
-              ? {
-                  ...comment,
-                  dislikeCount: comment.disliked
-                    ? comment.dislikeCount - 1
-                    : comment.dislikeCount + 1,
-                  disliked: !comment.disliked,
-                  // 싫어요를 누르면 좋아요는 해제
-                  liked: false,
-                  likeCount: comment.liked
-                    ? comment.likeCount - 1
-                    : comment.likeCount,
-                }
-              : comment
-          ),
-        }))
-      );
-
-      toast.success("댓글 평가가 반영되었습니다.");
-    } catch (error) {
-      console.error("댓글 싫어요 실패:", error);
-      toast.error("댓글 평가에 실패했습니다.");
-    }
-  };
-
   // 검색 처리
   const handleSearch = async (query: string, category: string) => {
     try {
@@ -982,6 +859,130 @@ const CommunityPage: React.FC = () => {
     }
   };
 
+  // 댓글 좋아요 처리
+  const handleCommentLike = async (commentId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    try {
+      await backendApi.likeComment(commentId);
+
+      // API가 업데이트된 정보를 반환하지 않으므로 프론트엔드에서 직접 상태 업데이트
+      setPosts((prevPosts) =>
+        prevPosts.map((post) => ({
+          ...post,
+          comments: post.comments?.map((comment) =>
+            comment.id === commentId
+              ? {
+                  ...comment,
+                  likeCount: comment.liked
+                    ? comment.likeCount - 1
+                    : comment.likeCount + 1,
+                  liked: !comment.liked,
+                  // 좋아요를 누르면 싫어요는 해제
+                  disliked: false,
+                  dislikeCount: comment.disliked
+                    ? comment.dislikeCount - 1
+                    : comment.dislikeCount,
+                }
+              : comment
+          ),
+        }))
+      );
+
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) => ({
+          ...post,
+          comments: post.comments?.map((comment) =>
+            comment.id === commentId
+              ? {
+                  ...comment,
+                  likeCount: comment.liked
+                    ? comment.likeCount - 1
+                    : comment.likeCount + 1,
+                  liked: !comment.liked,
+                  // 좋아요를 누르면 싫어요는 해제
+                  disliked: false,
+                  dislikeCount: comment.disliked
+                    ? comment.dislikeCount - 1
+                    : comment.dislikeCount,
+                }
+              : comment
+          ),
+        }))
+      );
+
+      toast.success("댓글 평가가 반영되었습니다.");
+    } catch (error) {
+      console.error("댓글 좋아요 실패:", error);
+      toast.error("댓글 평가에 실패했습니다.");
+    }
+  };
+
+  // 댓글 싫어요 처리
+  const handleCommentDislike = async (commentId: number) => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    try {
+      await backendApi.dislikeComment(commentId);
+
+      // API가 업데이트된 정보를 반환하지 않으므로 프론트엔드에서 직접 상태 업데이트
+      setPosts((prevPosts) =>
+        prevPosts.map((post) => ({
+          ...post,
+          comments: post.comments?.map((comment) =>
+            comment.id === commentId
+              ? {
+                  ...comment,
+                  dislikeCount: comment.disliked
+                    ? comment.dislikeCount - 1
+                    : comment.dislikeCount + 1,
+                  disliked: !comment.disliked,
+                  // 싫어요를 누르면 좋아요는 해제
+                  liked: false,
+                  likeCount: comment.liked
+                    ? comment.likeCount - 1
+                    : comment.likeCount,
+                }
+              : comment
+          ),
+        }))
+      );
+
+      setVisiblePosts((prevPosts) =>
+        prevPosts.map((post) => ({
+          ...post,
+          comments: post.comments?.map((comment) =>
+            comment.id === commentId
+              ? {
+                  ...comment,
+                  dislikeCount: comment.disliked
+                    ? comment.dislikeCount - 1
+                    : comment.dislikeCount + 1,
+                  disliked: !comment.disliked,
+                  // 싫어요를 누르면 좋아요는 해제
+                  liked: false,
+                  likeCount: comment.liked
+                    ? comment.likeCount - 1
+                    : comment.likeCount,
+                }
+              : comment
+          ),
+        }))
+      );
+
+      toast.success("댓글 평가가 반영되었습니다.");
+    } catch (error) {
+      console.error("댓글 싫어요 실패:", error);
+      toast.error("댓글 평가에 실패했습니다.");
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-2">
       {/* 상단 검색 및 버튼 영역 - 고정 헤더로 변경 */}
@@ -1002,6 +1003,12 @@ const CommunityPage: React.FC = () => {
             </button>
             <button
               onClick={() => {
+                if (isUserBlocked()) {
+                  toast.error(
+                    "현재 글쓰기 기능이 제한되었습니다. 관리자에게 문의해주세요."
+                  );
+                  return;
+                }
                 setShowWriteForm(true);
                 setShowSearch(false);
                 setShowSearchModal(false);
@@ -1572,18 +1579,18 @@ const CommunityPage: React.FC = () => {
                           <div className="flex-1 flex">
                             <input
                               type="text"
-                              placeholder={
-                                isUserBlocked()
-                                  ? "댓글 작성이 제한되었습니다"
-                                  : "댓글을 입력하세요..."
-                              }
+                              placeholder={isUserBlocked() ? "댓글 작성이 제한되었습니다" : "댓글을 입력하세요..."}
                               className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
                               value={newComment}
                               onChange={(e) => setNewComment(e.target.value)}
+                              disabled={isUserBlocked()}
                             />
                             <button
-                              className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
+                              className={`rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white ${
+                                isUserBlocked() ? "opacity-50 cursor-not-allowed" : ""
+                              }`}
                               onClick={() => handleCommentSubmit(post.id)}
+                              disabled={isUserBlocked()}
                             >
                               <FaReply />
                             </button>
@@ -1751,7 +1758,9 @@ const CommunityPage: React.FC = () => {
                           >
                             <FaThumbsUp size={14} />
                           </button>
-                          <span className="text-sm">{post.likeCount || 0}</span>
+                          <span className="text-sm">
+                            {post.likeCount || 0}
+                          </span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <button
@@ -1818,17 +1827,18 @@ const CommunityPage: React.FC = () => {
                                 <span className="text-xs text-gray-500">
                                   {new Date(comment.createdAt).toLocaleString()}
                                 </span>
-                                {isLoggedIn && user?.id !== comment.user.id && (
-                                  <button
-                                    className="p-1 hover:bg-gray-100 rounded-full"
-                                    title="댓글 신고하기"
-                                    onClick={() =>
-                                      openReportModal(comment.id, "comment")
-                                    }
-                                  >
-                                    <FaBell className="text-red-500 text-xs" />
-                                  </button>
-                                )}
+                                {isLoggedIn &&
+                                  user?.id !== comment.user.id && (
+                                    <button
+                                      className="p-1 hover:bg-gray-100 rounded-full"
+                                      title="댓글 신고하기"
+                                      onClick={() =>
+                                        openReportModal(comment.id, "comment")
+                                      }
+                                    >
+                                      <FaBell className="text-red-500 text-xs" />
+                                    </button>
+                                  )}
                               </div>
                               {isLoggedIn && user?.id === comment.user.id && (
                                 <button
@@ -1863,7 +1873,9 @@ const CommunityPage: React.FC = () => {
                                 <span>{comment.likeCount || 0}</span>
                               </button>
                               <button
-                                onClick={() => handleCommentDislike(comment.id)}
+                                onClick={() =>
+                                  handleCommentDislike(comment.id)
+                                }
                                 className={`flex items-center text-xs space-x-1 ${
                                   comment.disliked
                                     ? "text-red-500"
@@ -1908,10 +1920,14 @@ const CommunityPage: React.FC = () => {
                             className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
                             value={newComment}
                             onChange={(e) => setNewComment(e.target.value)}
+                            disabled={isUserBlocked()}
                           />
                           <button
-                            className="rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white"
+                            className={`rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white ${
+                              isUserBlocked() ? "opacity-50 cursor-not-allowed" : ""
+                            }`}
                             onClick={() => handleCommentSubmit(post.id)}
+                            disabled={isUserBlocked()}
                           >
                             <FaReply />
                           </button>
