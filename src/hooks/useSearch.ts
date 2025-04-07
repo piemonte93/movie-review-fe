@@ -14,6 +14,7 @@ export const useSearch = (query: string, page = 1) => {
   const [error, setError] = useState<string | null>(null);
   const [totalPages, setTotalPages] = useState<number>(0);
   const [totalResults, setTotalResults] = useState<number>(0);
+  const [filterKey, setFilterKey] = useState(0);
 
   useEffect(() => {
     const fetchSearchResults = async () => {
@@ -48,9 +49,13 @@ export const useSearch = (query: string, page = 1) => {
     };
 
     fetchSearchResults();
-  }, [query, page]); // 검색어나 페이지가 변경되면 재검색
+  }, [query, page, filterKey]); // filterKey를 의존성 배열에 추가
 
-  return { contents, loading, error, totalPages, totalResults };
+  const updateFilters = () => {
+    setFilterKey((prev) => prev + 1);
+  };
+
+  return { contents, loading, error, totalPages, totalResults, updateFilters };
 };
 
 /**
@@ -139,6 +144,7 @@ export const useFilteredTvShows = (
   const [tvShows, setTvShows] = useState<TvShow[]>([]);
   const [totalPages, setTotalPages] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
+  const [filterKey, setFilterKey] = useState(0);
 
   useEffect(() => {
     const fetchTvShows = async () => {
@@ -147,12 +153,10 @@ export const useFilteredTvShows = (
 
       try {
         let result;
-        // 장르를 콤마로 구분된 문자열로 변환
         const genreParam =
           genres && genres.length > 0 ? genres.join(",") : undefined;
 
         if (searchQuery.trim()) {
-          // 검색어가 있는 경우에도 필터 적용
           result = await backendApi.getTmdbFilteredTvShows(
             genreParam,
             year,
@@ -162,10 +166,9 @@ export const useFilteredTvShows = (
             isKorean,
             isForeign,
             network,
-            searchQuery // 검색어를 파라미터로 추가
+            searchQuery
           );
         } else {
-          // 필터링만 적용
           result = await backendApi.getTmdbFilteredTvShows(
             genreParam,
             year,
@@ -211,7 +214,12 @@ export const useFilteredTvShows = (
     isKorean,
     isForeign,
     network,
+    filterKey,
   ]);
 
-  return { tvShows, loading, error, totalPages, totalResults };
+  const updateFilters = () => {
+    setFilterKey((prev) => prev + 1);
+  };
+
+  return { tvShows, loading, error, totalPages, totalResults, updateFilters };
 };
