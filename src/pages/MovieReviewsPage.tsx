@@ -1186,6 +1186,13 @@ const MovieReviewsPage: React.FC = () => {
 
   // 리뷰 삭제 핸들러
   const handleDeleteReview = async (reviewId: number) => {
+    // 로그인 확인
+    if (!isLoggedIn) {
+      toast.error("로그인이 필요합니다.");
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
     // 삭제 확인
     if (!window.confirm("리뷰를 삭제하시겠습니까?")) {
       return;
@@ -1452,7 +1459,7 @@ const MovieReviewsPage: React.FC = () => {
   // 신고 제출 처리 함수
   const handleReportSubmit = async () => {
     if (!reportContent.trim()) {
-      toast.error("신고 내용을 입력해주세요.");
+      toast.error("신고 내용을 자세히 입력해주세요.");
       return;
     }
 
@@ -1517,7 +1524,7 @@ const MovieReviewsPage: React.FC = () => {
 
   // Admin 권한을 확인하는 함수 추가
   const isAdmin = () => {
-    return user?.roles?.includes("ROLE_ADMIN") || false;
+    return user?.roles?.includes("ROLE_ADMIN") || user?.roles?.includes("ROLE_MODERATOR") || false;
   };
 
   // 글쓰기 버튼 클릭 처리 핸들러

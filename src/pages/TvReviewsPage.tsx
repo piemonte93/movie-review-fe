@@ -967,6 +967,13 @@ const TvReviewsPage: React.FC = () => {
 
   // 리뷰 삭제 핸들러
   const handleDeleteReview = async (reviewId: number) => {
+    // 로그인 확인
+    if (!isLoggedIn) {
+      toast.error("로그인이 필요합니다.");
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
     // 삭제 확인
     if (!window.confirm("리뷰를 삭제하시겠습니까?")) {
       return;
@@ -986,50 +993,24 @@ const TvReviewsPage: React.FC = () => {
   // 댓글 삭제 핸들러
   const handleDeleteComment = async (reviewId: number, commentId: number) => {
     if (!isLoggedIn) {
-      navigate("/login", { state: { from: location } });
+      toast.error("로그인이 필요합니다.");
       return;
     }
 
-    // 권한 확인을 위해 댓글 정보 가져오기
-    const review = reviews.find((r) => r.id === reviewId);
-    if (!review) {
-      toast.error("리뷰를 찾을 수 없습니다.");
-      return;
-    }
+    const comment = reviews
+      .find((r) => r.id === reviewId)
+      ?.comments.find((c) => c.id === commentId);
 
-    const comment = review.comments.find((c) => c.id === commentId);
-    if (!comment) {
-      toast.error("댓글을 찾을 수 없습니다.");
-      return;
-    }
+    if (!comment) return;
 
-    // 권한 체크: 현재 사용자가 댓글 작성자이거나 관리자인지 확인
     const hasPermission = isCommentAuthor(comment.userId) || isAdmin();
-
-    console.log("댓글 삭제 권한 체크:", {
-      commentId,
-      commentUserId: comment.userId,
-      commentUserIdType: typeof comment.userId,
-      currentUserId: user?.id,
-      currentUserIdType: typeof user?.id,
-      isCommentAuthor: isCommentAuthor(comment.userId),
-      isAdminUser: isAdmin(),
-      hasPermission,
-    });
 
     if (!hasPermission) {
       toast.error("댓글 삭제 권한이 없습니다.");
       return;
     }
 
-    if (!window.confirm("댓글을 삭제하시겠습니까?")) {
-      return;
-    }
-
     try {
-      console.log(
-        `댓글 삭제 시도: reviewId=${reviewId}, commentId=${commentId}`
-      );
       await backendApi.deleteReviewComment(reviewId, commentId);
       console.log(`댓글 삭제 API 호출 성공`);
 
@@ -1295,14 +1276,8 @@ const TvReviewsPage: React.FC = () => {
 
   // 로그인한 사용자가 관리자인지 확인하는 함수
   const isAdmin = useCallback(() => {
-    const isUserAdmin = isLoggedIn && user?.roles?.includes("ROLE_ADMIN");
-    console.log("관리자 권한 확인:", {
-      isLoggedIn,
-      roles: user?.roles || [],
-      isAdmin: isUserAdmin,
-    });
-    return isUserAdmin;
-  }, [isLoggedIn, user]);
+    return user?.roles?.includes("ROLE_ADMIN") || user?.roles?.includes("ROLE_MODERATOR") || false;
+  }, [user]);
 
   // 신고 모달 열기 함수
   const openReportModal = (id: number, type: "comment" | "review") => {
@@ -1529,22 +1504,26 @@ const TvReviewsPage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  {isLoggedIn && user?.id === review.user.id && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEditReview(review)}
-                        className="text-gray-600 hover:text-blue-600"
-                        title="수정"
-                      >
-                        <FaEdit />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteReview(review.id)}
-                        className="text-gray-600 hover:text-red-600"
-                        title="삭제"
-                      >
-                        <FaTrash />
-                      </button>
+                  {isLoggedIn && (user?.id === review.user.id || isAdmin()) && (
+                    <div className="flex space-x-2">
+                      {user?.id === review.user.id && !isUserBlocked() && (
+                        <button
+                          onClick={() => handleEditReview(review)}
+                          className="text-gray-500 hover:text-blue-500"
+                          title="수정"
+                        >
+                          <FaEdit />
+                        </button>
+                      )}
+                      {(user?.id === review.user.id && !isUserBlocked() || isAdmin()) && (
+                        <button
+                          onClick={() => handleDeleteReview(review.id)}
+                          className="text-gray-500 hover:text-red-500"
+                          title="삭제"
+                        >
+                          <FaTrash />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1745,7 +1724,7 @@ const TvReviewsPage: React.FC = () => {
                                 </span>
                                 {isLoggedIn &&
                                   (isCommentAuthor(comment.userId) ||
-                                    isAdmin()) && (
+                                    isAdmin()) && !isUserBlocked() && (
                                     <button
                                       onClick={() =>
                                         handleDeleteComment(

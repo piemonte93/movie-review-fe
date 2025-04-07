@@ -26,6 +26,7 @@ interface AuthContextType {
   refreshAuthStatus: () => void;
   updateUserInfo: (updatedUser: Partial<User>) => void;
   isUserBlocked: () => boolean;
+  isAdminOrModerator: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -349,9 +350,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
-  // 사용자가 차단되었는지 확인하는 함수
+  // 사용자가 차단되었는지 확인
   const isUserBlocked = () => {
-    return user?.status === "BLOCKED";
+    if (!user) return false;
+
+    if (typeof user.status === 'string') {
+      return user.status === 'BLOCKED' || user.status === 'DELETED';
+    }
+
+    return false;
+  };
+
+  // 사용자가 관리자 또는 모더레이터인지 확인하는 함수 추가
+  const isAdminOrModerator = () => {
+    if (!user || !user.roles) return false;
+    return user.roles.includes('ROLE_ADMIN') || user.roles.includes('ROLE_MODERATOR');
   };
 
   return (
@@ -364,6 +377,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         refreshAuthStatus,
         updateUserInfo,
         isUserBlocked,
+        isAdminOrModerator,
       }}
     >
       {children}
