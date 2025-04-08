@@ -7,7 +7,7 @@ import {
   FaUserPlus,
   FaAt,
 } from "react-icons/fa";
-import { useNotifications } from "../context/NotificationContext";
+import { useNotifications, Notification } from "../context/NotificationContext";
 import { formatDistanceToNow } from "date-fns";
 import { ko } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
@@ -68,32 +68,50 @@ const NotificationModal: React.FC<NotificationModalProps> = ({
     onClose();
   };
 
-  // 알림 메시지 생성
-  const getNotificationMessage = (notification: any) => {
-    const fromUsername = notification.fromUser?.username || "알 수 없는 사용자";
-
+  // 알림 메시지 생성 (댓글 내용은 분리)
+  const getNotificationMessage = (notification: Notification) => {
     switch (notification.type) {
       case "LIKE":
         if (notification.reviewId) {
-          return `내 리뷰에 좋아요를 눌렀습니다.`;
+          const reviewTitle = notification.reviewTitle || "해당 리뷰";
+          return `'${reviewTitle}' 리뷰에 좋아요를 눌렀습니다.`;
+        } else if (notification.postId) {
+          const postTitle = notification.postTitle || "해당 게시글";
+          return `'${postTitle}' 게시글에 좋아요를 눌렀습니다.`;
         } else {
-          return `내 게시글에 좋아요를 눌렀습니다.`;
+          return `좋아요를 눌렀습니다.`;
         }
       case "COMMENT":
         if (notification.reviewId) {
-          return `내 리뷰에 댓글을 작성했습니다.`;
+          const reviewTitle = notification.reviewTitle || "해당 리뷰";
+          return `'${reviewTitle}' 리뷰에 댓글을 작성했습니다.`; // Return only base message
+        } else if (notification.postId) {
+          const postTitle = notification.postTitle || "해당 게시글";
+          return `'${postTitle}' 게시글에 댓글을 작성했습니다.`; // Return only base message
         } else {
-          return `내 게시글에 댓글을 작성했습니다.`;
+          return `댓글을 작성했습니다.`; // Return only base message
         }
       case "REPLY":
         return `내 댓글에 답글을 작성했습니다.`;
       case "FOLLOW":
         return `나를 팔로우했습니다.`;
       case "MENTION":
-        return `게시글에서 나를 멘션했습니다.`;
+        const postTitleMention = notification.postTitle || "해당 게시글";
+        return `'${postTitleMention}' 게시글에서 나를 멘션했습니다.`;
       default:
         return `새로운 알림이 있습니다.`;
     }
+  };
+
+  // 댓글 미리보기 생성
+  const getCommentPreview = (notification: Notification) => {
+    const MAX_COMMENT_LENGTH = 20;
+    if (notification.type === "COMMENT" && notification.commentContent) {
+      return notification.commentContent.length > MAX_COMMENT_LENGTH
+        ? `"${notification.commentContent.substring(0, MAX_COMMENT_LENGTH)}..."`
+        : `"${notification.commentContent}"`;
+    }
+    return null;
   };
 
   // 모든 알림 읽음 처리
@@ -129,42 +147,53 @@ const NotificationModal: React.FC<NotificationModalProps> = ({
       <div className="max-h-[400px] overflow-y-auto">
         {notifications.length > 0 ? (
           <ul className="divide-y divide-gray-100">
-            {notifications.map((notification) => (
-              <li
-                key={notification.id}
-                className={`cursor-pointer p-4 transition hover:bg-gray-50 ${
-                  !notification.read ? "bg-blue-50" : ""
-                }`}
-                onClick={() =>
-                  handleNotificationClick(notification.id, notification)
-                }
-              >
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 pt-1">
-                    {getNotificationIcon(notification.type)}
+            {notifications.map((notification) => {
+              // Generate message and preview for each notification
+              const message = getNotificationMessage(notification);
+              const commentPreview = getCommentPreview(notification);
+
+              return (
+                <li
+                  key={notification.id}
+                  className={`cursor-pointer p-4 transition hover:bg-gray-50 ${
+                    !notification.read ? "bg-blue-50" : ""
+                  }`}
+                  onClick={() =>
+                    handleNotificationClick(notification.id, notification)
+                  }
+                >
+                  <div className="flex items-start space-x-3">
+                    <div className="flex-shrink-0 pt-1">
+                      {getNotificationIcon(notification.type)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">
+                        {notification.fromUser
+                          ? notification.fromUser.username
+                          : "시스템"}
+                      </p>
+                      {/* Render base message */}
+                      <p className="text-sm text-gray-500">{message}</p>
+                      {/* Render comment preview if it exists */}
+                      {commentPreview && (
+                        <p className="mt-1 text-sm text-gray-600 pl-2 border-l-2 border-gray-300 italic">
+                          {commentPreview}
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-gray-400">
+                        {formatDistanceToNow(new Date(notification.createdAt), {
+                          addSuffix: true,
+                          locale: ko,
+                        })}
+                      </p>
+                    </div>
+                    {!notification.read && (
+                      <div className="h-2 w-2 rounded-full bg-blue-500"></div>
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">
-                      {notification.fromUser
-                        ? notification.fromUser.username
-                        : "시스템"}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {getNotificationMessage(notification)}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-400">
-                      {formatDistanceToNow(new Date(notification.createdAt), {
-                        addSuffix: true,
-                        locale: ko,
-                      })}
-                    </p>
-                  </div>
-                  {!notification.read && (
-                    <div className="h-2 w-2 rounded-full bg-blue-500"></div>
-                  )}
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <div className="flex flex-col items-center justify-center p-8 text-center">
