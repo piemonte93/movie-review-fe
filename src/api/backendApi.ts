@@ -1506,18 +1506,43 @@ export const backendApi = {
         }
       );
       console.log("댓글 좋아요 응답:", response.data);
-      console.log("댓글 좋아요 수:", response.data.likeCount);
-      console.log("댓글 싫어요 수:", response.data.dislikeCount);
-      console.log("댓글 좋아요 상태:", response.data.liked);
-      console.log("댓글 싫어요 상태:", response.data.disliked);
+      console.log(
+        "댓글 좋아요 수:",
+        response.data.likeCount,
+        typeof response.data.likeCount
+      );
+      console.log(
+        "댓글 싫어요 수:",
+        response.data.dislikeCount,
+        typeof response.data.dislikeCount
+      );
+      console.log(
+        "댓글 좋아요 상태:",
+        response.data.liked,
+        typeof response.data.liked
+      );
+      console.log(
+        "댓글 싫어요 상태:",
+        response.data.disliked,
+        typeof response.data.disliked
+      );
 
       // 응답 데이터에 likeCount/dislikeCount가 없는 경우 0으로 설정
       const processedResponse = {
         ...response.data,
-        likeCount: response.data.likeCount || 0,
-        dislikeCount: response.data.dislikeCount || 0,
+        likeCount:
+          typeof response.data.likeCount === "number"
+            ? response.data.likeCount
+            : 0,
+        dislikeCount:
+          typeof response.data.dislikeCount === "number"
+            ? response.data.dislikeCount
+            : 0,
+        liked: Boolean(response.data.liked),
+        disliked: Boolean(response.data.disliked),
       };
 
+      console.log("가공된 좋아요 응답:", processedResponse);
       return processedResponse;
     } catch (error) {
       console.error("댓글 좋아요 실패:", error);
@@ -1555,18 +1580,43 @@ export const backendApi = {
         }
       );
       console.log("댓글 싫어요 응답:", response.data);
-      console.log("댓글 좋아요 수:", response.data.likeCount);
-      console.log("댓글 싫어요 수:", response.data.dislikeCount);
-      console.log("댓글 좋아요 상태:", response.data.liked);
-      console.log("댓글 싫어요 상태:", response.data.disliked);
+      console.log(
+        "댓글 좋아요 수:",
+        response.data.likeCount,
+        typeof response.data.likeCount
+      );
+      console.log(
+        "댓글 싫어요 수:",
+        response.data.dislikeCount,
+        typeof response.data.dislikeCount
+      );
+      console.log(
+        "댓글 좋아요 상태:",
+        response.data.liked,
+        typeof response.data.liked
+      );
+      console.log(
+        "댓글 싫어요 상태:",
+        response.data.disliked,
+        typeof response.data.disliked
+      );
 
       // 응답 데이터에 likeCount/dislikeCount가 없는 경우 0으로 설정
       const processedResponse = {
         ...response.data,
-        likeCount: response.data.likeCount || 0,
-        dislikeCount: response.data.dislikeCount || 0,
+        likeCount:
+          typeof response.data.likeCount === "number"
+            ? response.data.likeCount
+            : 0,
+        dislikeCount:
+          typeof response.data.dislikeCount === "number"
+            ? response.data.dislikeCount
+            : 0,
+        liked: Boolean(response.data.liked),
+        disliked: Boolean(response.data.disliked),
       };
 
+      console.log("가공된 싫어요 응답:", processedResponse);
       return processedResponse;
     } catch (error) {
       console.error("댓글 싫어요 실패:", error);
