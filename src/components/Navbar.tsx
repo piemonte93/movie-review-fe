@@ -147,31 +147,27 @@ const Navbar: React.FC = () => {
                     className="absolute left-0 mt-2 w-48 rounded-md bg-white py-2 shadow-lg ring-1 ring-black ring-opacity-5 z-50"
                     onMouseLeave={() => setIsCommunityMenuOpen(false)}
                   >
-                    {isLoggedIn && (
-                      <>
-                        <Link
-                          to="/movie-reviews"
-                          className="block px-4 py-2 text-gray-800 hover:bg-gray-200"
-                          onClick={() => setIsCommunityMenuOpen(false)}
-                        >
-                          영화 리뷰
-                        </Link>
-                        <Link
-                          to="/tv-reviews"
-                          className="block px-4 py-2 text-gray-800 hover:bg-gray-200"
-                          onClick={() => setIsCommunityMenuOpen(false)}
-                        >
-                          TV쇼 리뷰
-                        </Link>
-                        <Link
-                          to="/community"
-                          className="block px-4 py-2 text-gray-800 hover:bg-gray-200"
-                          onClick={() => setIsCommunityMenuOpen(false)}
-                        >
-                          커뮤니티
-                        </Link>
-                      </>
-                    )}
+                    <Link
+                      to="/movie-reviews"
+                      className="block px-4 py-2 text-gray-800 hover:bg-gray-200"
+                      onClick={() => setIsCommunityMenuOpen(false)}
+                    >
+                      영화 리뷰
+                    </Link>
+                    <Link
+                      to="/tv-reviews"
+                      className="block px-4 py-2 text-gray-800 hover:bg-gray-200"
+                      onClick={() => setIsCommunityMenuOpen(false)}
+                    >
+                      TV쇼 리뷰
+                    </Link>
+                    <Link
+                      to="/community"
+                      className="block px-4 py-2 text-gray-800 hover:bg-gray-200"
+                      onClick={() => setIsCommunityMenuOpen(false)}
+                    >
+                      커뮤니티
+                    </Link>
                   </div>
                 )}
               </li>
