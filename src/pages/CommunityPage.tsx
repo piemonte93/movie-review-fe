@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
 import {
@@ -24,6 +24,12 @@ import { backendApi } from "../api/backendApi";
 import { toast } from "react-toastify";
 import type { Post, Comment, UserItem } from "../api/backendApi";
 import { formatDate } from "../utils/dateUtils";
+import { MentionsInput, Mention, SuggestionDataItem } from "react-mentions"; // Import react-mentions
+import {
+  searchUsers as apiSearchUsers, // Use alias
+  UserResponse, // Ensure imported
+  Page, // Ensure imported
+} from "../api/backendApi";
 
 // 알림 데이터 타입 정의
 interface Notification {
@@ -37,6 +43,11 @@ interface Notification {
     username: string;
     profileImageUrl: string | null;
   };
+}
+
+interface UserMentionData extends SuggestionDataItem {
+  id: string;
+  display: string;
 }
 
 const CommunityPage: React.FC = () => {
@@ -95,103 +106,39 @@ const CommunityPage: React.FC = () => {
     "comment" | "post" | null
   >(null);
 
-  // 개발 모드 확인 (실제 배포 환경에서는 false로 설정해야 함)
-  const isDevelopmentMode = true;
+  const postTextAreaRef = useRef<HTMLTextAreaElement>(null);
 
-  // 이미 신고한 항목인지 확인하는 함수
-  const isAlreadyReported = (id: number, type: "comment" | "post"): boolean => {
-    const reportedItems = JSON.parse(
-      localStorage.getItem("reportedItems") || "{}"
-    );
-    const key = `${type}_${id}`;
-    return !!reportedItems[key];
-  };
-
-  // 신고 내역 초기화 함수 (개발 전용)
-  const clearReportRecords = () => {
-    localStorage.removeItem("reportedItems");
-    toast.info("신고 내역이 초기화되었습니다.");
-  };
-
-  // 신고 기록을 저장하는 함수
-  const saveReportRecord = (id: number, type: "comment" | "post"): void => {
-    const reportedItems = JSON.parse(
-      localStorage.getItem("reportedItems") || "{}"
-    );
-    const key = `${type}_${id}`;
-    reportedItems[key] = true;
-    localStorage.setItem("reportedItems", JSON.stringify(reportedItems));
-  };
-
-  // 신고 모달 열기 함수
-  const openReportModal = (id: number, type: "comment" | "post") => {
-    // 이미 신고한 항목인지 확인
-    if (isAlreadyReported(id, type)) {
-      toast.warning("이미 신고한 항목입니다.");
-      return;
-    }
-
-    setReportTargetId(id);
-    setReportTargetType(type);
-    setReportContent("");
-    setShowReportModal(true);
-  };
-
-  // 신고 제출 처리 함수
-  const handleReportSubmit = async () => {
-    if (!reportContent.trim()) {
-      toast.error("신고 내용을 자세히 입력해주세요.");
-      return;
-    }
-
-    try {
-      const targetUserId = getReportTargetUserId();
-
-      await backendApi.createReport({
-        targetId: reportTargetId!,
-        targetUserId,
-        reportType: reportTargetType === "post" ? "post" : "comment",
-        content: reportContent,
-      });
-
-      // 신고 성공 시 로컬 스토리지에 기록
-      if (reportTargetId && reportTargetType) {
-        saveReportRecord(reportTargetId, reportTargetType);
-      }
-
-      toast.success("신고가 접수되었습니다.");
-      setShowReportModal(false);
-      setReportContent("");
-      setReportTargetId(null);
-      setReportTargetType(null);
-    } catch (error) {
-      console.error("신고 접수 실패:", error);
-      toast.error("신고 접수에 실패했습니다. 다시 시도해주세요.");
-    }
-  };
-
-  // 신고 대상의 사용자 ID를 가져오는 함수
-  const getReportTargetUserId = (): number => {
-    let targetUserId = 0;
-
-    if (reportTargetType === "post") {
-      // 게시글인 경우 user.id를 사용
-      const post = posts.find((p) => p.id === reportTargetId);
-      targetUserId = post?.user?.id || 0;
-    } else if (reportTargetType === "comment") {
-      // 댓글인 경우 모든 게시글의 모든 댓글을 검색
-      for (const post of posts) {
-        if (post.comments) {
-          const comment = post.comments.find((c) => c.id === reportTargetId);
-          if (comment) {
-            targetUserId = comment.user.id;
-            break;
-          }
+  // Function to fetch users for mentions
+  const fetchUsers = useCallback(
+    async (query: string, callback: (data: UserMentionData[]) => void) => {
+      if (!query) {
+        callback([]);
+        return;
+      } // Return empty array if query is empty
+      try {
+        const response: Page<UserResponse> = await apiSearchUsers(query);
+        if (response && response.content) {
+          const users: UserMentionData[] = response.content.map(
+            (user: UserResponse) => ({
+              id: user.username,
+              display: user.username,
+            })
+          );
+          callback(users);
+        } else {
+          callback([]);
         }
+      } catch (fetchError) {
+        console.error("Error fetching users for mention:", fetchError);
+        callback([]);
       }
-    }
+    },
+    [apiSearchUsers] // Dependency
+  );
 
-    return targetUserId;
+  // onChange handler for post content MentionsInput
+  const handlePostContentChange = (event: any, newValue: string) => {
+    setContent(newValue);
   };
 
   // 글쓰기 버튼 클릭 처리 핸들러
@@ -1366,83 +1313,24 @@ const CommunityPage: React.FC = () => {
                 />
               </div>
               <div className="mb-4 relative">
-                <textarea
-                  ref={textareaRef}
-                  placeholder="내용은 450자까지 입력 가능합니다. @를 입력하여 다른 사용자를 언급하세요."
-                  className="h-32 w-full rounded-md border border-gray-300 p-2 focus:border-blue-500 focus:outline-none"
+                {/* Replace textarea with MentionsInput */}
+                <MentionsInput
                   value={content}
-                  onChange={handleContentChange}
-                  onClick={(e) =>
-                    setCursorPosition(
-                      (e.target as HTMLTextAreaElement).selectionStart
-                    )
-                  }
-                  onKeyUp={(e) =>
-                    setCursorPosition(
-                      (e.target as HTMLTextAreaElement).selectionStart
-                    )
-                  }
+                  onChange={handlePostContentChange}
+                  placeholder="내용은 450자까지 입력 가능합니다. @를 입력하여 다른 사용자를 언급하세요."
+                  className="mentions-input w-full h-32 rounded-md border border-gray-300 p-2 focus:border-blue-500 focus:outline-none"
+                  a11ySuggestionsListLabel={"Suggested users for mention"}
+                  // inputRef={postTextAreaRef} // Optional ref
                   maxLength={450}
-                  required
-                ></textarea>
-
-                {/* 멘션 목록 */}
-                {showMentionList && (
-                  <div className="absolute left-0 z-10 mt-1 w-64 rounded-md bg-white shadow-lg">
-                    <ul className="max-h-40 overflow-y-auto">
-                      {mentionUsers.length === 0 ? (
-                        <li className="px-4 py-2 text-sm text-gray-500">
-                          일치하는 사용자가 없습니다.
-                        </li>
-                      ) : (
-                        mentionUsers.map((user) => (
-                          <li
-                            key={user.id}
-                            className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                            onClick={() => handleSelectMention(user)}
-                          >
-                            <div className="flex items-center">
-                              <div className="h-6 w-6 rounded-full bg-gray-200 mr-2">
-                                {user.profileImageUrl ? (
-                                  <img
-                                    src={user.profileImageUrl}
-                                    alt={user.username}
-                                    className="h-full w-full rounded-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center">
-                                    <FaUser
-                                      className="text-gray-500"
-                                      size={10}
-                                    />
-                                  </div>
-                                )}
-                              </div>
-                              <span>{user.username}</span>
-                            </div>
-                          </li>
-                        ))
-                      )}
-                    </ul>
-                  </div>
-                )}
-
-                {/* 언급된 사용자 목록 */}
-                {mentionedUsers.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-xs text-gray-500 mb-1">언급된 사용자:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {mentionedUsers.map((user) => (
-                        <span
-                          key={user.id}
-                          className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700"
-                        >
-                          @{user.username}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                >
+                  <Mention
+                    trigger="@"
+                    data={fetchUsers}
+                    displayTransform={(username: string) => `@${username}`}
+                    className="mentions__mention"
+                    appendSpaceOnAdd={true}
+                  />
+                </MentionsInput>
               </div>
               <div className="flex justify-end">
                 <button

@@ -649,9 +649,10 @@ const MovieReviewsPage: React.FC = () => {
         console.log("리뷰 생성 성공:", response);
 
         toast.success("리뷰가 성공적으로 등록되었습니다.");
-        resetForm();
-        setPage(0);
-        fetchReviews();
+        resetForm(); // Reset form fields
+        setShowWriteForm(false); // <-- Explicitly close the modal
+        setPage(0); // Reset page for infinite scroll
+        fetchReviews(); // Fetch updated reviews
       }
     } catch (error) {
       console.error("리뷰 제출 실패:", error);
@@ -866,7 +867,8 @@ const MovieReviewsPage: React.FC = () => {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) {
-      setSearchResults(reviews);
+      // If search query is empty, reset to show all reviews (or initial page)
+      resetSearch();
       return;
     }
 
@@ -893,6 +895,19 @@ const MovieReviewsPage: React.FC = () => {
     });
 
     setSearchResults(filtered);
+    setVisibleReviews(filtered); // Update the visible list with search results
+    setHasMore(false); // Disable infinite scroll when showing search results
+  };
+
+  // 검색 초기화
+  const resetSearch = () => {
+    setSearchQuery("");
+    setSearchResults([]); // Clear search results state
+    setVisibleReviews(reviews.slice(0, reviewsPerPage)); // Reset visible reviews to the first page
+    setHasMore(reviews.length > reviewsPerPage); // Re-enable infinite scroll if needed
+    setShowSearch(false);
+    setShowSearchModal(false);
+    // Optionally reset page number if needed, e.g., setPage(0);
   };
 
   // 검색 카테고리를 표시하는 텍스트 반환
@@ -906,251 +921,6 @@ const MovieReviewsPage: React.FC = () => {
         return "작성자";
       default:
         return "제목";
-    }
-  };
-
-  // 검색 초기화
-  const resetSearch = () => {
-    setSearchQuery("");
-    setSearchResults(reviews);
-    setShowSearch(false);
-    setShowSearchModal(false);
-  };
-
-  // 댓글 토글
-  const toggleComments = async (reviewId: number) => {
-    console.log("댓글 토글:", reviewId, "현재:", expandedCommentId);
-
-    // 이미 확장된 경우 닫기
-    if (expandedCommentId === reviewId) {
-      setExpandedCommentId(null);
-      return;
-    }
-
-    try {
-      console.log(`리뷰 ID ${reviewId}의 댓글 목록 요청 시작`);
-      // 댓글 로딩 상태 설정
-      setLoading(true);
-
-      // 댓글 데이터 가져오기 시도
-      const response = await backendApi.getReviewComments(reviewId);
-      console.log(`리뷰 ID ${reviewId}의 댓글 데이터 원본:`, response);
-      console.log(`리뷰 ID ${reviewId}의 댓글 데이터 매핑 시작`);
-
-      // 첫 번째 댓글의 구조 로깅 (디버깅용)
-      if (response.content && response.content.length > 0) {
-        const firstComment = response.content[0];
-        console.log(`첫 번째 댓글 전체 구조:`, firstComment);
-        console.log(`첫 번째 댓글 사용자 정보:`, {
-          user_id: firstComment.user_id,
-          userId: firstComment.userId,
-          user: firstComment.user,
-        });
-      }
-
-      const mappedComments: Comment[] = response.content.map(
-        (comment: CommentResponse) => {
-          // userId 정보 로깅 및 추출
-          const userId =
-            comment.user_id !== undefined
-              ? comment.user_id
-              : comment.userId !== undefined
-                ? comment.userId
-                : comment.user?.userId !== undefined
-                  ? comment.user.userId
-                  : undefined;
-
-          console.log(`댓글 ID ${comment.id}의 사용자 정보:`, {
-            originalUserId: comment.user_id,
-            alternativeUserId: comment.userId,
-            userObjectUserId: comment.user?.userId,
-            finalUserId: userId,
-          });
-
-          // 날짜 데이터 확인 및 처리
-          let createdAt;
-
-          if (comment.created_at && comment.created_at.trim() !== "") {
-            try {
-              // 서버로부터 온 LocalDateTime 문자열 처리 (2023-04-03T15:30:45)
-              const localDateTimeRegex =
-                /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
-              if (localDateTimeRegex.test(comment.created_at)) {
-                console.log(
-                  `댓글 ID ${comment.id}의 LocalDateTime 형식 감지:`,
-                  comment.created_at
-                );
-
-                // 중요: 서버에서 보낸 시간은 이미 KST(한국시간)이지만 타임존 정보가 없음
-                // 기존: Z를 추가하여 UTC로 해석하는 방식은 시간이 잘못 표시되는 문제 발생
-                // 수정: 타임존 정보만 추가(KST = +09:00)하고 추가 계산을 하지 않음
-                const date = new Date(`${comment.created_at}+09:00`);
-                createdAt = date.toISOString();
-
-                console.log(
-                  `댓글 ID ${comment.id}의 KST 타임존 정보 추가:`,
-                  createdAt
-                );
-              } else {
-                createdAt = comment.created_at;
-              }
-
-              // 날짜 형식 검증
-              const testDate = new Date(createdAt);
-              if (isNaN(testDate.getTime())) {
-                throw new Error("유효하지 않은 날짜 형식");
-              }
-
-              // 미래 날짜 체크 (디버깅 용도)
-              if (testDate.getTime() > Date.now()) {
-                console.log(
-                  `댓글 ID ${comment.id}의 날짜가 미래입니다:`,
-                  createdAt
-                );
-                // 미래 날짜도 그대로 표시 (수정됨)
-              }
-            } catch (error) {
-              console.warn(`날짜 파싱 오류 (댓글 ID: ${comment.id}):`, error);
-              createdAt = new Date().toISOString();
-            }
-          } else {
-            console.warn(`댓글 ID ${comment.id}의 created_at이 비어있습니다.`);
-            createdAt = new Date().toISOString();
-          }
-
-          console.log(`댓글 ID ${comment.id}의 최종 날짜 값:`, createdAt);
-          console.log(`댓글 ID ${comment.id}의 최종 userId 값:`, userId);
-
-          return {
-            id: comment.id,
-            content: comment.content,
-            createdAt: createdAt,
-            username: comment.username,
-            profileImageUrl: comment.user_profile_image_url,
-            likeCount: 0,
-            dislikeCount: 0,
-            userId: userId,
-            user: {
-              id: comment.user?.userId || 0,
-              username: comment.user?.username || comment.username || "",
-              profileImageUrl:
-                comment.user?.profileUrl ||
-                comment.user_profile_image_url ||
-                null,
-            },
-          };
-        }
-      );
-
-      console.log(`리뷰 ID ${reviewId}의 변환된 댓글:`, mappedComments);
-
-      setReviews((prevReviews) =>
-        prevReviews.map((review) =>
-          review.id === reviewId
-            ? { ...review, comments: mappedComments }
-            : review
-        )
-      );
-
-      // 가시적인 리뷰 목록도 업데이트
-      setVisibleReviews((prevReviews) =>
-        prevReviews.map((review) =>
-          review.id === reviewId
-            ? { ...review, comments: mappedComments }
-            : review
-        )
-      );
-
-      // 댓글 ID 설정 (추가)
-      setExpandedCommentId(reviewId);
-    } catch (error) {
-      console.error(`리뷰 ID ${reviewId}의 댓글 목록 불러오기 실패:`, error);
-      toast.error("댓글 목록을 불러오는데 실패했습니다.");
-    } finally {
-      // 로딩 상태 해제
-      setLoading(false);
-    }
-  };
-
-  // fetchReviewComments: 별도 함수로 댓글 목록을 가져옴
-  const fetchReviewComments = async (reviewId: number) => {
-    try {
-      console.log(`리뷰 ID ${reviewId}의 댓글 목록 새로고침 요청`);
-      const response = await backendApi.getReviewComments(reviewId);
-
-      const mappedComments: Comment[] = response.content.map(
-        (comment: CommentResponse) => {
-          // userId 정보 로깅 및 추출
-          const userId =
-            comment.user_id !== undefined
-              ? comment.user_id
-              : comment.userId !== undefined
-                ? comment.userId
-                : comment.user?.userId !== undefined
-                  ? comment.user.userId
-                  : undefined;
-
-          // 날짜 처리
-          let createdAt;
-          if (comment.created_at && comment.created_at.trim() !== "") {
-            try {
-              const localDateTimeRegex =
-                /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
-              if (localDateTimeRegex.test(comment.created_at)) {
-                const date = new Date(`${comment.created_at}+09:00`);
-                createdAt = date.toISOString();
-              } else {
-                createdAt = comment.created_at;
-              }
-            } catch (error) {
-              createdAt = new Date().toISOString();
-            }
-          } else {
-            createdAt = new Date().toISOString();
-          }
-
-          return {
-            id: comment.id,
-            content: comment.content,
-            createdAt: createdAt,
-            username: comment.username,
-            profileImageUrl: comment.user_profile_image_url,
-            likeCount: 0,
-            dislikeCount: 0,
-            userId: userId,
-            user: {
-              id: comment.user?.userId || 0,
-              username: comment.user?.username || comment.username || "",
-              profileImageUrl:
-                comment.user?.profileUrl ||
-                comment.user_profile_image_url ||
-                null,
-            },
-          };
-        }
-      );
-
-      // 리뷰 상태 업데이트
-      setReviews((prevReviews) =>
-        prevReviews.map((review) =>
-          review.id === reviewId
-            ? { ...review, comments: mappedComments }
-            : review
-        )
-      );
-
-      setVisibleReviews((prevReviews) =>
-        prevReviews.map((review) =>
-          review.id === reviewId
-            ? { ...review, comments: mappedComments }
-            : review
-        )
-      );
-
-      return mappedComments;
-    } catch (error) {
-      console.error(`댓글 목록 새로고침 실패:`, error);
-      throw error;
     }
   };
 
@@ -1601,6 +1371,116 @@ const MovieReviewsPage: React.FC = () => {
     }
   };
 
+  // Optionally reset page number if needed, e.g., setPage(0);
+
+  // --- Start: Restore toggleComments and fetchReviewComments ---
+
+  // 댓글 토글 함수 - 댓글 보여주기/숨기기 및 댓글 데이터 로드
+  const toggleComments = async (reviewId: number) => {
+    console.log(
+      "댓글 토글 시도:",
+      reviewId,
+      "현재 확장 ID:",
+      expandedCommentId
+    );
+    // 이미 확장된 댓글이면 닫기
+    if (expandedCommentId === reviewId) {
+      console.log(`리뷰 ${reviewId} 댓글 닫기`);
+      setExpandedCommentId(null);
+      return;
+    }
+
+    // 댓글 로딩 상태 설정 (선택적)
+    // setLoading(true); // 필요하다면 로딩 상태 관리 추가
+
+    try {
+      console.log(`리뷰 ${reviewId} 댓글 로드 시작`);
+      // 댓글 데이터 가져오기 (fetchReviewComments 함수 사용)
+      const comments = await fetchReviewComments(reviewId);
+      console.log(`리뷰 ${reviewId} 댓글 로드 완료:`, comments);
+      // 성공적으로 댓글을 가져왔으면 해당 리뷰의 댓글 섹션 확장
+      setExpandedCommentId(reviewId);
+      console.log(`리뷰 ${reviewId} 댓글 확장됨`);
+    } catch (error) {
+      console.error(`리뷰 ID ${reviewId}의 댓글 목록 불러오기 실패:`, error);
+      toast.error("댓글 목록을 불러오는데 실패했습니다.");
+      setExpandedCommentId(null); // 에러 발생 시 확장 상태 해제
+    } finally {
+      // setLoading(false); // 로딩 상태 해제
+    }
+  };
+
+  // 특정 리뷰의 댓글 목록을 가져오고 상태를 업데이트하는 함수
+  const fetchReviewComments = async (reviewId: number): Promise<Comment[]> => {
+    try {
+      console.log(`API 호출: 리뷰 ID ${reviewId}의 댓글 목록 가져오기`);
+      const response = await backendApi.getReviewComments(reviewId);
+      console.log(`리뷰 ID ${reviewId} 댓글 API 응답 원본:`, response);
+
+      if (!response || !response.content || !Array.isArray(response.content)) {
+        console.warn(
+          `리뷰 ID ${reviewId}에 대한 댓글 데이터 형식이 잘못되었거나 데이터가 없습니다.`
+        );
+        // 댓글 데이터가 없어도 리뷰 상태 업데이트 (빈 배열로)
+        updateReviewCommentsState(reviewId, []);
+        return []; // 빈 배열 반환
+      }
+
+      const mappedComments: Comment[] = response.content.map(
+        (comment: CommentResponse) => {
+          const dateValue = comment.created_at || comment.createdAt;
+          const createdAt = convertBackendDateToISO(dateValue);
+          const userId =
+            comment.user_id ?? comment.userId ?? comment.user?.userId ?? 0;
+          const username =
+            comment.username ?? comment.user?.username ?? "알 수 없음";
+          const profileImageUrl =
+            comment.user_profile_image_url ?? comment.user?.profileUrl ?? null;
+
+          return {
+            id: comment.id,
+            content: comment.content,
+            createdAt: createdAt,
+            username: username,
+            profileImageUrl: profileImageUrl,
+            likeCount: comment.likeCount || 0,
+            dislikeCount: comment.dislikeCount || 0,
+            userId: userId,
+          };
+        }
+      );
+
+      console.log(`리뷰 ID ${reviewId} 매핑된 댓글:`, mappedComments);
+
+      // 댓글 데이터로 리뷰 상태 업데이트
+      updateReviewCommentsState(reviewId, mappedComments);
+
+      return mappedComments;
+    } catch (error) {
+      console.error(`리뷰 ID ${reviewId} 댓글 목록 가져오기 실패:`, error);
+      toast.error("댓글 목록을 불러오는 중 오류가 발생했습니다.");
+      // 에러 발생 시에도 리뷰 상태 업데이트 (빈 배열로)
+      updateReviewCommentsState(reviewId, []);
+      throw error; // 에러를 다시 던져 toggleComments에서 처리하도록 함
+    }
+  };
+
+  // 리뷰 상태 업데이트 로직 분리 (코드 중복 방지)
+  const updateReviewCommentsState = (reviewId: number, comments: Comment[]) => {
+    setReviews((prevReviews) =>
+      prevReviews.map((review) =>
+        review.id === reviewId ? { ...review, comments: comments } : review
+      )
+    );
+    setVisibleReviews((prevVisibleReviews) =>
+      prevVisibleReviews.map((review) =>
+        review.id === reviewId ? { ...review, comments: comments } : review
+      )
+    );
+  };
+
+  // --- End: Restore toggleComments and fetchReviewComments ---
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* 리뷰 작성 버튼 */}
@@ -1797,49 +1677,47 @@ const MovieReviewsPage: React.FC = () => {
 
               {/* 영화 정보와 리뷰 내용 */}
               <div className="flex flex-col sm:flex-row mb-4">
+                {/* Poster Container */}
                 <div className="flex flex-col w-full sm:w-32 mb-3 sm:mb-0 sm:mr-4 flex-shrink-0 items-center sm:items-start">
                   {review.moviePoster ? (
+                    // Apply aspect ratio to this wrapper div
                     <div
-                      className="cursor-pointer"
+                      className="cursor-pointer w-full aspect-[2/3] mb-1" // Added aspect-ratio and adjusted margin
                       onClick={() => navigateToMovieDetail(review.movieId)}
                     >
                       <img
                         src={getPosterUrl(review.moviePoster, "w500")}
                         alt={review.movieTitle}
-                        className="w-auto max-w-[150px] sm:w-full max-h-[225px] object-cover rounded mb-2"
+                        // Image fills the aspect ratio container, keep object-cover and rounded
+                        className="w-full h-full object-cover rounded"
                         onError={(e) => {
-                          console.log(
-                            `이미지 로드 실패: ${review.moviePoster}`
-                          );
                           (e.target as HTMLImageElement).src =
-                            "https://via.placeholder.com/1000x1500?text=No+Image";
+                            "https://via.placeholder.com/500x750?text=No+Image";
                         }}
                       />
-                      <p
-                        className="text-sm font-semibold text-center w-full truncate max-w-[150px] sm:max-w-full"
-                        title={review.movieTitle}
-                      >
-                        {review.movieTitle}
-                      </p>
                     </div>
                   ) : (
+                    // Apply same aspect ratio to placeholder wrapper
                     <div
-                      className="cursor-pointer"
+                      className="cursor-pointer w-full aspect-[2/3] mb-1"
                       onClick={() => navigateToMovieDetail(review.movieId)}
                     >
-                      <div className="w-[150px] sm:w-full h-[225px] bg-gray-200 rounded flex items-center justify-center mb-2">
+                      {/* Placeholder fills the aspect ratio container */}
+                      <div className="w-full h-full bg-gray-200 rounded flex items-center justify-center">
                         <FaFilm className="text-gray-400 text-4xl" />
                       </div>
-                      <p
-                        className="text-sm font-semibold text-center w-full truncate max-w-[150px] sm:max-w-full"
-                        title={review.movieTitle}
-                      >
-                        {review.movieTitle}
-                      </p>
                     </div>
                   )}
+                  {/* Movie title below the aspect ratio container */}
+                  <p
+                    className="text-sm font-semibold text-center w-full truncate max-w-full" // Use max-w-full for consistency
+                    title={review.movieTitle}
+                  >
+                    {review.movieTitle}
+                  </p>
                 </div>
-                <div className="flex-1">
+                {/* Content Container - Add min-w-0 */}
+                <div className="flex-1 min-w-0">
                   <div
                     className={`transition-all duration-300 ${
                       review.isSpoiler ? "blur-sm hover:blur-none" : ""

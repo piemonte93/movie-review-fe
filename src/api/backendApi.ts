@@ -1365,7 +1365,7 @@ export const backendApi = {
           },
         }
       );
-      
+
       // 명시적으로 좋아요/싫어요 수를 숫자로 변환한 응답 반환
       const processedResponse = {
         ...response.data,
@@ -1374,7 +1374,7 @@ export const backendApi = {
         liked: !!response.data.liked,
         disliked: !!response.data.disliked,
       };
-      
+
       return processedResponse;
     } catch (error) {
       console.error("게시글 좋아요 실패:", error);
@@ -1411,7 +1411,7 @@ export const backendApi = {
           },
         }
       );
-      
+
       // 명시적으로 좋아요/싫어요 수를 숫자로 변환한 응답 반환
       const processedResponse = {
         ...response.data,
@@ -1420,7 +1420,7 @@ export const backendApi = {
         liked: !!response.data.liked,
         disliked: !!response.data.disliked,
       };
-      
+
       return processedResponse;
     } catch (error) {
       console.error("게시글 싫어요 실패:", error);
@@ -2802,3 +2802,64 @@ export interface User {
   blockReason?: string | null;
   blockDate?: string | null;
 }
+
+// Add UserResponse interface matching backend DTO
+export interface UserResponse {
+  id: number;
+  username: string;
+  email: string;
+  profileImageUrl: string | null;
+  bio: string | null;
+  socialLogin: boolean;
+  roles: string[];
+  status: string;
+  blockReason: string | null;
+  blockDate: string | null; // Assuming LocalDateTime is serialized as string
+  reportedCount: number;
+}
+
+// 페이징 인터페이스 정의 (Ensure Page interface exists and includes content)
+export interface Page<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+  first: boolean;
+  last: boolean;
+  empty: boolean;
+}
+
+// Add function to search users by username
+export const searchUsers = async (
+  query: string,
+  page = 0,
+  size = 10
+): Promise<Page<UserResponse>> => {
+  try {
+    const response = await apiClient.get<Page<UserResponse>>(
+      "/api/users/search",
+      {
+        params: { query, page, size },
+      }
+    );
+    // Ensure content is always an array
+    if (!response.data.content) {
+      response.data.content = [];
+    }
+    return response.data;
+  } catch (error) {
+    console.error("Error searching users:", error);
+    // Return an empty page structure on error
+    return {
+      content: [],
+      totalElements: 0,
+      totalPages: 0,
+      number: page,
+      size: size,
+      first: true,
+      last: true,
+      empty: true,
+    };
+  }
+};
