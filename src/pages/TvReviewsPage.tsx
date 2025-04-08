@@ -636,7 +636,7 @@ const TvReviewsPage: React.FC = () => {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) {
-      setSearchResults(reviews);
+      resetSearch(); // Reset if query is empty
       return;
     }
 
@@ -663,6 +663,8 @@ const TvReviewsPage: React.FC = () => {
     });
 
     setSearchResults(filtered);
+    setVisibleReviews(filtered); // Update visible reviews
+    setHasMore(false); // Disable infinite scroll for search results
   };
 
   // 검색 카테고리를 표시하는 텍스트 반환
@@ -682,9 +684,12 @@ const TvReviewsPage: React.FC = () => {
   // 검색 초기화
   const resetSearch = () => {
     setSearchQuery("");
-    setSearchResults(reviews);
+    setSearchResults([]); // Clear search results state
+    setVisibleReviews(reviews.slice(0, reviewsPerPage)); // Reset visible reviews
+    setHasMore(reviews.length > reviewsPerPage); // Re-enable infinite scroll
     setShowSearch(false);
     setShowSearchModal(false);
+    // Optionally reset page number if needed, e.g., setPage(0);
   };
 
   // 댓글 토글 함수 - 댓글 보여주기/숨기기 및 댓글 데이터 로드
