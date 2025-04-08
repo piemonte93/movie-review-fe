@@ -716,17 +716,10 @@ const CommunityPage: React.FC = () => {
       // 댓글 데이터 검증 및 가공
       const processedComments = comments.map((comment) => ({
         ...comment,
-        likeCount:
-          comment.likeCount !== undefined && comment.likeCount !== null
-            ? Number(comment.likeCount)
-            : 0,
-        dislikeCount:
-          comment.dislikeCount !== undefined && comment.dislikeCount !== null
-            ? Number(comment.dislikeCount)
-            : 0,
-        // 다른 필드도 검증이 필요한 경우 추가
-        liked: Boolean(comment.liked),
-        disliked: Boolean(comment.disliked),
+        likeCount: parseInt(String(comment.likeCount || "0"), 10),
+        dislikeCount: parseInt(String(comment.dislikeCount || "0"), 10),
+        liked: !!comment.liked,
+        disliked: !!comment.disliked,
       }));
 
       console.log(`가공된 댓글 데이터:`, processedComments);
@@ -767,37 +760,60 @@ const CommunityPage: React.FC = () => {
 
       const updatedPost = await backendApi.likePost(postId);
       console.log("좋아요 API 응답 데이터:", updatedPost);
-      console.log("API 응답의 좋아요 수:", updatedPost.likeCount);
-      console.log("API 응답의 싫어요 수:", updatedPost.dislikeCount);
-      console.log("API 응답의 좋아요 상태:", updatedPost.liked);
-      console.log("API 응답의 싫어요 상태:", updatedPost.disliked);
+      console.log(
+        "API 응답의 좋아요 수:",
+        updatedPost.likeCount,
+        typeof updatedPost.likeCount
+      );
+      console.log(
+        "API 응답의 싫어요 수:",
+        updatedPost.dislikeCount,
+        typeof updatedPost.dislikeCount
+      );
+      console.log(
+        "API 응답의 좋아요 상태:",
+        updatedPost.liked,
+        typeof updatedPost.liked
+      );
+      console.log(
+        "API 응답의 싫어요 상태:",
+        updatedPost.disliked,
+        typeof updatedPost.disliked
+      );
 
       // 게시글 목록 업데이트
       setPosts((prevPosts) =>
-        prevPosts.map((post) =>
-          post.id === postId
-            ? {
-                ...post,
-                likeCount: updatedPost.likeCount ?? 0,
-                dislikeCount: updatedPost.dislikeCount ?? 0,
-                liked: Boolean(updatedPost.liked),
-                disliked: Boolean(updatedPost.disliked),
-              }
-            : post
-        )
+        prevPosts.map((post) => {
+          if (post.id === postId) {
+            const updatedPostData = {
+              ...post,
+              likeCount: updatedPost.likeCount,
+              dislikeCount: updatedPost.dislikeCount,
+              liked: updatedPost.liked,
+              disliked: updatedPost.disliked,
+            };
+            console.log("업데이트된 게시글 데이터:", updatedPostData);
+            return updatedPostData;
+          }
+          return post;
+        })
       );
+
       setVisiblePosts((prevPosts) =>
-        prevPosts.map((post) =>
-          post.id === postId
-            ? {
-                ...post,
-                likeCount: updatedPost.likeCount ?? 0,
-                dislikeCount: updatedPost.dislikeCount ?? 0,
-                liked: Boolean(updatedPost.liked),
-                disliked: Boolean(updatedPost.disliked),
-              }
-            : post
-        )
+        prevPosts.map((post) => {
+          if (post.id === postId) {
+            const updatedPostData = {
+              ...post,
+              likeCount: updatedPost.likeCount,
+              dislikeCount: updatedPost.dislikeCount,
+              liked: updatedPost.liked,
+              disliked: updatedPost.disliked,
+            };
+            console.log("업데이트된 visible 게시글 데이터:", updatedPostData);
+            return updatedPostData;
+          }
+          return post;
+        })
       );
 
       // 업데이트 후 상태 확인을 위한 setTimeout 추가
@@ -840,37 +856,60 @@ const CommunityPage: React.FC = () => {
 
       const updatedPost = await backendApi.dislikePost(postId);
       console.log("싫어요 API 응답 데이터:", updatedPost);
-      console.log("API 응답의 좋아요 수:", updatedPost.likeCount);
-      console.log("API 응답의 싫어요 수:", updatedPost.dislikeCount);
-      console.log("API 응답의 좋아요 상태:", updatedPost.liked);
-      console.log("API 응답의 싫어요 상태:", updatedPost.disliked);
+      console.log(
+        "API 응답의 좋아요 수:",
+        updatedPost.likeCount,
+        typeof updatedPost.likeCount
+      );
+      console.log(
+        "API 응답의 싫어요 수:",
+        updatedPost.dislikeCount,
+        typeof updatedPost.dislikeCount
+      );
+      console.log(
+        "API 응답의 좋아요 상태:",
+        updatedPost.liked,
+        typeof updatedPost.liked
+      );
+      console.log(
+        "API 응답의 싫어요 상태:",
+        updatedPost.disliked,
+        typeof updatedPost.disliked
+      );
 
       // 게시글 목록 업데이트
       setPosts((prevPosts) =>
-        prevPosts.map((post) =>
-          post.id === postId
-            ? {
-                ...post,
-                likeCount: updatedPost.likeCount ?? 0,
-                dislikeCount: updatedPost.dislikeCount ?? 0,
-                liked: Boolean(updatedPost.liked),
-                disliked: Boolean(updatedPost.disliked),
-              }
-            : post
-        )
+        prevPosts.map((post) => {
+          if (post.id === postId) {
+            const updatedPostData = {
+              ...post,
+              likeCount: updatedPost.likeCount,
+              dislikeCount: updatedPost.dislikeCount,
+              liked: updatedPost.liked,
+              disliked: updatedPost.disliked,
+            };
+            console.log("업데이트된 게시글 데이터:", updatedPostData);
+            return updatedPostData;
+          }
+          return post;
+        })
       );
+
       setVisiblePosts((prevPosts) =>
-        prevPosts.map((post) =>
-          post.id === postId
-            ? {
-                ...post,
-                likeCount: updatedPost.likeCount ?? 0,
-                dislikeCount: updatedPost.dislikeCount ?? 0,
-                liked: Boolean(updatedPost.liked),
-                disliked: Boolean(updatedPost.disliked),
-              }
-            : post
-        )
+        prevPosts.map((post) => {
+          if (post.id === postId) {
+            const updatedPostData = {
+              ...post,
+              likeCount: updatedPost.likeCount,
+              dislikeCount: updatedPost.dislikeCount,
+              liked: updatedPost.liked,
+              disliked: updatedPost.disliked,
+            };
+            console.log("업데이트된 visible 게시글 데이터:", updatedPostData);
+            return updatedPostData;
+          }
+          return post;
+        })
       );
 
       // 업데이트 후 상태 확인을 위한 setTimeout 추가
@@ -1010,34 +1049,30 @@ const CommunityPage: React.FC = () => {
         response.dislikeCount,
         typeof response.dislikeCount
       );
+      console.log("응답의 좋아요 상태:", response.liked, typeof response.liked);
+      console.log(
+        "응답의 싫어요 상태:",
+        response.disliked,
+        typeof response.disliked
+      );
 
       // 현재 게시글의 댓글 목록 업데이트
       const updatedPosts = posts.map((post) => {
         if (post.id === expandedPostId) {
           const updatedComments = post.comments.map((comment) => {
             if (comment.id === commentId) {
-              // 명시적으로 숫자형으로 변환하여 UI에 표시될 수 있도록 함
-              const likeCount =
-                response.likeCount !== undefined && response.likeCount !== null
-                  ? Number(response.likeCount)
-                  : 0;
-
-              const dislikeCount =
-                response.dislikeCount !== undefined &&
-                response.dislikeCount !== null
-                  ? Number(response.dislikeCount)
-                  : 0;
-
-              console.log("변환된 좋아요 수:", likeCount);
-              console.log("변환된 싫어요 수:", dislikeCount);
-
-              return {
+              const updatedComment = {
                 ...comment,
-                likeCount: likeCount,
-                dislikeCount: dislikeCount,
-                liked: Boolean(response.liked),
-                disliked: Boolean(response.disliked),
+                likeCount: parseInt(String(response.likeCount || "0"), 10),
+                dislikeCount: parseInt(
+                  String(response.dislikeCount || "0"),
+                  10
+                ),
+                liked: !!response.liked,
+                disliked: !!response.disliked,
               };
+              console.log("업데이트된 댓글 데이터:", updatedComment);
+              return updatedComment;
             }
             return comment;
           });
@@ -1050,7 +1085,11 @@ const CommunityPage: React.FC = () => {
       setPosts(updatedPosts);
       // 현재 보이는 게시글 목록도 업데이트
       setVisiblePosts(
-        updatedPosts.filter((post, index) => index < (page + 1) * postsPerPage)
+        visiblePosts.map((post) =>
+          post.id === expandedPostId
+            ? updatedPosts.find((p) => p.id === expandedPostId) || post
+            : post
+        )
       );
 
       toast.success(
@@ -1060,7 +1099,7 @@ const CommunityPage: React.FC = () => {
       );
     } catch (error) {
       console.error("댓글 좋아요 처리 실패:", error);
-      toast.error("댓글 좋아요 처리에 실패했습니다.");
+      toast.error("좋아요 처리에 실패했습니다.");
     }
   };
 
@@ -1089,28 +1128,18 @@ const CommunityPage: React.FC = () => {
         if (post.id === expandedPostId) {
           const updatedComments = post.comments.map((comment) => {
             if (comment.id === commentId) {
-              // 명시적으로 숫자형으로 변환하여 UI에 표시될 수 있도록 함
-              const likeCount =
-                response.likeCount !== undefined && response.likeCount !== null
-                  ? Number(response.likeCount)
-                  : 0;
-
-              const dislikeCount =
-                response.dislikeCount !== undefined &&
-                response.dislikeCount !== null
-                  ? Number(response.dislikeCount)
-                  : 0;
-
-              console.log("변환된 좋아요 수:", likeCount);
-              console.log("변환된 싫어요 수:", dislikeCount);
-
-              return {
+              const updatedComment = {
                 ...comment,
-                likeCount: likeCount,
-                dislikeCount: dislikeCount,
-                liked: Boolean(response.liked),
-                disliked: Boolean(response.disliked),
+                likeCount: parseInt(String(response.likeCount || "0"), 10),
+                dislikeCount: parseInt(
+                  String(response.dislikeCount || "0"),
+                  10
+                ),
+                liked: !!response.liked,
+                disliked: !!response.disliked,
               };
+              console.log("업데이트된 댓글 데이터:", updatedComment);
+              return updatedComment;
             }
             return comment;
           });
@@ -1123,17 +1152,21 @@ const CommunityPage: React.FC = () => {
       setPosts(updatedPosts);
       // 현재 보이는 게시글 목록도 업데이트
       setVisiblePosts(
-        updatedPosts.filter((post, index) => index < (page + 1) * postsPerPage)
+        visiblePosts.map((post) =>
+          post.id === expandedPostId
+            ? updatedPosts.find((p) => p.id === expandedPostId) || post
+            : post
+        )
       );
 
       toast.success(
         response.disliked
           ? "댓글에 싫어요를 표시했습니다."
-          : "댓글에 싫어요를 취소했습니다."
+          : "싫어요를 취소했습니다."
       );
     } catch (error) {
       console.error("댓글 싫어요 처리 실패:", error);
-      toast.error("댓글 싫어요 처리에 실패했습니다.");
+      toast.error("싫어요 처리에 실패했습니다.");
     }
   };
 
@@ -1580,7 +1613,9 @@ const CommunityPage: React.FC = () => {
                               <FaThumbsUp size={14} />
                             </button>
                             <span className="text-sm">
-                              {post.likeCount || 0}
+                              {post.likeCount !== undefined
+                                ? post.likeCount
+                                : 0}
                             </span>
                           </div>
                           <div className="flex items-center space-x-1">
@@ -1593,7 +1628,9 @@ const CommunityPage: React.FC = () => {
                               <FaThumbsDown size={14} />
                             </button>
                             <span className="text-sm">
-                              {post.dislikeCount || 0}
+                              {post.dislikeCount !== undefined
+                                ? post.dislikeCount
+                                : 0}
                             </span>
                           </div>
                           <button
@@ -1697,10 +1734,12 @@ const CommunityPage: React.FC = () => {
                                 >
                                   <FaThumbsUp />
                                   <span>
-                                    {comment.likeCount !== undefined &&
-                                    comment.likeCount !== null
-                                      ? Number(comment.likeCount)
-                                      : 0}
+                                    {Number.isInteger(comment.likeCount)
+                                      ? comment.likeCount
+                                      : parseInt(
+                                          String(comment.likeCount || "0"),
+                                          10
+                                        )}
                                   </span>
                                 </button>
                                 <button
@@ -1715,10 +1754,12 @@ const CommunityPage: React.FC = () => {
                                 >
                                   <FaThumbsDown />
                                   <span>
-                                    {comment.dislikeCount !== undefined &&
-                                    comment.dislikeCount !== null
-                                      ? Number(comment.dislikeCount)
-                                      : 0}
+                                    {Number.isInteger(comment.dislikeCount)
+                                      ? comment.dislikeCount
+                                      : parseInt(
+                                          String(comment.dislikeCount || "0"),
+                                          10
+                                        )}
                                   </span>
                                 </button>
                               </div>
@@ -1943,7 +1984,9 @@ const CommunityPage: React.FC = () => {
                           >
                             <FaThumbsUp size={14} />
                           </button>
-                          <span className="text-sm">{post.likeCount || 0}</span>
+                          <span className="text-sm">
+                            {post.likeCount !== undefined ? post.likeCount : 0}
+                          </span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <button
@@ -1955,7 +1998,9 @@ const CommunityPage: React.FC = () => {
                             <FaThumbsDown size={14} />
                           </button>
                           <span className="text-sm">
-                            {post.dislikeCount || 0}
+                            {post.dislikeCount !== undefined
+                              ? post.dislikeCount
+                              : 0}
                           </span>
                         </div>
                         <button
@@ -2057,10 +2102,12 @@ const CommunityPage: React.FC = () => {
                               >
                                 <FaThumbsUp />
                                 <span>
-                                  {comment.likeCount !== undefined &&
-                                  comment.likeCount !== null
-                                    ? Number(comment.likeCount)
-                                    : 0}
+                                  {Number.isInteger(comment.likeCount)
+                                    ? comment.likeCount
+                                    : parseInt(
+                                        String(comment.likeCount || "0"),
+                                        10
+                                      )}
                                 </span>
                               </button>
                               <button
@@ -2073,10 +2120,12 @@ const CommunityPage: React.FC = () => {
                               >
                                 <FaThumbsDown />
                                 <span>
-                                  {comment.dislikeCount !== undefined &&
-                                  comment.dislikeCount !== null
-                                    ? Number(comment.dislikeCount)
-                                    : 0}
+                                  {Number.isInteger(comment.dislikeCount)
+                                    ? comment.dislikeCount
+                                    : parseInt(
+                                        String(comment.dislikeCount || "0"),
+                                        10
+                                      )}
                                 </span>
                               </button>
                             </div>
