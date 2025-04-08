@@ -1371,6 +1371,116 @@ const MovieReviewsPage: React.FC = () => {
     }
   };
 
+  // Optionally reset page number if needed, e.g., setPage(0);
+
+  // --- Start: Restore toggleComments and fetchReviewComments ---
+
+  // 댓글 토글 함수 - 댓글 보여주기/숨기기 및 댓글 데이터 로드
+  const toggleComments = async (reviewId: number) => {
+    console.log(
+      "댓글 토글 시도:",
+      reviewId,
+      "현재 확장 ID:",
+      expandedCommentId
+    );
+    // 이미 확장된 댓글이면 닫기
+    if (expandedCommentId === reviewId) {
+      console.log(`리뷰 ${reviewId} 댓글 닫기`);
+      setExpandedCommentId(null);
+      return;
+    }
+
+    // 댓글 로딩 상태 설정 (선택적)
+    // setLoading(true); // 필요하다면 로딩 상태 관리 추가
+
+    try {
+      console.log(`리뷰 ${reviewId} 댓글 로드 시작`);
+      // 댓글 데이터 가져오기 (fetchReviewComments 함수 사용)
+      const comments = await fetchReviewComments(reviewId);
+      console.log(`리뷰 ${reviewId} 댓글 로드 완료:`, comments);
+      // 성공적으로 댓글을 가져왔으면 해당 리뷰의 댓글 섹션 확장
+      setExpandedCommentId(reviewId);
+      console.log(`리뷰 ${reviewId} 댓글 확장됨`);
+    } catch (error) {
+      console.error(`리뷰 ID ${reviewId}의 댓글 목록 불러오기 실패:`, error);
+      toast.error("댓글 목록을 불러오는데 실패했습니다.");
+      setExpandedCommentId(null); // 에러 발생 시 확장 상태 해제
+    } finally {
+      // setLoading(false); // 로딩 상태 해제
+    }
+  };
+
+  // 특정 리뷰의 댓글 목록을 가져오고 상태를 업데이트하는 함수
+  const fetchReviewComments = async (reviewId: number): Promise<Comment[]> => {
+    try {
+      console.log(`API 호출: 리뷰 ID ${reviewId}의 댓글 목록 가져오기`);
+      const response = await backendApi.getReviewComments(reviewId);
+      console.log(`리뷰 ID ${reviewId} 댓글 API 응답 원본:`, response);
+
+      if (!response || !response.content || !Array.isArray(response.content)) {
+        console.warn(
+          `리뷰 ID ${reviewId}에 대한 댓글 데이터 형식이 잘못되었거나 데이터가 없습니다.`
+        );
+        // 댓글 데이터가 없어도 리뷰 상태 업데이트 (빈 배열로)
+        updateReviewCommentsState(reviewId, []);
+        return []; // 빈 배열 반환
+      }
+
+      const mappedComments: Comment[] = response.content.map(
+        (comment: CommentResponse) => {
+          const dateValue = comment.created_at || comment.createdAt;
+          const createdAt = convertBackendDateToISO(dateValue);
+          const userId =
+            comment.user_id ?? comment.userId ?? comment.user?.userId ?? 0;
+          const username =
+            comment.username ?? comment.user?.username ?? "알 수 없음";
+          const profileImageUrl =
+            comment.user_profile_image_url ?? comment.user?.profileUrl ?? null;
+
+          return {
+            id: comment.id,
+            content: comment.content,
+            createdAt: createdAt,
+            username: username,
+            profileImageUrl: profileImageUrl,
+            likeCount: comment.likeCount || 0,
+            dislikeCount: comment.dislikeCount || 0,
+            userId: userId,
+          };
+        }
+      );
+
+      console.log(`리뷰 ID ${reviewId} 매핑된 댓글:`, mappedComments);
+
+      // 댓글 데이터로 리뷰 상태 업데이트
+      updateReviewCommentsState(reviewId, mappedComments);
+
+      return mappedComments;
+    } catch (error) {
+      console.error(`리뷰 ID ${reviewId} 댓글 목록 가져오기 실패:`, error);
+      toast.error("댓글 목록을 불러오는 중 오류가 발생했습니다.");
+      // 에러 발생 시에도 리뷰 상태 업데이트 (빈 배열로)
+      updateReviewCommentsState(reviewId, []);
+      throw error; // 에러를 다시 던져 toggleComments에서 처리하도록 함
+    }
+  };
+
+  // 리뷰 상태 업데이트 로직 분리 (코드 중복 방지)
+  const updateReviewCommentsState = (reviewId: number, comments: Comment[]) => {
+    setReviews((prevReviews) =>
+      prevReviews.map((review) =>
+        review.id === reviewId ? { ...review, comments: comments } : review
+      )
+    );
+    setVisibleReviews((prevVisibleReviews) =>
+      prevVisibleReviews.map((review) =>
+        review.id === reviewId ? { ...review, comments: comments } : review
+      )
+    );
+  };
+
+  // --- End: Restore toggleComments and fetchReviewComments ---
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* 리뷰 작성 버튼 */}
