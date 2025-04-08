@@ -22,8 +22,13 @@ const NotificationModal: React.FC<NotificationModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { notifications, markAsRead, markAllAsRead, fetchNotifications } =
-    useNotifications();
+  const {
+    notifications,
+    markAsRead,
+    markAllAsRead,
+    clearNotifications,
+    fetchNotifications,
+  } = useNotifications();
   const navigate = useNavigate();
 
   // 모달이 열릴 때 알림 데이터 불러오기
@@ -119,6 +124,18 @@ const NotificationModal: React.FC<NotificationModalProps> = ({
     markAllAsRead();
   };
 
+  // 모든 알림 삭제 처리 (New Handler)
+  const handleDeleteAll = () => {
+    // Ask for confirmation before deleting
+    if (
+      window.confirm(
+        "정말로 모든 알림을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
+      )
+    ) {
+      clearNotifications();
+    }
+  };
+
   // 모달이 열려있지 않으면 null 반환
   if (!isOpen) return null;
 
@@ -127,12 +144,21 @@ const NotificationModal: React.FC<NotificationModalProps> = ({
       {/* 모달 헤더 */}
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
         <h3 className="text-lg font-medium">알림</h3>
-        <div className="flex">
+        <div className="flex items-center">
+          {" "}
+          {/* Use items-center for vertical alignment */}
           <button
             onClick={handleMarkAllAsRead}
-            className="mr-2 rounded-full p-1 text-sm text-gray-500 hover:bg-gray-100"
+            className="mr-2 rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100" // Adjusted padding/margin/size
           >
             모두 읽음
+          </button>
+          {/* New Delete All Button */}
+          <button
+            onClick={handleDeleteAll}
+            className="mr-2 rounded px-2 py-1 text-xs text-red-500 hover:bg-red-50" // Adjusted padding/margin/size, added red color
+          >
+            모두 삭제
           </button>
           <button
             onClick={onClose}

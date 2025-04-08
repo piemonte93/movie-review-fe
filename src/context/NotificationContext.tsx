@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { apiClient } from "../api/backendApi";
 import { useAuth } from "./AuthContext";
+import { toast } from 'react-toastify';
 
 // 알림 타입 정의
 export type NotificationType =
@@ -196,11 +197,26 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
     }
   };
 
-  // 모든 알림 삭제
+  // 모든 알림 삭제 (Implement actual logic)
   const clearNotifications = async () => {
-    // 현재 백엔드 API에 모든 알림 삭제 엔드포인트가 없으므로
-    // 향후 추가 예정
-    console.log("모든 알림 삭제 기능은 아직 구현되지 않았습니다.");
+    if (!isLoggedIn || !user) {
+        toast.warn("로그인이 필요합니다.");
+        return;
+    }
+
+    try {
+      // Call backend API to delete all notifications for the current user
+      await apiClient.delete("/api/notifications");
+      
+      // Clear notifications and unread count in the frontend state
+      setNotifications([]);
+      setUnreadCount(0);
+      toast.success("모든 알림이 삭제되었습니다."); // Add success toast
+
+    } catch (error: any) {
+      console.error("Failed to delete notifications", error);
+      toast.error(error.response?.data?.message || "알림 삭제 중 오류가 발생했습니다."); // Add error toast
+    }
   };
 
   // 로그인 상태가 변경될 때 SSE 연결 설정/해제
