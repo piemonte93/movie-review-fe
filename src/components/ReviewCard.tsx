@@ -1,9 +1,10 @@
 import React from "react";
-import { MovieReview, TvShowReview } from "../api/backendApi";
+import { MovieReview, TvShowReview, BASE_URL } from "../api/backendApi";
 import { useNavigate } from "react-router-dom";
 import { formatDate } from "../utils/dateUtils";
 import StarRating from "./StarRating";
 import { FaUserCircle, FaTv, FaFilm } from "react-icons/fa";
+import defaultAvatar from "../assets/default-profile.png";
 
 interface ReviewCardProps {
   review: MovieReview | TvShowReview;
@@ -12,6 +13,9 @@ interface ReviewCardProps {
 
 const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
   const navigate = useNavigate();
+
+  // 디버깅: ReviewCard가 받는 전체 review 데이터 로깅
+  console.log(`[ReviewCard ${review.id}] Received review data:`, review);
 
   // 더 정확한 타입 체크 - contentType 필드가 있으면 우선 사용
   const isMovieReview = (r: MovieReview | TvShowReview): r is MovieReview => {
@@ -55,9 +59,46 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
   // 마찬가지로 포스터 경로도 moviePoster 필드 사용
   const posterPath = review.moviePoster || "";
 
-  // TODO: Fetch or use user info from review object if available
-  const authorUsername = review.user?.username || "익명";
-  const authorProfileImg = review.user?.profileImageUrl;
+  // 사용자 정보 추출 및 로깅 (수정: review 객체에서 직접 추출)
+  // const author = review.user; // 더 이상 사용하지 않음
+  // console.log(`[ReviewCard ${review.id}] Extracted author object:`, author); // 관련 로그 제거
+
+  // 작성자 정보 추출 (수정: review에서 직접 접근)
+  const authorUsername = review.username || "익명";
+  const authorProfileImg = review.userProfileImageUrl; // 필드 이름 확인 필요 (API 응답 기준)
+
+  // 디버깅: 추출된 사용자 이름 및 프로필 이미지 URL 로깅
+  console.log(
+    `[ReviewCard ${review.id}] Extracted username directly from review: ${authorUsername}`
+  );
+  console.log(
+    `[ReviewCard ${review.id}] Extracted profile image URL directly from review: ${authorProfileImg}`
+  );
+
+  // 프로필 이미지 URL을 적절히 처리
+  const getProfileImageUrl = (imgUrl: string | null | undefined) => {
+    if (!imgUrl) return null;
+
+    console.log("원본 프로필 이미지 URL:", imgUrl);
+
+    // 이미 절대 경로인 경우 (http:// 또는 https:// 로 시작)
+    if (imgUrl.startsWith("http://") || imgUrl.startsWith("https://")) {
+      console.log("절대 경로 유지:", imgUrl);
+      return imgUrl;
+    }
+
+    // 상대 경로인 경우 BASE_URL 추가
+    const fullUrl = `${BASE_URL}${imgUrl}`;
+    console.log("상대 경로에 BASE_URL 추가:", fullUrl);
+    return fullUrl;
+  };
+
+  const profileImageUrl = getProfileImageUrl(authorProfileImg);
+
+  // 디버깅: 최종 처리된 프로필 이미지 URL 로깅
+  console.log(
+    `[ReviewCard ${review.id}] Processed profile image URL: ${profileImageUrl}`
+  );
 
   const handleCardClick = () => {
     // contentType과 contentId에 따라 적절한 페이지로 이동
@@ -120,11 +161,21 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
               </span>
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-600">
-              {authorProfileImg ? (
+              {/* 디버깅: 렌더링 시 사용되는 값 확인 */}
+              {console.log(
+                `[ReviewCard ${review.id}] Rendering with profileImageUrl: ${profileImageUrl}, authorUsername: ${authorUsername}`
+              )}
+              {profileImageUrl ? (
                 <img
-                  src={authorProfileImg}
+                  src={profileImageUrl}
                   alt={authorUsername}
                   className="w-5 h-5 rounded-full object-cover"
+                  onError={(e) => {
+                    console.error(
+                      `[ReviewCard ${review.id}] Failed to load image: ${profileImageUrl}`
+                    );
+                    e.currentTarget.src = defaultAvatar;
+                  }}
                 />
               ) : (
                 <FaUserCircle className="w-5 h-5 text-gray-400" />

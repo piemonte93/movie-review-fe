@@ -1,11 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import {
-  getUserProfile,
-  updateUserProfile,
-  uploadProfileImage,
-} from "../api/userApi";
+import { updateMyProfileApi } from "../api/userApi";
 import {
   FaUser,
   FaCamera,
@@ -14,6 +10,9 @@ import {
 } from "react-icons/fa";
 import authApi from "../api/authApi";
 import { toast } from "react-toastify";
+import { UserProfile } from "../types/user";
+import { BASE_URL } from "../api/backendApi";
+import defaultAvatar from "../assets/default-profile.png";
 
 // 프로필 정보를 캐싱하기 위한 로컬 스토리지 키 (필요 시 사용)
 // const PROFILE_CACHE_KEY = "cached_profile_data";
@@ -26,9 +25,6 @@ const ProfileEditPage: React.FC = () => {
   const [username, setUsername] = useState("");
   const [originalUsername, setOriginalUsername] = useState(""); // 원래 사용자 이름 저장
   const [bio, setBio] = useState("");
-  const [profileImage, setProfileImage] = useState<string | undefined>(
-    undefined
-  );
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -39,6 +35,9 @@ const ProfileEditPage: React.FC = () => {
   const [checkingUsername, setCheckingUsername] = useState(false); // 사용자 이름 중복 체크 중 여부
 
   const [pageLoading, setPageLoading] = useState(true); // 페이지 자체 로딩 상태 추가
+
+  const [imagePreview, setImagePreview] = useState<string | null>(null); // 이미지 미리보기 URL 상태
+  const [imageFileToUpload, setImageFileToUpload] = useState<File | null>(null); // 업로드할 파일 상태
 
   // 사용자 데이터 로딩
   useEffect(() => {
@@ -68,7 +67,6 @@ const ProfileEditPage: React.FC = () => {
       setUsername(user.username || "");
       setOriginalUsername(user.username || "");
       setBio(user.bio || "");
-      setProfileImage(user.profileImageUrl);
       setUsernameChecked(true); // 초기 상태는 체크된 것으로 간주 (현재 이름 기준)
 
       // 서버에서 최신 프로필을 다시 가져올 필요는 없어 보임 (Context가 최신이라고 가정)
@@ -137,26 +135,61 @@ const ProfileEditPage: React.FC = () => {
     }
   }, [username, originalUsername]); // useCallback 사용하여 최적화
 
-  // 프로필 업데이트 제출 핸들러
-  const handleSubmit = async (e: React.FormEvent) => {
+  // 프로필 이미지 변경 핸들러 (파일 선택 및 미리보기만 처리)
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+
+      // 이미지 유효성 검사
+      if (!file.type.startsWith("image/")) {
+        toast.error("이미지 파일만 업로드 가능합니다.");
+        setImageFileToUpload(null);
+        setImagePreview(null); // 원래 이미지로 복원
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        // 5MB 제한
+        toast.error("파일 크기는 5MB 이하여야 합니다.");
+        setImageFileToUpload(null);
+        setImagePreview(null); // 원래 이미지로 복원
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+
+      // 파일 상태 저장
+      setImageFileToUpload(file);
+
+      // 미리보기 생성
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+      console.log("프로필 이미지 파일 선택됨:", file.name);
+    }
+  };
+
+  // 프로필 업데이트 제출 핸들러 (모든 변경사항 일괄 처리)
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
 
-    if (submitting) return;
+    if (submitting || pageLoading || checkingUsername) return; // Prevent multiple submissions
 
     const trimmedUsername = username.trim();
     const originalBio = user?.bio || "";
     const usernameChanged = trimmedUsername !== originalUsername;
     const bioChanged = bio !== originalBio;
-    const profileImageFile = fileInputRef.current?.files?.[0]; // 파일이 실제로 있는지 확인
+    const imageChanged = imageFileToUpload !== null;
 
-    // 변경사항이 있는지 확인
-    if (!usernameChanged && !bioChanged && !profileImageFile) {
+    // 1. Check if there are any changes
+    if (!usernameChanged && !bioChanged && !imageChanged) {
       toast.info("변경된 내용이 없습니다.");
       return;
     }
 
-    // 사용자 이름 유효성 검사 및 중복 체크 확인
+    // 2. Validate username if changed
     if (usernameChanged) {
       if (!trimmedUsername) {
         toast.error("사용자 이름을 입력해주세요.");
@@ -176,147 +209,106 @@ const ProfileEditPage: React.FC = () => {
 
     const toastId = toast.loading("프로필 업데이트 중...");
     setSubmitting(true);
-    let usernameUpdateSuccess = true;
-    let otherUpdatesSuccess = true; // bio 또는 이미지 업데이트 성공 여부
-    let proceedWithOtherUpdates = true; // 이름 변경 성공 시 다른 업데이트 진행
-    let finalProfileImageUrl = profileImage; // 최종 이미지 URL
 
     try {
-      // 1. 사용자 이름 변경 처리 (변경된 경우에만)
+      // 3. Prepare FormData
+      const formData = new FormData();
+
+      // Append profile data as JSON string under the key "profileData"
+      const profileData = {
+        username: trimmedUsername, // Use trimmed username
+        bio: bio,
+      };
+      formData.append(
+        "profileData",
+        new Blob([JSON.stringify(profileData)], { type: "application/json" })
+      );
+
+      // Append image file if changed
+      if (imageChanged && imageFileToUpload) {
+        formData.append("imageFile", imageFileToUpload);
+      }
+
+      console.log("Calling updateMyProfileApi...");
+      // 4. Call the new API function
+      const updatedProfileData: UserProfile =
+        await updateMyProfileApi(formData);
+      console.log("API call successful, response:", updatedProfileData);
+
+      // 토큰 관련 디버깅 정보 출력
+      const token = localStorage.getItem("token");
+      console.log("현재 저장된 토큰 상태:", token ? "토큰 있음" : "토큰 없음");
+      if (token) {
+        try {
+          // 토큰 디코딩하여 내용 확인
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          console.log("현재 토큰에 저장된 사용자명:", payload.sub);
+          // 만료 시간 확인
+          const expTime = new Date(payload.exp * 1000).toLocaleString();
+          console.log("토큰 만료 시간:", expTime);
+        } catch (e) {
+          console.error("토큰 파싱 오류:", e);
+        }
+      }
+
+      // 5. Update AuthContext
+      // Map the received UserProfile data to the structure expected by updateUserInfo
+      // Assuming updateUserInfo expects an object with user properties directly
+      const userInfoForContext = {
+        id: updatedProfileData.id,
+        username: updatedProfileData.username,
+        email: updatedProfileData.email,
+        roles: updatedProfileData.roles,
+        bio: updatedProfileData.bio, // Use the updated bio from response
+        profileImageUrl: updatedProfileData.profileImageUrl, // Use the updated image URL from response
+        // Add any other fields AuthContext/updateUserInfo might expect
+      };
+      console.log("Updating AuthContext with:", userInfoForContext);
+
+      // 사용자 이름 변경 감지
+      const usernameChanged = originalUsername !== updatedProfileData.username;
       if (usernameChanged) {
-        try {
-          console.log("사용자 이름 업데이트 API 호출:", trimmedUsername);
-          const response = await authApi.updateUsername(trimmedUsername);
-          console.log("사용자 이름 업데이트 응답:", response);
-
-          if (
-            response &&
-            response.token &&
-            response.username &&
-            response.username === trimmedUsername &&
-            response.id &&
-            response.email
-          ) {
-            console.log("사용자 이름 변경 성공, 새 토큰 및 정보 수신");
-            const updatedUser = {
-              id: response.id,
-              username: response.username,
-              email: response.email,
-              roles: response.roles,
-              status: response.status,
-              bio: response.bio, // bio는 이후 단계에서 업데이트 될 수 있음
-              profileImageUrl: response.profileImageUrl, // 이미지도 이후 단계에서 업데이트 될 수 있음
-              provider: response.provider,
-            };
-            const loginSuccess = await login(response.token, updatedUser);
-
-            if (loginSuccess) {
-              console.log("AuthContext login 성공. 인증 상태 갱신 완료.");
-              setOriginalUsername(trimmedUsername);
-              setUsernameChecked(true);
-            } else {
-              console.error(
-                "AuthContext login 함수 실패. 인증 상태 갱신 실패."
-              );
-              throw new Error(
-                "인증 정보를 갱신하는 데 실패했습니다. 다시 로그인해주세요."
-              );
-            }
-          } else {
-            throw new Error(
-              response?.message || "사용자 이름 변경에 실패했습니다."
-            );
-          }
-        } catch (error: any) {
-          console.error("사용자 이름 업데이트 중 오류:", error);
-          usernameUpdateSuccess = false;
-          proceedWithOtherUpdates = false;
-          // 오류 토스트는 최종 단계에서 한 번만 표시
-          throw error; // 오류를 바깥 catch로 전파
-        }
+        console.log(
+          `사용자 이름이 '${originalUsername}'에서 '${updatedProfileData.username}'로 변경되었습니다.`
+        );
+        console.log(
+          "새 토큰으로 인증 정보가 갱신되었습니다. 로그아웃되지 않을 것입니다."
+        );
       }
 
-      // 2. 자기소개 또는 프로필 이미지 변경 처리 (이름 변경 성공 또는 시도 없었을 때, 그리고 변경사항 있을 때)
-      if (proceedWithOtherUpdates && (bioChanged || profileImageFile)) {
-        console.log("자기소개 또는 프로필 이미지 업데이트 시작...");
-        try {
-          let updateData: { bio?: string; profileImageUrl?: string } = {};
-          let imageUpdated = false;
+      updateUserInfo(userInfoForContext);
 
-          // 프로필 이미지 업로드 (파일이 있을 경우)
-          if (profileImageFile) {
-            console.log("프로필 이미지 업로드 API 호출 중...");
-            const uploadResponse = await uploadProfileImage(profileImageFile);
-            if (uploadResponse && uploadResponse.profileImageUrl) {
-              console.log(
-                "프로필 이미지 업로드 성공:",
-                uploadResponse.profileImageUrl
-              );
-              finalProfileImageUrl = uploadResponse.profileImageUrl;
-              updateData.profileImageUrl = finalProfileImageUrl; // 업데이트 데이터에 추가
-              imageUpdated = true;
-              setProfileImage(finalProfileImageUrl);
-            } else {
-              throw new Error("프로필 이미지 업로드에 실패했습니다.");
-            }
-          }
+      // 6. Reset state and show success
+      setOriginalUsername(trimmedUsername); // Update original username
+      setImageFileToUpload(null);
+      setImagePreview(null);
 
-          // 자기소개 업데이트 (bio가 변경된 경우)
-          if (bioChanged) {
-            updateData.bio = bio;
-          }
-
-          // Bio 또는 Image URL 업데이트 API 호출 (updateData에 내용이 있을 때만)
-          if (Object.keys(updateData).length > 0) {
-            console.log("자기소개/이미지 URL 업데이트 API 호출:", updateData);
-            await updateUserProfile(updateData); // updateUserProfile API 호출
-            console.log("자기소개/이미지 URL 업데이트 API 호출 성공");
-
-            // Context 업데이트
-            if (updateData.profileImageUrl !== undefined) {
-              updateUserInfo({ profileImageUrl: finalProfileImageUrl });
-            }
-            if (updateData.bio !== undefined) {
-              updateUserInfo({ bio: bio });
-            }
-          } else {
-            console.log("업데이트할 자기소개/이미지 URL 데이터 없음");
-          }
-        } catch (error: any) {
-          console.error("자기소개/이미지 업데이트 중 오류:", error);
-          otherUpdatesSuccess = false;
-          // 오류 토스트는 최종 단계에서 한 번만 표시
-          throw error; // 오류를 바깥 catch로 전파
-        }
-      }
-
-      // 모든 업데이트가 성공했거나, 시도된 업데이트가 모두 성공한 경우
-      console.log("모든 업데이트 시도 완료. 최종 성공 토스트 표시.");
       toast.update(toastId, {
         render: "프로필이 성공적으로 업데이트되었습니다.",
         type: "success",
         isLoading: false,
         autoClose: 3000,
+        closeButton: true,
       });
-      // 성공 후 프로필 페이지 이동 (선택적)
-      // setTimeout(() => navigate('/profile'), 1000);
+
+      // Optionally navigate back or elsewhere
+      // navigate("/profile");
     } catch (error: any) {
-      // 모든 종류의 오류 처리 (username, bio/image, 기타)
-      console.error("프로필 업데이트 중 최종 오류 발생:", error);
+      console.error("프로필 업데이트 실패:", error);
+      const errorMessage =
+        error.response?.data?.message || // Check for Spring Boot error response
+        error.message ||
+        "프로필 업데이트 중 오류가 발생했습니다.";
       toast.update(toastId, {
-        render: error.message || "프로필 업데이트 중 오류가 발생했습니다.",
+        render: errorMessage,
         type: "error",
         isLoading: false,
         autoClose: 5000,
+        closeButton: true,
       });
+      setError(errorMessage); // Set page level error if needed
     } finally {
-      // 최종적으로 실행되어 제출 상태 해제
       setSubmitting(false);
-      console.log("handleSubmit 완료, submitting 상태 false로 변경");
-      // 파일 입력 초기화 추가 (오류 발생 시에도 초기화되도록)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
     }
   };
 
@@ -324,49 +316,6 @@ const ProfileEditPage: React.FC = () => {
   const handleProfileImageClick = () => {
     if (!uploadingImage && fileInputRef.current) {
       fileInputRef.current.click();
-    }
-  };
-
-  // 프로필 이미지 변경 핸들러
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-
-      // 이미지 유효성 검사
-      if (!file.type.startsWith("image/")) {
-        toast.error("이미지 파일만 업로드 가능합니다.");
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        // 5MB 제한
-        toast.error("파일 크기는 5MB 이하여야 합니다.");
-        return;
-      }
-
-      const toastId = toast.loading("프로필 이미지 업로드 중...");
-      try {
-        setUploadingImage(true);
-        console.log("프로필 이미지 업로드 시작:", file.name);
-
-        const result = await uploadProfileImage(file); // API 호출
-        console.log("이미지 업로드 결과:", result);
-
-        setProfileImage(result.profileImageUrl); // UI 업데이트
-        updateUserInfo({ profileImageUrl: result.profileImageUrl }); // Context 업데이트
-
-        toast.success("프로필 이미지가 업데이트되었습니다.", { id: toastId });
-      } catch (error) {
-        console.error("프로필 이미지 업로드 실패:", error);
-        toast.error("이미지 업로드에 실패했습니다. 다시 시도해주세요.", {
-          id: toastId,
-        });
-      } finally {
-        setUploadingImage(false);
-        // 파일 입력 초기화 (다시 같은 파일 선택 가능하도록)
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-      }
     }
   };
 
@@ -399,6 +348,9 @@ const ProfileEditPage: React.FC = () => {
     );
   }
 
+  // Use user from context for the current profile image URL
+  const currentProfileImageUrl = user?.profileImageUrl;
+
   return (
     <div className="container mx-auto px-4 py-12 max-w-2xl">
       <h1 className="text-3xl font-bold mb-8 text-center">프로필 편집</h1>
@@ -410,26 +362,42 @@ const ProfileEditPage: React.FC = () => {
             className="relative h-32 w-32 rounded-full overflow-hidden bg-gray-200 cursor-pointer group border border-gray-300"
             onClick={handleProfileImageClick}
           >
-            {profileImage ? (
+            {imagePreview || currentProfileImageUrl ? (
               <img
-                src={profileImage}
+                src={
+                  imagePreview
+                    ? imagePreview
+                    : currentProfileImageUrl
+                      ? `${BASE_URL}${currentProfileImageUrl}`
+                      : defaultAvatar
+                }
                 alt="프로필 이미지"
-                className="h-full w-full object-cover"
+                className="h-full w-full object-cover bg-gray-100"
+                onError={(e) => {
+                  if (e.currentTarget.src !== defaultAvatar) {
+                    e.currentTarget.src = defaultAvatar;
+                  }
+                }}
               />
             ) : (
               <div className="h-full w-full flex items-center justify-center bg-gray-100">
-                <FaUser className="text-gray-400 text-5xl" />
+                <img
+                  src={defaultAvatar}
+                  alt="기본 프로필 이미지"
+                  className="h-full w-full object-cover"
+                />
               </div>
             )}
             <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <FaCamera className="text-white text-3xl" />
             </div>
-            {/* 이미지 업로드 중 스피너 */}
-            {uploadingImage && (
-              <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70 rounded-full">
-                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            )}
+            {/* 이미지 업로드 중 스피너 - 이 스피너는 handleSubmit 중 사용되므로 유지 */}
+            {submitting &&
+              imageFileToUpload && ( // submitting 상태이고 업로드할 파일이 있을 때만 표시
+                <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70 rounded-full">
+                  <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              )}
           </div>
           <input
             type="file"
@@ -437,15 +405,17 @@ const ProfileEditPage: React.FC = () => {
             onChange={handleImageChange}
             accept="image/*"
             className="hidden"
-            disabled={uploadingImage}
+            disabled={submitting} // submitting 중에는 파일 선택 비활성화
           />
           <button
             type="button"
             onClick={handleProfileImageClick}
             className="text-sm text-blue-600 hover:underline disabled:text-gray-400"
-            disabled={uploadingImage}
+            disabled={submitting} // submitting 중에는 버튼 비활성화
           >
-            {uploadingImage ? "업로드 중..." : "프로필 사진 변경"}
+            {submitting && imageFileToUpload
+              ? "업로드 중..."
+              : "프로필 사진 변경"}
           </button>
         </div>
 

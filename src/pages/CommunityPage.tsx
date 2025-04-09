@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useNotifications } from "../context/NotificationContext";
 import {
   FaUser,
   FaComment,
@@ -20,16 +19,18 @@ import {
 } from "react-icons/fa";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
-import { backendApi } from "../api/backendApi";
+import { backendApi, BASE_URL } from "../api/backendApi";
 import { toast } from "react-toastify";
-import type { Post, Comment, UserItem } from "../api/backendApi";
-import { formatDate } from "../utils/dateUtils";
-import { MentionsInput, Mention, SuggestionDataItem } from "react-mentions"; // Import react-mentions
-import {
-  searchUsers as apiSearchUsers, // Use alias
-  UserResponse, // Ensure imported
-  Page, // Ensure imported
+import type {
+  Post,
+  Comment,
+  UserItem,
+  Page as ApiPage,
 } from "../api/backendApi";
+import { formatDate } from "../utils/dateUtils";
+import { MentionsInput, Mention, SuggestionDataItem } from "react-mentions";
+import { searchUsers as apiSearchUsers, UserResponse } from "../api/backendApi";
+import defaultAvatar from "../assets/default-profile.png";
 
 // 알림 데이터 타입 정의
 interface Notification {
@@ -54,7 +55,6 @@ const CommunityPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isLoggedIn, user, isUserBlocked, isAdminOrModerator } = useAuth();
-  const { addNotification } = useNotifications();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [posts, setPosts] = useState<Post[]>([]);
@@ -213,7 +213,7 @@ const CommunityPage: React.FC = () => {
         return;
       }
       try {
-        const response: Page<UserResponse> = await apiSearchUsers(query);
+        const response: ApiPage<UserResponse> = await apiSearchUsers(query);
         if (response && response.content) {
           const users: UserMentionData[] = response.content.map(
             (user: UserResponse) => ({
@@ -405,6 +405,7 @@ const CommunityPage: React.FC = () => {
   };
 
   // 알림 생성 함수
+  /*
   const createNotification = (users: UserItem[], postId: number) => {
     // 실제로는 API 호출로 알림 생성
     users.forEach((mentionedUser) => {
@@ -421,6 +422,7 @@ const CommunityPage: React.FC = () => {
       });
     });
   };
+  */
 
   // 알림 클릭 핸들러
   const handleNotificationClick = (notification: Notification) => {
@@ -609,11 +611,6 @@ const CommunityPage: React.FC = () => {
           liked: false,
           disliked: false,
         };
-
-        // 멘션된 사용자에게 알림 생성
-        if (mentionedUsers.length > 0) {
-          createNotification(mentionedUsers, completePost.id);
-        }
 
         // 새 게시글을 목록 최상단에 추가
         setPosts((prevPosts) => [completePost, ...prevPosts]);
@@ -1021,7 +1018,6 @@ const CommunityPage: React.FC = () => {
     try {
       let response;
       if (showSearch && searchQuery) {
-        // 검색 결과 더 불러오기
         response = await backendApi.searchPosts(
           searchQuery,
           searchCategory,
@@ -1035,9 +1031,13 @@ const CommunityPage: React.FC = () => {
         setSearchPage(nextPage);
         setSearchHasMore(response.totalPages > nextPage + 1);
       } else {
-        // 일반 게시글 더 불러오기
         response = await backendApi.getPosts(nextPage, postsPerPage);
-        setVisiblePosts((prevPosts) => [...prevPosts, ...response.content]);
+        if (response.content) {
+          setVisiblePosts((prevPosts) => [
+            ...prevPosts,
+            ...(response.content as Post[]),
+          ]);
+        }
         setPage(nextPage);
         setHasMore(response.totalPages > nextPage + 1);
       }
@@ -1219,7 +1219,7 @@ const CommunityPage: React.FC = () => {
               .id;
 
       if (!targetUserId) {
-        toast.error("신고 대상의、사용자 정보를 찾을 수 없습니다.");
+        toast.error("신고 대상의 사용자 정보를 찾을 수 없습니다.");
         return;
       }
 
@@ -1307,30 +1307,6 @@ const CommunityPage: React.FC = () => {
             >
               <FaPen />
             </button>
-            {isLoggedIn && (
-              <button
-                className="rounded-full p-2 hover:bg-gray-100"
-                title="테스트 알림 생성"
-                onClick={() => {
-                  addNotification({
-                    type: "mention",
-                    postId: 1,
-                    createdAt: new Date(),
-                    read: false,
-                    fromUser: {
-                      id: 2,
-                      username: "테스트사용자",
-                      profileImageUrl: null,
-                    },
-                  });
-                  alert(
-                    "테스트 알림이 생성되었습니다. 알림 아이콘을 확인해보세요."
-                  );
-                }}
-              >
-                테스트 알림
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -1555,18 +1531,23 @@ const CommunityPage: React.FC = () => {
                   <div className="mr-4 flex flex-col items-center">
                     <Link
                       to={
-                        post.user.id === user?.id
+                        post.user?.id === user?.id
                           ? "/profile"
-                          : `/user-profile/${post.user.id}`
+                          : `/user-profile/${post.user?.id}`
                       }
                       className="flex-shrink-0"
                     >
                       <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden cursor-pointer flex items-center justify-center">
-                        {post.user.profileImageUrl ? (
+                        {post.user?.profileImageUrl ? (
                           <img
-                            src={post.user.profileImageUrl}
-                            alt={post.user.username}
+                            src={`${BASE_URL}${post.user.profileImageUrl}`}
+                            alt={post.user.username || "사용자"}
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                              if (e.currentTarget.src !== defaultAvatar) {
+                                e.currentTarget.src = defaultAvatar;
+                              }
+                            }}
                           />
                         ) : (
                           <FaUser className="text-gray-400 text-xl" />
@@ -1576,13 +1557,13 @@ const CommunityPage: React.FC = () => {
                     <div className="text-center mt-1">
                       <Link
                         to={
-                          post.user.id === user?.id
+                          post.user?.id === user?.id
                             ? "/profile"
-                            : `/user-profile/${post.user.id}`
+                            : `/user-profile/${post.user?.id}`
                         }
                         className="font-bold text-sm hover:underline"
                       >
-                        {post.user.username}
+                        {post.user?.username || "사용자"}
                       </Link>
                       <div className="text-xs text-gray-500">
                         {formatDate(post.createdAt)}

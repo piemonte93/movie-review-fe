@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   FaSearch,
@@ -7,10 +7,13 @@ import {
   FaSignOutAlt,
   FaCog,
   FaChevronDown,
+  FaUserCircle,
 } from "react-icons/fa";
 import NotificationModal from "./NotificationModal";
 import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
+import { BASE_URL } from "../api/backendApi";
+import defaultAvatar from "../assets/default-profile.png";
 
 const Navbar: React.FC = () => {
   const navigate = useNavigate();
@@ -34,6 +37,8 @@ const Navbar: React.FC = () => {
 
   // TV 메뉴 열림/닫힘 상태
   const [isTvMenuOpen, setIsTvMenuOpen] = useState(false);
+
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
   // 사용자 아이콘 클릭 핸들러
   const handleUserIconClick = () => {
@@ -99,13 +104,19 @@ const Navbar: React.FC = () => {
       ) {
         setIsNotificationModalOpen(false);
       }
+      if (
+        profileMenuRef.current &&
+        !profileMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsUserMenuOpen(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
+  }, [profileMenuRef]);
 
   return (
     <header className="border-b border-gray-200 bg-white fixed top-0 left-0 right-0 z-50 shadow-sm">
@@ -232,19 +243,26 @@ const Navbar: React.FC = () => {
           {isLoggedIn ? (
             <div className="relative user-menu">
               <button
-                className="user-icon relative rounded-full p-2 hover:bg-gray-100"
-                onClick={handleUserIconClick}
-                aria-label="프로필"
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white h-8 w-8"
+                aria-expanded={isUserMenuOpen}
+                aria-haspopup="true"
               >
-                {user?.profileImageUrl ? (
-                  <img
-                    src={user.profileImageUrl}
-                    alt="프로필"
-                    className="w-6 h-6 rounded-full object-cover"
-                  />
-                ) : (
-                  <FaUser className="text-gray-600" />
-                )}
+                <span className="sr-only">사용자 메뉴 열기</span>
+                <img
+                  className="h-full w-full rounded-full object-cover bg-gray-700"
+                  src={
+                    user.profileImageUrl
+                      ? `${BASE_URL}${user.profileImageUrl}`
+                      : defaultAvatar
+                  }
+                  alt="사용자 프로필 이미지"
+                  onError={(e) => {
+                    if (e.currentTarget.src !== defaultAvatar) {
+                      e.currentTarget.src = defaultAvatar;
+                    }
+                  }}
+                />
               </button>
 
               {isUserMenuOpen && (

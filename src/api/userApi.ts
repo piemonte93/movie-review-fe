@@ -983,3 +983,85 @@ export const getUserPostCount = async (userId: number): Promise<number> => {
     return 0;
   }
 };
+
+// New API function to update profile with potential image upload
+export const updateMyProfileApi = async (formData: FormData): Promise<any> => {
+  console.log("Submitting profile update with FormData:");
+  // Optional: Log FormData contents for debugging (can be tricky)
+  // formData.forEach((value, key) => {
+  //   console.log(key, value);
+  // });
+
+  try {
+    // Use PUT request to the correct backend endpoint /api/profile/me
+    const response = await apiClient.put<any>("/api/profile/me", formData, {
+      headers: {
+        // Content-Type is automatically set
+      },
+    });
+    console.log("Profile update API response:", response.data);
+
+    // 새로운 응답 형식 처리 - 토큰 필드명이 다양할 수 있으므로 모든 가능성 처리
+    // 백엔드에서는 'accessToken'으로 보내지만, 프론트엔드는 'token'으로 사용할 수 있음
+    let newToken = null;
+    let profileData = null;
+
+    // 응답 구조에 따라 토큰과 프로필 정보 추출
+    if (response.data) {
+      // 응답 구조 분석 출력
+      console.log("응답 데이터 상세 구조:", JSON.stringify(response.data));
+
+      // 1. 응답에 'accessToken'과 'profile' 필드가 있는 경우 (네이밍 불일치 케이스)
+      if (response.data.accessToken && response.data.profile) {
+        console.log("케이스 1: accessToken + profile 구조 감지");
+        newToken = response.data.accessToken;
+        profileData = response.data.profile;
+      }
+      // 2. 응답에 'token'과 'profile' 필드가 있는 경우
+      else if (response.data.token && response.data.profile) {
+        console.log("케이스 2: token + profile 구조 감지");
+        newToken = response.data.token;
+        profileData = response.data.profile;
+      }
+      // 3. 응답 자체가 프로필 데이터인 경우 (토큰 없음)
+      else {
+        console.log("케이스 3: 응답이 직접 프로필 데이터");
+        profileData = response.data;
+      }
+
+      // 새 토큰이 있으면 저장
+      if (newToken) {
+        console.log("새 토큰 발급 감지: 사용자 이름이 변경되었습니다.");
+
+        // 새 토큰 저장
+        localStorage.setItem("token", newToken);
+
+        // 토큰이 실제로 저장되었는지 확인
+        const savedToken = localStorage.getItem("token");
+        console.log(
+          "새 토큰 저장 완료. 실제 저장된 토큰:",
+          savedToken ? savedToken.substring(0, 20) + "..." : "저장 실패!"
+        );
+
+        // 모든 localStorage의 키를 출력하여 디버깅
+        console.log("현재 로컬스토리지 키 목록:");
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          console.log(`- ${key}`);
+        }
+      }
+
+      // 프로필 정보 반환
+      return profileData;
+    }
+
+    // 기존 응답 형식(프로필 정보만)인 경우 - 이 부분은 이제 사용되지 않음
+    return response.data;
+  } catch (error: any) {
+    console.error(
+      "Error updating profile:",
+      error.response?.data || error.message
+    );
+    throw error;
+  }
+};

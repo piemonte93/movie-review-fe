@@ -40,7 +40,7 @@ apiClient.interceptors.request.use(
   }
 );
 
-// 응답 인터셉터 - 401 오류 처리
+// 응답 인터셉터 - 401/403 오류 처리
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -64,6 +64,7 @@ apiClient.interceptors.response.use(
     // 로그인 요청인지 확인 (로그아웃 처리 제외 대상)
     const isLoginPath = requestUrl.includes("/api/auth/login");
 
+    // 401 Unauthorized (인증 실패) 처리
     if (
       error.response &&
       error.response.status === 401 &&
@@ -74,7 +75,27 @@ apiClient.interceptors.response.use(
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       window.location.href = "/login";
-    } else if (
+    }
+    // 403 Forbidden (권한 부족) 처리 - 로그아웃하지 않고 오류만 표시
+    else if (error.response && error.response.status === 403) {
+      console.log("403 오류 발생 - 권한이 없습니다. 로그아웃하지 않습니다.");
+      // 토큰 유효성 체크
+      const token = localStorage.getItem("token");
+      if (token) {
+        try {
+          // 토큰 디코딩
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          const username = payload.sub;
+          console.log(
+            `현재 토큰의 사용자: ${username} - 토큰은 유효하지만 권한이 없습니다.`
+          );
+        } catch (e) {
+          console.error("토큰 디코딩 오류:", e);
+        }
+      }
+    }
+    // OAuth 또는 로그인 관련 401 오류 처리
+    else if (
       error.response &&
       error.response.status === 401 &&
       (isOAuthPath || isLoginPath)
@@ -376,6 +397,9 @@ export const authApi = {
         username: response.data.username || "사용자",
         email: response.data.email || "",
         roles: response.data.roles || ["ROLE_USER"],
+        profileImageUrl: response.data.profileImageUrl,
+        status: response.data.status,
+        bio: response.data.bio,
       };
 
       console.log("변환된 사용자 정보:", userData);

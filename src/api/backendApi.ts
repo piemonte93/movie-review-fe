@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosRequestConfig } from "axios";
 import { TMDB_API_BASE_URL, TMDB_API_KEY } from "../constants";
 import {
   Content,
@@ -12,24 +12,40 @@ import { TvShow } from "../types/content";
 import { useState, useEffect } from "react";
 
 // This will point to our Spring Boot backend
-const BASE_URL = "http://localhost:8080";
+export const BASE_URL = "http://localhost:8080";
 
 // Create axios instance with timeout
 export const apiClient = axios.create({
   baseURL: BASE_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
   timeout: 15000, // 15초 타임아웃
 });
 
 // 요청 인터셉터 추가
 apiClient.interceptors.request.use(
-  (config) => {
+  (config: AxiosRequestConfig) => {
+    // 1. Handle Authorization Token
     const token = localStorage.getItem("token");
     if (token) {
+      if (!config.headers) config.headers = {}; // Ensure headers object exists
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // 2. Handle Content-Type for FormData
+    if (config.data instanceof FormData) {
+      // If data is FormData, remove the Content-Type header
+      // to allow the browser to set it automatically with the correct boundary
+      if (config.headers && config.headers["Content-Type"]) {
+        delete config.headers["Content-Type"];
+        console.log("Removed Content-Type header for FormData request.");
+      }
+    } else {
+      // For other request types, ensure Content-Type is set to application/json if not already set
+      if (!config.headers) config.headers = {};
+      if (!config.headers["Content-Type"]) {
+        config.headers["Content-Type"] = "application/json";
+      }
+    }
+
     return config;
   },
   (error) => {
@@ -53,7 +69,7 @@ apiClient.interceptors.response.use(
       message: error.message,
     });
 
-    // 토큰 유효성 체크
+    // 토큰 유효성 체크 - 401(Unauthorized)과 403(Forbidden)은 다르게 처리합니다
     if (error.response?.status === 401 || error.response?.status === 403) {
       const token = localStorage.getItem("token");
       console.log("현재 토큰 확인:", token ? "토큰 있음" : "토큰 없음");
@@ -64,15 +80,45 @@ apiClient.interceptors.response.use(
           const payload = JSON.parse(atob(token.split(".")[1]));
           const expiration = payload.exp * 1000; // 밀리초로 변환
           const now = Date.now();
+          const tokenUsername = payload.sub || ""; // 토큰에 저장된 사용자명
 
           console.log("토큰 만료 정보:", {
             현재시간: new Date(now).toLocaleString(),
             만료시간: new Date(expiration).toLocaleString(),
             만료여부: now > expiration ? "만료됨" : "유효함",
+            사용자명: tokenUsername,
           });
 
-          if (now > expiration) {
-            console.log("토큰이 만료되었습니다. 로그아웃이 필요합니다.");
+          // 401(Unauthorized) 응답인 경우만 토큰 관련 조치
+          if (error.response?.status === 401) {
+            console.log(
+              "401 Unauthorized 오류: 인증 정보가 유효하지 않습니다."
+            );
+            if (now > expiration) {
+              console.log("토큰이 만료되었습니다. 로그아웃이 필요합니다.");
+              // 토큰 만료 시 이벤트 발생 (AuthContext가 처리하도록)
+              // 토큰 삭제는 AuthContext에서 처리하도록 함
+              window.dispatchEvent(
+                new CustomEvent("auth-error", {
+                  detail: { message: "토큰이 만료되었습니다." },
+                })
+              );
+            } else {
+              console.log("토큰은 유효하지만 인증 오류가 발생했습니다.");
+              // 토큰은 유효하지만 401 오류가 발생한 경우에도 이벤트 발생
+              window.dispatchEvent(
+                new CustomEvent("auth-error", {
+                  detail: { message: "인증에 실패했습니다." },
+                })
+              );
+            }
+          }
+          // 403(Forbidden) 응답의 경우는 인증은 됐지만 권한이 없는 경우이므로 토큰 삭제하지 않음
+          else if (error.response?.status === 403) {
+            console.log(
+              "403 Forbidden 오류: 접근 권한이 없습니다. 토큰은 유효하게 유지합니다."
+            );
+            // 여기서는 토큰을 삭제하지 않음 - 403은 인증은 됐으나 권한이 없는 경우
           }
         } catch (e) {
           console.error("토큰 분석 중 오류:", e);
@@ -165,7 +211,7 @@ export interface MovieReview {
   likeCount?: number;
   dislikeCount?: number;
   commentCount?: number;
-  contentType: 'movie' | 'tv'; // contentType 속성 추가
+  contentType: "movie" | "tv"; // contentType 속성 추가
   user: {
     id: number;
     username: string;
@@ -2946,13 +2992,14 @@ export const backendApi = {
   getHotReviews: async (limit: number = 5): Promise<MovieReview[]> => {
     try {
       // 백엔드 응답 타입은 ReviewResponse[] 형태임 (User 정보가 최상위 레벨)
-      const response = await apiClient.get<any[]>("/api/reviews/hot", { // 타입을 any[] 로 임시 지정
+      const response = await apiClient.get<any[]>("/api/reviews/hot", {
+        // 타입을 any[] 로 임시 지정
         params: { limit },
       });
       console.log("인기 리뷰 API 응답 (원본):", response.data);
 
       // 프론트엔드 MovieReview 타입에 맞게 데이터 변환
-      const transformedData: MovieReview[] = response.data.map(review => ({
+      const transformedData: MovieReview[] = response.data.map((review) => ({
         ...review, // 기존 review 속성 복사 (id, title, content, rating 등)
         // 백엔드 응답의 최상위 사용자 필드를 사용하여 user 객체 생성
         user: {
@@ -2967,16 +3014,15 @@ export const backendApi = {
         // 만약 백엔드 응답 필드와 MovieReview 필드명이 다르다면 여기서 매핑 필요
         // 예: moviePosterPath -> moviePoster
         moviePoster: review.moviePosterPath, // 필드명 매핑 예시
-        
+
         // likes, dislikes는 ReviewResponse에 없으므로, MovieReview 타입 정의와 맞춰야 함
         // 여기서는 빈 배열로 초기화하거나, 타입 정의에서 옵셔널로 변경 필요
         likes: [], // 임시 초기화
         dislikes: [], // 임시 초기화
       }));
-      
+
       console.log("인기 리뷰 API 응답 (변환됨):", transformedData);
       return transformedData; // 변환된 MovieReview[] 반환
-
     } catch (error) {
       console.error("인기 리뷰 조회 실패:", error);
       return []; // 실패 시 빈 배열 반환
@@ -2985,27 +3031,37 @@ export const backendApi = {
 
   // 팔로우 관련 함수들
   toggleFollow: async (targetUserId: number): Promise<UserFollowResponse> => {
-    const response = await apiClient.post<UserFollowResponse>(`/api/users/follow/${targetUserId}`);
+    const response = await apiClient.post<UserFollowResponse>(
+      `/api/users/follow/${targetUserId}`
+    );
     return response.data;
   },
 
   getMyFollowers: async (): Promise<FollowUserResponse[]> => {
-    const response = await apiClient.get<FollowUserResponse[]>('/api/users/followers');
+    const response = await apiClient.get<FollowUserResponse[]>(
+      "/api/users/followers"
+    );
     return response.data;
   },
 
   getMyFollowing: async (): Promise<FollowUserResponse[]> => {
-    const response = await apiClient.get<FollowUserResponse[]>('/api/users/following');
+    const response = await apiClient.get<FollowUserResponse[]>(
+      "/api/users/following"
+    );
     return response.data;
   },
 
   getUserFollowers: async (userId: number): Promise<FollowUserResponse[]> => {
-    const response = await apiClient.get<FollowUserResponse[]>(`/api/users/${userId}/followers`);
+    const response = await apiClient.get<FollowUserResponse[]>(
+      `/api/users/${userId}/followers`
+    );
     return response.data;
   },
 
   getUserFollowing: async (userId: number): Promise<FollowUserResponse[]> => {
-    const response = await apiClient.get<FollowUserResponse[]>(`/api/users/${userId}/following`);
+    const response = await apiClient.get<FollowUserResponse[]>(
+      `/api/users/${userId}/following`
+    );
     return response.data;
   },
 
@@ -3015,28 +3071,36 @@ export const backendApi = {
    */
   getFollowingScraps: async (): Promise<any[]> => {
     try {
-      const response = await apiClient.get<any[]>('/api/users/following/scraps');
+      const response = await apiClient.get<any[]>(
+        "/api/users/following/scraps"
+      );
       // API 응답을 적절한 형태로 매핑하여 반환
-      return response.data.map(item => ({
+      return response.data.map((item) => ({
         id: item.id,
-        title: item.title || '',
-        name: item.name || '',
-        poster_path: item.poster_path || '',
-        backdrop_path: item.backdrop_path || '',
-        overview: item.overview || '',
+        title: item.title || "",
+        name: item.name || "",
+        poster_path: item.poster_path || "",
+        backdrop_path: item.backdrop_path || "",
+        overview: item.overview || "",
         vote_average: item.vote_average || 0,
         vote_count: item.vote_count || 0,
-        release_date: item.release_date || '',
-        first_air_date: item.first_air_date || '',
-        media_type: item.media_type || 'movie',
+        release_date: item.release_date || "",
+        first_air_date: item.first_air_date || "",
+        media_type: item.media_type || "movie",
         // Content 인터페이스 호환을 위한 필드 추가
         genre_ids: [],
         popularity: 0,
         adult: false,
-        original_language: 'ko'
+        original_language: "ko",
       }));
-    } catch (error) {
-      console.error('팔로잉 사용자들의 스크랩 목록 조회 실패:', error);
+    } catch (error: any) {
+      console.error("팔로잉 사용자들의 스크랩 목록 조회 실패:", error);
+      // 403 오류(권한 부족)가 발생해도 앱이 지속되도록 빈 배열 반환
+      if (error?.response?.status === 403) {
+        console.log(
+          "403 Forbidden - 사용자 이름 변경 후 권한 부족 문제 발생. 빈 배열 반환."
+        );
+      }
       return [];
     }
   },
