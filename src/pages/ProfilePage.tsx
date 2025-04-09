@@ -999,10 +999,6 @@ const ProfilePage: React.FC = () => {
                     (profileData?.postCount || 0)}
                 </span>
                 <span className="ml-1">게시물</span>
-                <div className="text-xs text-gray-500">
-                  (리뷰: {profileData?.reviewCount || 0}, 게시글:{" "}
-                  {profileData?.postCount || 0})
-                </div>
               </div>
               <button
                 onClick={loadFollowers}
