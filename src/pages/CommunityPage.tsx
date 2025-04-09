@@ -113,6 +113,9 @@ const CommunityPage: React.FC = () => {
   const [searchTotalPages, setSearchTotalPages] = useState(0);
   const [searchHasMore, setSearchHasMore] = useState(true);
 
+  // 재렌더링을 위한 상태 추가
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
   // 검색 처리 함수 정의 복원
   const handleSearch = useCallback(
     async (query: string, category: string, newSearch = true) => {
@@ -318,6 +321,31 @@ const CommunityPage: React.FC = () => {
     checkPostProperties();
   }, []);
 
+  // 강제 새로고침을 위한 useEffect 추가
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      // 현재 페이지 데이터를 다시 로드
+      const refreshData = async () => {
+        try {
+          const response = await backendApi.getPosts(page, postsPerPage);
+          console.log("새로고침 데이터:", response);
+
+          if (response && response.content) {
+            // 검색 모드가 아닐 때만 업데이트
+            if (!showSearch) {
+              setPosts(response.content);
+              setVisiblePosts(response.content);
+            }
+          }
+        } catch (error) {
+          console.error("데이터 새로고침 실패:", error);
+        }
+      };
+
+      refreshData();
+    }
+  }, [refreshTrigger, page, postsPerPage, showSearch]);
+
   // 사용자 검색 API 호출 함수
   const searchUsers = async (query: string): Promise<UserItem[]> => {
     if (query.length < 2) return [];
@@ -487,6 +515,9 @@ const CommunityPage: React.FC = () => {
       // 현재 보고 있는 게시글 목록에서 삭제된 게시글 제거
       setPosts(posts.filter((p) => p.id !== postId));
       setVisiblePosts(visiblePosts.filter((p) => p.id !== postId));
+
+      // 재렌더링 트리거
+      setRefreshTrigger((prev) => prev + 1);
     } catch (error) {
       console.error("게시글 삭제 실패:", error);
       toast.error("게시글 삭제에 실패했습니다.");
@@ -550,6 +581,9 @@ const CommunityPage: React.FC = () => {
           return p;
         })
       );
+
+      // 재렌더링 트리거
+      setRefreshTrigger((prev) => prev + 1);
     } catch (error) {
       console.error("댓글 삭제 실패:", error);
       toast.error("댓글 삭제에 실패했습니다.");
@@ -593,6 +627,10 @@ const CommunityPage: React.FC = () => {
 
         setPosts(updatedPosts);
         setVisiblePosts(updatedPosts);
+
+        // 재렌더링 트리거
+        setRefreshTrigger((prev) => prev + 1);
+
         toast.success("게시글이 수정되었습니다.");
       } else {
         // 새 게시글 작성 모드
@@ -615,6 +653,9 @@ const CommunityPage: React.FC = () => {
         // 새 게시글을 목록 최상단에 추가
         setPosts((prevPosts) => [completePost, ...prevPosts]);
         setVisiblePosts((prevPosts) => [completePost, ...prevPosts]);
+
+        // 재렌더링 트리거
+        setRefreshTrigger((prev) => prev + 1);
 
         toast.success("게시글이 등록되었습니다.");
       }
@@ -718,6 +759,9 @@ const CommunityPage: React.FC = () => {
             : post
         )
       );
+
+      // 재렌더링 트리거
+      setRefreshTrigger((prev) => prev + 1);
 
       setNewComment("");
       toast.success("댓글이 등록되었습니다.");
@@ -1693,9 +1737,16 @@ const CommunityPage: React.FC = () => {
                               <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden cursor-pointer flex items-center justify-center">
                                 {comment.user.profileImageUrl ? (
                                   <img
-                                    src={comment.user.profileImageUrl}
+                                    src={`${BASE_URL}${comment.user.profileImageUrl}`}
                                     alt={comment.user.username}
                                     className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      if (
+                                        e.currentTarget.src !== defaultAvatar
+                                      ) {
+                                        e.currentTarget.src = defaultAvatar;
+                                      }
+                                    }}
                                   />
                                 ) : (
                                   <FaUser className="text-gray-400 text-sm" />
@@ -1806,9 +1857,14 @@ const CommunityPage: React.FC = () => {
                         <div className="mr-2 h-8 w-8 overflow-hidden rounded-full bg-gray-200">
                           {user?.profileImageUrl ? (
                             <img
-                              src={user.profileImageUrl}
+                              src={`${BASE_URL}${user.profileImageUrl}`}
                               alt="내 프로필"
                               className="h-full w-full object-cover"
+                              onError={(e) => {
+                                if (e.currentTarget.src !== defaultAvatar) {
+                                  e.currentTarget.src = defaultAvatar;
+                                }
+                              }}
                             />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center bg-gray-200">
