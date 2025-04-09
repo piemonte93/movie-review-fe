@@ -967,7 +967,7 @@ const ProfilePage: React.FC = () => {
             <div className="flex space-x-6 mb-4">
               <div className="text-center md:text-left">
                 <span className="font-semibold">
-                  {profileData?.watchedMoviesCount || 0}
+                  {profileData?.reviewCount || 0}
                 </span>
                 <span className="ml-1">게시물</span>
               </div>
