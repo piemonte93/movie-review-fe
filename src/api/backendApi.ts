@@ -4,10 +4,12 @@ import {
   Content,
   ContentDetail,
   ContentResponse,
+  Review as TmdbReview,
   ReviewResponse,
   VideoResponse,
 } from "../types/content";
 import { TvShow } from "../types/content";
+import { useState, useEffect } from "react";
 
 // This will point to our Spring Boot backend
 const BASE_URL = "http://localhost:8080";
@@ -410,6 +412,81 @@ export const backendApi = {
   getMovieVideos: async (id: number): Promise<VideoResponse> => {
     const response = await apiClient.get(`/api/contents/movie/${id}/videos`);
     return response.data;
+  },
+
+  // 로컬 데이터베이스에서 영화 TMDB ID로 리뷰를 가져오는 함수
+  getMovieReviewsByTmdbId: async (
+    movieId: number,
+    page = 0,
+    size = 10
+  ): Promise<Page<Review>> => {
+    try {
+      const response = await apiClient.get(`/api/reviews/movie/${movieId}`, {
+        params: { page, size },
+      });
+
+      // 로컬 리뷰에 source 속성 추가
+      const localReviews = response.data.content.map((review: any) => ({
+        ...review,
+        source: "local", // 로컬 리뷰임을 표시
+      }));
+
+      return {
+        ...response.data,
+        content: localReviews,
+      };
+    } catch (error) {
+      console.error(
+        `TMDB ID ${movieId}의 로컬 영화 리뷰 가져오기 실패:`,
+        error
+      );
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        number: page,
+        size: size,
+        first: true,
+        last: true,
+        empty: true,
+      };
+    }
+  },
+
+  // 로컬 데이터베이스에서 TV TMDB ID로 리뷰를 가져오는 함수
+  getTvShowReviewsByTmdbId: async (
+    tvId: number,
+    page = 0,
+    size = 10
+  ): Promise<Page<Review>> => {
+    try {
+      const response = await apiClient.get(`/api/tvreviews/tv/${tvId}`, {
+        params: { page, size },
+      });
+
+      // 로컬 리뷰에 source 속성 추가
+      const localReviews = response.data.content.map((review: any) => ({
+        ...review,
+        source: "local", // 로컬 리뷰임을 표시
+      }));
+
+      return {
+        ...response.data,
+        content: localReviews,
+      };
+    } catch (error) {
+      console.error(`TMDB ID ${tvId}의 로컬 TV 쇼 리뷰 가져오기 실패:`, error);
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        number: page,
+        size: size,
+        first: true,
+        last: true,
+        empty: true,
+      };
+    }
   },
 
   // TV 프로그램 관련 API
@@ -2751,6 +2828,48 @@ export const backendApi = {
   },
 
   checkUserStatus,
+
+  // 리뷰 댓글 생성 함수 추가
+  createReviewComment: async (
+    reviewId: number,
+    content: string
+  ): Promise<Comment> => {
+    console.log(`[API] 리뷰 댓글 생성 요청: reviewId=${reviewId}`);
+    try {
+      const response = await apiClient.post<Comment>(
+        `/api/reviews/${reviewId}/comments`,
+        { content }
+      );
+      console.log("[API] 리뷰 댓글 생성 성공:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("[API] 리뷰 댓글 생성 실패:", error);
+      throw error;
+    }
+  },
+
+  // 게시글 댓글 가져오기
+  getPostComments: async (
+    postId: number,
+    page = 0,
+    size = 10
+  ): Promise<{
+    content: Comment[];
+    totalElements: number;
+    totalPages: number;
+    currentPage: number;
+    size: number;
+  }> => {
+    try {
+      const response = await apiClient.get(`/api/community/posts/${postId}/comments`, {
+        params: { page, size },
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`게시글 ID ${postId}의 댓글 목록 가져오기 실패:`, error);
+      throw error;
+    }
+  },
 };
 
 // 신고 관련 타입 정의
@@ -2863,3 +2982,52 @@ export const searchUsers = async (
     };
   }
 };
+
+// TMDB 리뷰와 로컬 리뷰를 모두 포함할 수 있는 통합 타입
+export interface CombinedReview {
+  id: number | string;
+  user?: { // 로컬 리뷰용
+    id: number;
+    username: string;
+    profileImageUrl: string | null;
+  };
+  title?: string; // 로컬 리뷰용
+  content: string;
+  rating?: number; // 로컬 리뷰용 (TMDB는 author_details.rating)
+  createdAt?: string; // 공통 (TMDB는 created_at에서 매핑됨)
+  modifiedAt?: string; // 로컬 리뷰용
+  isSpoiler?: boolean; // 로컬 리뷰용 (is_spoiler에서 변환 필요? DTO 확인)
+  is_spoiler?: boolean; // ReviewResponse DTO 필드명 확인 필요
+  commentCount?: number; // 로컬 리뷰용
+  likeCount?: number;
+  dislikeCount?: number;
+  source: "local" | "tmdb";
+  // --- TMDB 리뷰용 필드 ---
+  author?: string; 
+  author_details?: { 
+    name?: string;
+    username?: string;
+    avatar_path?: string;
+    rating?: number; // TMDB 평점 (10점 만점)
+  };
+  // Linter 오류 해결을 위해 avatar_path 추가 (Optional chaining으로 접근하므로 안전)
+  avatar_path?: string; 
+}
+
+// 로컬 리뷰를 위한 Review 인터페이스 추가 (CombinedReview와 중복 줄이기 위해 개선 가능)
+export interface Review {
+  id: number;
+  user?: {
+    id: number;
+    username: string;
+    profileImageUrl: string | null;
+  };
+  title?: string;
+  content: string;
+  rating?: number;
+  createdAt?: string;
+  modifiedAt?: string;
+  is_spoiler?: boolean;
+  likeCount?: number;
+  dislikeCount?: number;
+}

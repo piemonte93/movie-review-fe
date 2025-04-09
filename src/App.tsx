@@ -1,4 +1,9 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 import Navbar from "./components/Navbar";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -25,6 +30,7 @@ import { ToastContainer } from "react-toastify";
 import TvShowsPage from "./pages/TvShowsPage";
 import Footer from "./components/Footer";
 import TvReviewsPage from "./pages/TvReviewsPage";
+import ReviewListPage from "./pages/ReviewListPage";
 
 function App() {
   return (
@@ -46,11 +52,13 @@ function App() {
                 <Route path="/verify-code" element={<VerifyCodePage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/movie/:id" element={<ContentDetailPage />} />
+                <Route path="/movie/:id/reviews" element={<ReviewListPage />} />
                 <Route
                   path="/movie/:id/videos"
                   element={<ContentVideosPage />}
                 />
                 <Route path="/tv/:id" element={<ContentDetailPage />} />
+                <Route path="/tv/:id/reviews" element={<ReviewListPage />} />
                 <Route path="/tv/:id/videos" element={<ContentVideosPage />} />
                 <Route
                   path="/oauth2/redirect"
@@ -69,13 +77,13 @@ function App() {
                 <Route path="/community" element={<CommunityPage />} />
                 <Route path="/movie-reviews" element={<MovieReviewsPage />} />
                 <Route path="/tv-reviews" element={<TvReviewsPage />} />
-                <Route 
-                  path="/admin" 
+                <Route
+                  path="/admin"
                   element={
                     <RequireAdmin>
                       <AdminPage />
                     </RequireAdmin>
-                  } 
+                  }
                 />
               </Routes>
             </main>
