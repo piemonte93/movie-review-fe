@@ -507,6 +507,14 @@ export const getOtherUserProfile = async (
     const profileResponse = await apiClient.get(`/api/profile/id/${userId}`);
     console.log("사용자 프로필 데이터 응답:", profileResponse.data);
 
+    // 디버깅: 응답에서 reviewCount와 postCount 확인
+    console.log(
+      `[디버그] 프로필 응답의 reviewCount: ${profileResponse.data.reviewCount}`
+    );
+    console.log(
+      `[디버그] 프로필 응답의 postCount: ${profileResponse.data.postCount}`
+    );
+
     // 응답 데이터를 UserProfile 형식에 맞게 변환
     const responseData = profileResponse.data;
 
@@ -530,6 +538,14 @@ export const getOtherUserProfile = async (
       mutualFollow: responseData.mutualFollow || false,
       followsMe: responseData.followsMe || false,
     };
+
+    // 디버깅: 생성된 profileData 객체의 값 확인
+    console.log(
+      `[디버그] 생성된 profileData 객체의 reviewCount: ${profileData.reviewCount}`
+    );
+    console.log(
+      `[디버그] 생성된 profileData 객체의 postCount: ${profileData.postCount}`
+    );
 
     // 백엔드에서 postCount가 없는 경우 게시글 수를 가져오기 위한 추가 요청
     if (profileData.postCount === undefined) {
@@ -947,6 +963,8 @@ export const getUserPostCount = async (userId: number): Promise<number> => {
         params: { page: 0, size: 1 }, // 페이지네이션 정보만 필요하므로 사이즈를 작게 설정
       }
     );
+
+    console.log(`[디버그] getUserPostCount 응답:`, response.data);
 
     // totalElements 필드에서 총 게시글 수를 확인합니다
     if (response.data && typeof response.data.totalElements === "number") {

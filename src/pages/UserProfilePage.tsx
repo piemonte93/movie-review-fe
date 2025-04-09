@@ -20,6 +20,7 @@ import {
   toggleFollow,
   getUserFollowers,
   getUserFollowing,
+  getUserPostCount,
 } from "../api/userApi";
 import { UserProfile, UserActivity } from "../types/user";
 import ContentCard from "../components/ContentCard";
@@ -273,10 +274,20 @@ const UserProfilePage: React.FC = () => {
             followerCount: directResponse.data.followerCount || 0,
             watchedMoviesCount: directResponse.data.reviewCount || 0,
             reviewedMoviesCount: directResponse.data.reviewCount || 0,
+            // 명시적으로 숫자 변환
+            reviewCount: Number(directResponse.data.reviewCount || 0),
+            postCount: Number(directResponse.data.postCount || 0),
             isFollowing: isFollowingStatus,
             mutualFollow: mutualFollowStatus,
             followsMe: followsMeStatus,
           };
+
+          console.log(`[디버그] 직접 API에서 생성된 profileData:`, {
+            reviewCount: profileData.reviewCount,
+            postCount: profileData.postCount,
+            reviewCountType: typeof profileData.reviewCount,
+            postCountType: typeof profileData.postCount,
+          });
 
           // 로컬 스토리지에 팔로우 상태 저장 (API 응답 기준)
           try {
@@ -300,7 +311,64 @@ const UserProfilePage: React.FC = () => {
           const activity = await getOtherUserActivity(userId);
           setActivityData(activity);
 
-          // 초기 데이터 로드
+          // 초기 데이터 로드 (모든 탭 데이터를 미리 로드하여 카운트 정확도 높임)
+          try {
+            console.log("[디버그] 모든 탭 데이터 사전 로드 시작");
+
+            // 비동기 병렬 로드로 성능 최적화
+            const loadAllTabsData = async () => {
+              // 게시물 로드
+              const postsResponse = await backendApi.getUserPosts(
+                parseInt(userId),
+                0
+              );
+              if (postsResponse && postsResponse.totalElements !== undefined) {
+                console.log(
+                  `[디버그] 사전 로드: 게시물 수 = ${postsResponse.totalElements}`
+                );
+                // 현재 선택된 탭이 아니면 UI를 업데이트하지 않고 카운트만 갱신
+                if (activeTab !== "posts") {
+                  setProfileData((prev) => ({
+                    ...prev,
+                    postCount: Number(postsResponse.totalElements),
+                  }));
+                }
+              }
+
+              // 리뷰 로드 (영화 + TV)
+              const [movieReviews, tvReviews] = await Promise.all([
+                backendApi.getUserReviewsById(parseInt(userId), 0),
+                backendApi.getUserTvReviewsById(parseInt(userId), 0),
+              ]);
+
+              const totalReviewCount =
+                Number(movieReviews?.totalElements || 0) +
+                Number(tvReviews?.totalElements || 0);
+
+              console.log(
+                `[디버그] 사전 로드: 총 리뷰 수 = ${totalReviewCount}`
+              );
+
+              // 현재 선택된 탭이 아니면 UI를 업데이트하지 않고 카운트만 갱신
+              if (activeTab !== "reviews") {
+                setProfileData((prev) => ({
+                  ...prev,
+                  reviewCount: totalReviewCount,
+                }));
+              }
+
+              console.log("[디버그] 모든 탭 데이터 사전 로드 완료");
+            };
+
+            // 비동기로 실행하여 UI 차단 방지
+            loadAllTabsData().catch((err) =>
+              console.error("[디버그] 탭 데이터 사전 로드 실패:", err)
+            );
+          } catch (preloadError) {
+            console.error("[디버그] 탭 데이터 사전 로드 오류:", preloadError);
+          }
+
+          // 사용자가 선택한 활성 탭의 데이터 로드
           if (activeTab === "posts") {
             fetchUserPosts();
           } else if (activeTab === "reviews") {
@@ -349,6 +417,36 @@ const UserProfilePage: React.FC = () => {
       profile.isFollowing = isFollowingStatus;
       profile.followsMe = followsMeStatus;
 
+      // reviewCount와 postCount가 없는 경우 설정
+      if (profile.reviewCount === undefined) {
+        profile.reviewCount =
+          profile.watchedMoviesCount || profile.reviewedMoviesCount || 0;
+        console.log(`[디버그] reviewCount 설정: ${profile.reviewCount}`);
+      }
+
+      if (
+        profile.postCount === undefined &&
+        typeof profile.postCount !== "number"
+      ) {
+        // postCount를 가져오기 위해 추가 API 호출을 시도할 수 있습니다
+        try {
+          console.log(`[디버그] 사용자 ${userId}의 게시글 수 조회 시작`);
+          profile.postCount = await getUserPostCount(parseInt(userId));
+          console.log(`[디버그] 게시글 수 설정: ${profile.postCount}`);
+        } catch (postError) {
+          console.error("[디버그] 게시글 수 가져오기 실패:", postError);
+          profile.postCount = 0;
+        }
+      }
+
+      // 최종 확인: reviewCount, postCount가 확실히 number 타입으로 설정되도록 함
+      profile.reviewCount = profile.reviewCount || 0;
+      profile.postCount = profile.postCount || 0;
+
+      console.log(
+        `[디버그] 최종 설정된 값 - reviewCount: ${profile.reviewCount}, postCount: ${profile.postCount}`
+      );
+
       console.log(
         `[디버그] 기존 방식으로 설정한 팔로우 상태: isFollowing=${isFollowingStatus}, followsMe=${followsMeStatus}, mutualFollow=${profile.mutualFollow}`
       );
@@ -371,7 +469,62 @@ const UserProfilePage: React.FC = () => {
       setIsFollowing(isFollowingStatus);
       setActivityData(activity);
 
-      // 초기 데이터 로드
+      // 초기 데이터 로드 (모든 탭 데이터를 미리 로드하여 카운트 정확도 높임)
+      try {
+        console.log("[디버그] 모든 탭 데이터 사전 로드 시작");
+
+        // 비동기 병렬 로드로 성능 최적화
+        const loadAllTabsData = async () => {
+          // 게시물 로드
+          const postsResponse = await backendApi.getUserPosts(
+            parseInt(userId),
+            0
+          );
+          if (postsResponse && postsResponse.totalElements !== undefined) {
+            console.log(
+              `[디버그] 사전 로드: 게시물 수 = ${postsResponse.totalElements}`
+            );
+            // 현재 선택된 탭이 아니면 UI를 업데이트하지 않고 카운트만 갱신
+            if (activeTab !== "posts") {
+              setProfileData((prev) => ({
+                ...prev,
+                postCount: Number(postsResponse.totalElements),
+              }));
+            }
+          }
+
+          // 리뷰 로드 (영화 + TV)
+          const [movieReviews, tvReviews] = await Promise.all([
+            backendApi.getUserReviewsById(parseInt(userId), 0),
+            backendApi.getUserTvReviewsById(parseInt(userId), 0),
+          ]);
+
+          const totalReviewCount =
+            Number(movieReviews?.totalElements || 0) +
+            Number(tvReviews?.totalElements || 0);
+
+          console.log(`[디버그] 사전 로드: 총 리뷰 수 = ${totalReviewCount}`);
+
+          // 현재 선택된 탭이 아니면 UI를 업데이트하지 않고 카운트만 갱신
+          if (activeTab !== "reviews") {
+            setProfileData((prev) => ({
+              ...prev,
+              reviewCount: totalReviewCount,
+            }));
+          }
+
+          console.log("[디버그] 모든 탭 데이터 사전 로드 완료");
+        };
+
+        // 비동기로 실행하여 UI 차단 방지
+        loadAllTabsData().catch((err) =>
+          console.error("[디버그] 탭 데이터 사전 로드 실패:", err)
+        );
+      } catch (preloadError) {
+        console.error("[디버그] 탭 데이터 사전 로드 오류:", preloadError);
+      }
+
+      // 사용자가 선택한 활성 탭의 데이터 로드
       if (activeTab === "posts") {
         fetchUserPosts();
       } else if (activeTab === "reviews") {
@@ -425,6 +578,15 @@ const UserProfilePage: React.FC = () => {
 
       if (nextPage === 0) {
         setPosts(response.content);
+
+        // postCount 업데이트
+        if (profileData && response.totalElements !== undefined) {
+          console.log(`[디버그] 게시물 수 업데이트: ${response.totalElements}`);
+          setProfileData({
+            ...profileData,
+            postCount: response.totalElements,
+          });
+        }
       } else {
         setPosts((prevPosts) => [...prevPosts, ...response.content]);
       }
@@ -482,6 +644,20 @@ const UserProfilePage: React.FC = () => {
 
       if (nextPage === 0) {
         setReviews(allReviews);
+
+        // reviewCount 업데이트 (영화 리뷰와 TV 쇼 리뷰의 총 개수)
+        if (profileData) {
+          const totalReviewCount =
+            (movieReviews.totalElements || 0) +
+            (tvShowReviews.totalElements || 0);
+          console.log(
+            `[디버그] 리뷰 수 업데이트: ${totalReviewCount} (영화: ${movieReviews.totalElements || 0}, TV: ${tvShowReviews.totalElements || 0})`
+          );
+          setProfileData({
+            ...profileData,
+            reviewCount: totalReviewCount,
+          });
+        }
       } else {
         setReviews((prevReviews) => [...prevReviews, ...allReviews]);
       }
@@ -1078,6 +1254,36 @@ const UserProfilePage: React.FC = () => {
 
             {/* 통계 (팔로워, 팔로잉 등) */}
             <div className="flex space-x-6 mt-2">
+              <div className="text-center md:text-left">
+                <span className="font-semibold">
+                  {(() => {
+                    // 디버깅을 위한 값 출력
+                    console.log("[디버그] 게시물 수 계산 시작");
+                    console.log(
+                      `- profileData.reviewCount: ${profileData?.reviewCount}`
+                    );
+                    console.log(
+                      `- profileData.postCount: ${profileData?.postCount}`
+                    );
+                    console.log(`- reviews.length: ${reviews.length}`);
+                    console.log(`- posts.length: ${posts.length}`);
+
+                    // 최대한 간단하게 계산
+                    const reviewCount = Number(profileData?.reviewCount || 0);
+                    const postCount = Number(profileData?.postCount || 0);
+                    const totalCount = reviewCount + postCount;
+
+                    console.log(`[디버그] 총 게시물 수: ${totalCount}`);
+
+                    // UI에 표시할 값 결정
+                    // 계산된 값이 0이면 현재 로드된 데이터 개수를 사용
+                    return totalCount > 0
+                      ? totalCount
+                      : reviews.length + posts.length;
+                  })()}
+                </span>
+                <span className="ml-1">게시물</span>
+              </div>
               <button
                 onClick={loadFollowers}
                 className="text-center md:text-left hover:underline"
@@ -1096,13 +1302,6 @@ const UserProfilePage: React.FC = () => {
                 </span>
                 <span className="ml-1">팔로우</span>
               </button>
-              <div className="text-center md:text-left">
-                <span className="font-semibold">
-                  {(profileData?.reviewCount || 0) +
-                    (profileData?.postCount || 0)}
-                </span>
-                <span className="ml-1">게시물</span>
-              </div>
             </div>
 
             {/* 프로필 소개 */}
