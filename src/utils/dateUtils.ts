@@ -128,97 +128,74 @@ export const getPostDateByPattern = (
 };
 
 /**
- * 레거시 포맷 함수 - 기존 코드와의 호환성을 위해 유지
- *
- * @param dateString 날짜 문자열
+ * 날짜 문자열을 특정 형식으로 포맷팅합니다.
+ * @param dateString - 포맷팅할 날짜 문자열
+ * @param options - Intl.DateTimeFormatOptions 타입의 포맷 옵션
+ * @param locale - 로케일 (기본값: 'ko-KR')
  * @returns 포맷팅된 날짜 문자열
  */
-export const formatDate = (date: string | Date): string => {
-  console.log(`formatDate 호출됨: 원본 날짜 ${date}`);
+export const formatDate = (
+  dateString: string,
+  options: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  },
+  locale: string = "ko-KR"
+): string => {
+  try {
+    const date = new Date(dateString);
 
-  if (!date) {
-    console.log("날짜 값이 없습니다");
+    // 유효한 날짜인지 확인
+    if (isNaN(date.getTime())) {
+      return "";
+    }
+
+    return date.toLocaleDateString(locale, options);
+  } catch (error) {
+    console.error("Date formatting error:", error);
     return "";
   }
+};
 
-  // 문자열을 Date 객체로 변환
-  let dateObj: Date;
-  if (typeof date === "string") {
-    console.log(`문자열 날짜 변환 시작: "${date}"`);
-
-    // 서버로부터 온 LocalDateTime 문자열 처리 (2023-04-03T15:30:45)
-    const localDateTimeRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/;
-    if (localDateTimeRegex.test(date)) {
-      console.log(`날짜가 LocalDateTime 형식입니다: ${date}`);
-
-      // 중요: 서버에서 보낸 시간은 KST 기준이지만 타임존 정보가 없음
-      // 기존: 시간에 9시간을 더하는 방식은 시간이 두 번 조정되는 문제 발생
-      // 수정: 타임존 정보만 추가하고 추가 계산을 하지 않음
-      dateObj = new Date(`${date}+09:00`); // 한국 시간대 정보 추가
-
-      console.log(
-        `KST 타임존 정보 추가 후 ISO 문자열: ${dateObj.toISOString()}`
-      );
-      console.log(`KST 타임존 정보 추가 후 로컬 시간: ${dateObj.toString()}`);
-    } else {
-      dateObj = new Date(date);
-      console.log(`일반 날짜 문자열로 처리: ${dateObj.toString()}`);
-    }
-  } else {
-    dateObj = date;
-    console.log(`Date 객체 직접 사용: ${dateObj.toString()}`);
-  }
-
-  // 날짜가 유효하지 않은 경우
-  if (isNaN(dateObj.getTime())) {
-    console.warn(`날짜 변환 실패: ${date}`);
-    return "날짜 정보 없음";
-  }
-
-  // 현재 시간보다 미래인지 확인 (디버깅 용도)
-  const now = new Date();
-  if (dateObj.getTime() > now.getTime()) {
-    console.log(
-      `미래 날짜 감지: ${dateObj.toISOString()}, 현재: ${now.toISOString()}`
-    );
-    // 미래 날짜도 그대로 표시
-  }
-
+/**
+ * 날짜 문자열을 상대적 시간으로 변환합니다 (예: "3일 전", "방금 전").
+ * @param dateString - 변환할 날짜 문자열
+ * @returns 상대적 시간 문자열
+ */
+export const getRelativeTimeFromNow = (dateString: string): string => {
   try {
-    // 24시간 표기법으로 변경(hour12: false)
-    const formattedDate = new Intl.DateTimeFormat("ko-KR", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false, // 24시간 표기법 사용
-      timeZone: "Asia/Seoul", // 명시적으로 한국 시간대 지정
-    }).format(dateObj);
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+    const diffMinutes = Math.floor(diffTime / (1000 * 60));
+    const diffSeconds = Math.floor(diffTime / 1000);
 
-    console.log(`최종 포맷팅된 날짜: ${formattedDate}`);
-    return formattedDate;
-  } catch (error) {
-    console.error(`날짜 포맷팅 오류:`, error);
-
-    // 대체 포맷팅 방법 시도 (24시간제)
-    try {
-      const year = dateObj.getFullYear();
-      const month = dateObj.getMonth() + 1;
-      const day = dateObj.getDate();
-      const hours = dateObj.getHours(); // 24시간제
-      const minutes = dateObj.getMinutes();
-
-      // 시간을 두 자리로 표시하기 위한 패딩 추가
-      const paddedHours = hours.toString().padStart(2, "0");
-      const paddedMinutes = minutes.toString().padStart(2, "0");
-
-      const fallbackFormatted = `${year}년 ${month}월 ${day}일 ${paddedHours}:${paddedMinutes}`;
-      console.log(`대체 포맷팅 결과: ${fallbackFormatted}`);
-      return fallbackFormatted;
-    } catch (fallbackError) {
-      console.error(`대체 포맷팅도 실패:`, fallbackError);
-      return "날짜 표시 오류";
+    if (diffDays > 30) {
+      // 30일 이상이면 날짜 표시
+      return formatDate(dateString, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } else if (diffDays > 0) {
+      return `${diffDays}일 전`;
+    } else if (diffHours > 0) {
+      return `${diffHours}시간 전`;
+    } else if (diffMinutes > 0) {
+      return `${diffMinutes}분 전`;
+    } else {
+      return "방금 전";
     }
+  } catch (error) {
+    console.error("Relative time calculation error:", error);
+    return "";
   }
+};
+
+export default {
+  formatDate,
+  getRelativeTimeFromNow,
 };

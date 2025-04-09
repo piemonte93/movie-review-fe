@@ -4,10 +4,12 @@ import {
   Content,
   ContentDetail,
   ContentResponse,
+  Review as TmdbReview,
   ReviewResponse,
   VideoResponse,
 } from "../types/content";
 import { TvShow } from "../types/content";
+import { useState, useEffect } from "react";
 
 // This will point to our Spring Boot backend
 const BASE_URL = "http://localhost:8080";
@@ -410,6 +412,81 @@ export const backendApi = {
   getMovieVideos: async (id: number): Promise<VideoResponse> => {
     const response = await apiClient.get(`/api/contents/movie/${id}/videos`);
     return response.data;
+  },
+
+  // 로컬 데이터베이스에서 영화 TMDB ID로 리뷰를 가져오는 함수
+  getMovieReviewsByTmdbId: async (
+    movieId: number,
+    page = 0,
+    size = 10
+  ): Promise<Page<Review>> => {
+    try {
+      const response = await apiClient.get(`/api/reviews/movie/${movieId}`, {
+        params: { page, size },
+      });
+
+      // 로컬 리뷰에 source 속성 추가
+      const localReviews = response.data.content.map((review: any) => ({
+        ...review,
+        source: "local", // 로컬 리뷰임을 표시
+      }));
+
+      return {
+        ...response.data,
+        content: localReviews,
+      };
+    } catch (error) {
+      console.error(
+        `TMDB ID ${movieId}의 로컬 영화 리뷰 가져오기 실패:`,
+        error
+      );
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        number: page,
+        size: size,
+        first: true,
+        last: true,
+        empty: true,
+      };
+    }
+  },
+
+  // 로컬 데이터베이스에서 TV TMDB ID로 리뷰를 가져오는 함수
+  getTvShowReviewsByTmdbId: async (
+    tvId: number,
+    page = 0,
+    size = 10
+  ): Promise<Page<Review>> => {
+    try {
+      const response = await apiClient.get(`/api/tvreviews/tv/${tvId}`, {
+        params: { page, size },
+      });
+
+      // 로컬 리뷰에 source 속성 추가
+      const localReviews = response.data.content.map((review: any) => ({
+        ...review,
+        source: "local", // 로컬 리뷰임을 표시
+      }));
+
+      return {
+        ...response.data,
+        content: localReviews,
+      };
+    } catch (error) {
+      console.error(`TMDB ID ${tvId}의 로컬 TV 쇼 리뷰 가져오기 실패:`, error);
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        number: page,
+        size: size,
+        first: true,
+        last: true,
+        empty: true,
+      };
+    }
   },
 
   // TV 프로그램 관련 API
@@ -2863,3 +2940,48 @@ export const searchUsers = async (
     };
   }
 };
+
+// TMDB 리뷰와 로컬 리뷰를 모두 포함할 수 있는 통합 타입
+export interface CombinedReview {
+  id: number | string;
+  user?: {
+    id: number;
+    username: string;
+    profileImageUrl: string | null;
+  };
+  title?: string;
+  content: string;
+  rating?: number;
+  createdAt?: string;
+  modifiedAt?: string;
+  is_spoiler?: boolean;
+  likeCount?: number;
+  dislikeCount?: number;
+  source: "local" | "tmdb";
+  author?: string;
+  author_details?: {
+    name?: string;
+    username?: string;
+    avatar_path?: string;
+    rating?: number;
+  };
+  avatar_path?: string;
+}
+
+// 로컬 리뷰를 위한 Review 인터페이스 추가
+export interface Review {
+  id: number;
+  user?: {
+    id: number;
+    username: string;
+    profileImageUrl: string | null;
+  };
+  title?: string;
+  content: string;
+  rating?: number;
+  createdAt?: string;
+  modifiedAt?: string;
+  is_spoiler?: boolean;
+  likeCount?: number;
+  dislikeCount?: number;
+}

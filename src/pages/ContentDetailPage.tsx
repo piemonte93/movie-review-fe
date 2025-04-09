@@ -1,14 +1,22 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation } from "react-router-dom";
-import { backendApi } from "../api/backendApi";
-import { FaStar, FaTimes, FaBookmark } from "react-icons/fa";
-import { ContentDetail, Review, Video } from "../types/content";
+import { backendApi, CombinedReview, Review } from "../api/backendApi";
+import {
+  FaStar,
+  FaTimes,
+  FaBookmark,
+  FaUserCircle,
+  FaCalendarAlt,
+} from "react-icons/fa";
+import { ContentDetail, Review as TmdbReview, Video } from "../types/content";
 import VideoPlayerModal from "../components/VideoPlayerModal";
 import CastCarousel from "../components/CastCarousel";
 import defaultProfile from "../assets/default-profile.svg";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "react-toastify";
 import { checkContentScrapStatus, toggleContentScrap } from "../api/userApi";
+import { StarRating } from "../components/StarRating";
+import { formatDate } from "../utils/dateUtils";
 
 /* // 임시 데이터는 주석 처리
 const mockMovieDetails = {
@@ -81,14 +89,16 @@ const ContentDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const [content, setContent] = useState<ContentDetail | null>(null);
-  const [reviews, setReviews] = useState<Review[]>([]);
+  const [tmdbReviews, setTmdbReviews] = useState<TmdbReview[]>([]);
+  const [localReviews, setLocalReviews] = useState<Review[]>([]);
+  const [combinedReviews, setCombinedReviews] = useState<CombinedReview[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [cast, setCast] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isTV, setIsTV] = useState(false);
   const [reviewImageErrors, setReviewImageErrors] = useState<{
-    [key: number]: boolean;
+    [key: string]: boolean;
   }>({});
   const [isScraped, setIsScraped] = useState<boolean>(false);
   const [scrappingInProgress, setScrappingInProgress] =
@@ -119,8 +129,8 @@ const ContentDetailPage = () => {
     setSelectedVideo(null);
   };
 
-  const handleReviewImageError = (reviewId: number) => {
-    setReviewImageErrors((prev) => ({ ...prev, [reviewId]: true }));
+  const handleReviewImageError = (reviewId: string | number) => {
+    setReviewImageErrors((prev) => ({ ...prev, [String(reviewId)]: true }));
   };
 
   // 리뷰 작성 제출 핸들러
@@ -185,7 +195,7 @@ const ContentDetailPage = () => {
       // 리뷰 목록 새로고침
       if (mediaType === "movie") {
         const reviewsResponse = await backendApi.getMovieReviews(parseInt(id!));
-        setReviews(reviewsResponse.results || []);
+        setTmdbReviews(reviewsResponse.results || []);
       }
     } catch (error) {
       console.error("리뷰 작성 실패:", error);
@@ -265,61 +275,93 @@ const ContentDetailPage = () => {
 
   useEffect(() => {
     const fetchContentDetails = async () => {
+      if (!id) {
+        setError("Invalid content ID.");
+        setLoading(false);
+        return;
+      }
       setLoading(true);
+      setError(null);
+      setIsTV(mediaType === "tv");
+
       try {
-        if (id) {
-          console.log(
-            "콘텐츠 상세 정보 요청: ID =",
-            id,
-            "미디어 타입 =",
-            mediaType
-          );
+        const detailsPromise =
+          mediaType === "tv"
+            ? backendApi.getTvDetails(parseInt(id))
+            : backendApi.getMovieDetails(parseInt(id));
+        const creditsPromise =
+          mediaType === "tv"
+            ? backendApi.getTvCredits(parseInt(id))
+            : backendApi.getMovieCredits(parseInt(id));
+        const videosPromise =
+          mediaType === "tv"
+            ? backendApi.getTvVideos(parseInt(id))
+            : backendApi.getMovieVideos(parseInt(id));
+        const localReviewsPromise =
+          mediaType === "tv"
+            ? backendApi.getTvShowReviewsByTmdbId(parseInt(id), 0, 10)
+            : backendApi.getMovieReviewsByTmdbId(parseInt(id), 0, 10);
+        const tmdbReviewsPromise =
+          mediaType === "tv"
+            ? backendApi.getTvReviews(parseInt(id))
+            : backendApi.getMovieReviews(parseInt(id));
 
-          // 미디어 타입에 따라 API 호출 결정
-          if (mediaType === "tv") {
-            // TV 프로그램인 경우
-            setIsTV(true);
-            const tvResponse = await backendApi.getTvDetails(parseInt(id));
-            console.log("TV 쇼 상세 응답:", tvResponse);
-            setContent(tvResponse);
+        const [
+          detailsResponse,
+          creditsResponse,
+          videosResponse,
+          localReviewsResponse,
+          tmdbReviewsResponse,
+        ] = await Promise.all([
+          detailsPromise,
+          creditsPromise,
+          videosPromise,
+          localReviewsPromise,
+          tmdbReviewsPromise,
+        ]);
 
-            // TV 출연진 정보 가져오기
-            const creditsResponse = await backendApi.getTvCredits(parseInt(id));
-            setCast(creditsResponse.cast || []);
+        setContent(detailsResponse);
+        setCast(creditsResponse.cast || []);
+        setVideos(videosResponse.results || []);
 
-            // TV 리뷰 가져오기
-            const reviewsResponse = await backendApi.getTvReviews(parseInt(id));
-            setReviews(reviewsResponse.results || []);
+        // 로컬 리뷰 설정
+        setLocalReviews(localReviewsResponse.content || []);
 
-            // TV 비디오 가져오기
-            const videosResponse = await backendApi.getTvVideos(parseInt(id));
-            setVideos(videosResponse.results || []);
-          } else {
-            // 영화인 경우
-            setIsTV(false);
-            const movieResponse = await backendApi.getMovieDetails(
-              parseInt(id)
+        // TMDB 리뷰 설정
+        setTmdbReviews(tmdbReviewsResponse.results || []);
+
+        // 로컬 리뷰와 TMDB 리뷰를 결합하여 combinedReviews 설정
+        const tmdbReviewsWithSource = (tmdbReviewsResponse.results || []).map(
+          (review) => ({
+            ...review,
+            source: "tmdb" as const,
+            id: review.id,
+          })
+        );
+
+        // 로컬 리뷰가 TMDB 리뷰보다 우선순위가 높도록 합침
+        const localReviewsWithSource = (localReviewsResponse.content || []).map(
+          (review) => ({
+            ...review,
+            source: "local" as const,
+          })
+        );
+
+        setCombinedReviews([
+          ...localReviewsWithSource,
+          ...tmdbReviewsWithSource,
+        ]);
+
+        // 스크랩 상태 확인 (로그인한 경우)
+        if (isLoggedIn) {
+          try {
+            const scrapStatus = await checkContentScrapStatus(
+              parseInt(id),
+              mediaType
             );
-            console.log("영화 상세 응답:", movieResponse);
-            setContent(movieResponse);
-
-            // 영화 출연진 정보 가져오기
-            const creditsResponse = await backendApi.getMovieCredits(
-              parseInt(id)
-            );
-            setCast(creditsResponse.cast || []);
-
-            // 영화 리뷰 가져오기
-            const reviewsResponse = await backendApi.getMovieReviews(
-              parseInt(id)
-            );
-            setReviews(reviewsResponse.results || []);
-
-            // 영화 비디오 가져오기
-            const videosResponse = await backendApi.getMovieVideos(
-              parseInt(id)
-            );
-            setVideos(videosResponse.results || []);
+            setIsScraped(scrapStatus);
+          } catch (error) {
+            console.error("스크랩 상태 확인 실패:", error);
           }
         }
       } catch (error) {
@@ -334,7 +376,7 @@ const ContentDetailPage = () => {
     };
 
     fetchContentDetails();
-  }, [id, mediaType]);
+  }, [id, mediaType, isLoggedIn]);
 
   if (loading) {
     return (
@@ -685,43 +727,108 @@ const ContentDetailPage = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {reviews.length > 0 ? (
-              reviews.slice(0, 4).map((review) => (
+            {combinedReviews.length > 0 ? (
+              combinedReviews.slice(0, 4).map((review) => (
                 <div key={review.id} className="border rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    {!reviewImageErrors[Number(review.id)] &&
-                    review.avatar_path ? (
-                      <img
-                        src={
-                          review.avatar_path.startsWith("/http")
-                            ? review.avatar_path.substring(1)
-                            : `https://image.tmdb.org/t/p/w200${review.avatar_path}`
-                        }
-                        alt={review.author}
-                        className="w-8 h-8 rounded-full object-cover"
-                        onError={() =>
-                          handleReviewImageError(Number(review.id))
-                        }
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center">
-                        <img
-                          src={defaultProfile}
-                          alt={review.author}
-                          className="w-4 h-4 object-contain opacity-70"
-                        />
+                  {review.source === "local" ? (
+                    // 로컬 리뷰 표시
+                    <>
+                      <div className="flex items-center gap-2 mb-2">
+                        {review.user?.profileImageUrl ? (
+                          <img
+                            src={review.user.profileImageUrl}
+                            alt={review.user?.username}
+                            className="w-8 h-8 rounded-full object-cover"
+                            onError={() =>
+                              handleReviewImageError(String(review.id))
+                            }
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                            <FaUserCircle className="text-gray-400" />
+                          </div>
+                        )}
+                        <span className="font-medium">
+                          {review.user?.username || "사용자"}
+                        </span>
                       </div>
-                    )}
-                    <span className="font-medium">{review.author}</span>
-                  </div>
-                  <p className="text-gray-600 text-sm mb-1 line-clamp-3">
-                    {review.content}
-                  </p>
+
+                      {/* 별점 표시 */}
+                      <div className="flex items-center mb-2">
+                        <StarRating rating={review.rating || 0} />
+                        <span className="ml-2 text-sm text-gray-600">
+                          ({review.rating || 0}점)
+                        </span>
+                      </div>
+
+                      {/* 작성 날짜 */}
+                      <div className="flex items-center text-xs text-gray-500 mb-2">
+                        <FaCalendarAlt className="mr-1" />
+                        {review.createdAt ? formatDate(review.createdAt) : ""}
+                      </div>
+
+                      {/* 리뷰 제목 */}
+                      {review.title && (
+                        <h3 className="font-medium mb-1">{review.title}</h3>
+                      )}
+
+                      {/* 리뷰 내용 */}
+                      <p className="text-gray-600 text-sm mb-1 line-clamp-3">
+                        {review.content}
+                      </p>
+                    </>
+                  ) : (
+                    // TMDB 리뷰 표시 (기존 방식)
+                    <>
+                      <div className="flex items-center gap-2 mb-2">
+                        {!reviewImageErrors[String(review.id)] &&
+                        review.avatar_path ? (
+                          <img
+                            src={
+                              review.avatar_path.startsWith("/http")
+                                ? review.avatar_path.substring(1)
+                                : `https://image.tmdb.org/t/p/w200${review.avatar_path}`
+                            }
+                            alt={review.author}
+                            className="w-8 h-8 rounded-full object-cover"
+                            onError={() =>
+                              handleReviewImageError(String(review.id))
+                            }
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center">
+                            <img
+                              src={defaultProfile}
+                              alt={review.author}
+                              className="w-4 h-4 object-contain opacity-70"
+                            />
+                          </div>
+                        )}
+                        <span className="font-medium">{review.author}</span>
+                      </div>
+
+                      {/* TMDB 별점 표시 (있는 경우) */}
+                      {review.author_details?.rating && (
+                        <div className="flex items-center mb-2">
+                          <StarRating
+                            rating={review.author_details.rating / 2}
+                          />
+                          <span className="ml-2 text-sm text-gray-600">
+                            ({review.author_details.rating}/10)
+                          </span>
+                        </div>
+                      )}
+
+                      <p className="text-gray-600 text-sm mb-1 line-clamp-3">
+                        {review.content}
+                      </p>
+                    </>
+                  )}
                 </div>
               ))
             ) : (
               <div className="col-span-4 text-center py-4 text-gray-500">
-                아직 리뷰가 없습니다. 첫 리뷰를 작성해보세요!
+                작성된 리뷰가 없습니다.
               </div>
             )}
           </div>
@@ -787,8 +894,10 @@ const ContentDetailPage = () => {
                       </p>
                     </>
                   ) : (
-                    <div className="aspect-video bg-gray-200 flex items-center justify-center">
-                      <p className="text-gray-600">{video.name}</p>
+                    <div className="aspect-video flex items-center justify-center bg-gray-100 rounded">
+                      <span className="text-sm text-gray-500">
+                        {video.site} 비디오
+                      </span>
                     </div>
                   )}
                 </div>
