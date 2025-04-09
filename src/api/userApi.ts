@@ -503,18 +503,15 @@ export const getOtherUserProfile = async (
   try {
     console.log(`사용자 ID: ${userId}의 프로필 데이터 요청 시작`);
 
-    // ID로 유저명 가져오기 (업데이트된 함수 사용)
-    const username = await getUsernameFromUserId(userId);
-    console.log(`사용자 ID ${userId}의 변환된 유저명: ${username}`);
-
-    // 유저명으로 프로필 정보 요청
-    const response = await apiClient.get(`/api/profile/${username}`);
-    console.log("사용자 프로필 데이터 응답:", response.data);
+    // 백엔드에서 사용자 프로필 정보를 가져옴 (ID 기반 직접 API 요청)
+    const profileResponse = await apiClient.get(`/api/profile/id/${userId}`);
+    console.log("사용자 프로필 데이터 응답:", profileResponse.data);
 
     // 응답 데이터를 UserProfile 형식에 맞게 변환
-    const responseData = response.data;
+    const responseData = profileResponse.data;
 
-    return {
+    // 기본 프로필 데이터 구성
+    const profileData = {
       user: {
         id: parseInt(userId),
         username: responseData.username || `사용자${userId}`,
@@ -527,46 +524,53 @@ export const getOtherUserProfile = async (
       },
       followingCount: responseData.followingCount || 0,
       followerCount: responseData.followerCount || 0,
-      watchedMoviesCount: responseData.reviewCount || 0,
-      reviewedMoviesCount: responseData.reviewCount || 0,
+      reviewCount: responseData.reviewCount || 0,
+      postCount: responseData.postCount || 0,
       isFollowing: responseData.isFollowing || false,
       mutualFollow: responseData.mutualFollow || false,
       followsMe: responseData.followsMe || false,
     };
-  } catch (error) {
-    console.error("사용자 프로필 데이터 가져오기 실패:", error);
 
-    // API 요청 실패 시 현재 로그인한 사용자 정보 확인
-    const currentUser = localStorage.getItem("user");
-    if (currentUser) {
+    // 백엔드에서 postCount가 없는 경우 게시글 수를 가져오기 위한 추가 요청
+    if (profileData.postCount === undefined) {
       try {
-        const userData = JSON.parse(currentUser);
+        console.log(`사용자 ${userId}의 게시글 수 조회 시작`);
 
-        // 요청한 사용자 ID와 현재 로그인한 사용자 ID가 같은 경우
-        if (userData.id === parseInt(userId)) {
-          console.log("현재 로그인한 사용자의 프로필 데이터 사용:", userData);
-          return {
-            user: {
-              id: userData.id,
-              username: userData.username,
-              email: userData.email || "user@example.com",
-              bio: userData.bio || "",
-              roles: userData.roles || ["USER"],
-              profileImageUrl: userData.profileImageUrl,
-              createdAt: userData.createdAt || "2023-01-01",
-              updatedAt: userData.updatedAt || "2023-01-01",
-            },
-            followingCount: userData.followingCount || 0,
-            followerCount: userData.followerCount || 0,
-            watchedMoviesCount: userData.watchedMoviesCount || 0,
-            reviewedMoviesCount: userData.reviewedMoviesCount || 0,
-            isFollowing: false,
-          };
+        // 여러 방법으로 게시글 수 가져오기 시도
+        let postCount = 0;
+
+        // 방법 1: 전용 카운트 API 시도
+        try {
+          const countResponse = await apiClient.get(
+            `/api/community/posts/count/${userId}`
+          );
+          if (typeof countResponse.data === "number") {
+            console.log("게시글 수 카운트 API 응답:", countResponse.data);
+            postCount = countResponse.data;
+          }
+        } catch (countError) {
+          console.log("게시글 수 카운트 API 호출 실패:", countError);
         }
-      } catch (parseError) {
-        console.error("로컬 스토리지 사용자 정보 파싱 오류:", parseError);
+
+        // 방법 1이 실패하면 방법 2 시도: getUserPostCount 함수 사용
+        if (postCount === 0) {
+          postCount = await getUserPostCount(userId);
+          console.log("getUserPostCount로 가져온 게시글 수:", postCount);
+        }
+
+        // 결과 설정
+        profileData.postCount = postCount;
+        console.log(`최종 게시글 수: ${postCount}`);
+      } catch (postError) {
+        console.error("게시글 수 가져오기 실패:", postError);
+        console.log("게시글 수 기본값 0으로 설정");
+        profileData.postCount = 0;
       }
     }
+
+    return profileData;
+  } catch (error) {
+    console.error("사용자 프로필 데이터 가져오기 실패:", error);
 
     // 폴백 데이터 (모든 API 실패 시)
     return {
@@ -582,8 +586,8 @@ export const getOtherUserProfile = async (
       },
       followingCount: 0,
       followerCount: 0,
-      watchedMoviesCount: 0,
-      reviewedMoviesCount: 0,
+      reviewCount: 0,
+      postCount: 0,
       isFollowing: false,
     };
   }

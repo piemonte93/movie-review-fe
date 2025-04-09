@@ -32,6 +32,9 @@ import {
   apiClient,
 } from "../api/backendApi";
 import { formatDate } from "../utils/dateUtils";
+import ReviewCard from "../components/ReviewCard";
+import PostCard from "../components/PostCard";
+import InfiniteScroll from "react-infinite-scroll-component";
 
 // MovieReview 인터페이스를 확장하여 contentType 속성 추가
 interface ExtendedMovieReview extends MovieReview {
@@ -61,6 +64,7 @@ const UserProfilePage: React.FC = () => {
   const [scrapsLoading, setScrapsLoading] = useState<boolean>(false);
   const [page, setPage] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(0);
+  const [hasMore, setHasMore] = useState<boolean>(true);
 
   // 모달 상태
   const [showFollowersModal, setShowFollowersModal] = useState<boolean>(false);
@@ -116,6 +120,28 @@ const UserProfilePage: React.FC = () => {
     try {
       setLoading(true);
       console.log(`[디버그] 사용자 ${userId} 프로필 데이터 로드 시작`);
+
+      // 잘못된 사용자 매핑 데이터 정리
+      try {
+        const userMappingStr = localStorage.getItem("user_id_mapping");
+        if (userMappingStr) {
+          const userMapping = JSON.parse(userMappingStr);
+          // 잘못된 매핑 제거
+          if (userMapping[userId]) {
+            console.log(
+              `[디버그] 사용자 ID ${userId}의 잘못된 매핑 제거:`,
+              userMapping[userId]
+            );
+            delete userMapping[userId];
+            localStorage.setItem(
+              "user_id_mapping",
+              JSON.stringify(userMapping)
+            );
+          }
+        }
+      } catch (cacheError) {
+        console.error("[디버그] 사용자 매핑 캐시 정리 실패:", cacheError);
+      }
 
       // 현재 로그인한 사용자가 자신의 프로필을 보는 경우는 팔로우 관련 처리 생략
       if (user?.id === parseInt(userId)) {
@@ -370,28 +396,42 @@ const UserProfilePage: React.FC = () => {
   useEffect(() => {
     if (!userId || loading) return;
 
+    // 탭이 변경되면 페이지 정보 초기화
+    setPage(0);
+    setHasMore(true);
+
     if (activeTab === "posts") {
-      fetchUserPosts();
+      fetchUserPosts(0);
     } else if (activeTab === "reviews") {
-      fetchUserReviews();
+      fetchUserReviews(0);
     } else if (activeTab === "scraps") {
       fetchUserScraps();
     }
   }, [activeTab]);
 
   // 사용자의 게시물 가져오기
-  const fetchUserPosts = async () => {
+  const fetchUserPosts = async (nextPage = 0) => {
     if (!userId) return;
 
     try {
       setPostsLoading(true);
-      console.log(`사용자 ${userId}의 게시물 로드 시작`);
+      console.log(`사용자 ${userId}의 게시물 로드 시작 (페이지: ${nextPage})`);
 
-      const response = await backendApi.getUserPosts(parseInt(userId), page);
+      const response = await backendApi.getUserPosts(
+        parseInt(userId),
+        nextPage
+      );
       console.log(`사용자 게시물 ${response.content.length}개 로드 완료`);
 
-      setPosts(response.content);
+      if (nextPage === 0) {
+        setPosts(response.content);
+      } else {
+        setPosts((prevPosts) => [...prevPosts, ...response.content]);
+      }
+
+      setPage(nextPage);
       setTotalPages(response.totalPages);
+      setHasMore(nextPage < response.totalPages - 1);
     } catch (error) {
       console.error("사용자 게시물 로드 실패", error);
     } finally {
@@ -400,17 +440,17 @@ const UserProfilePage: React.FC = () => {
   };
 
   // 사용자의 리뷰 가져오기
-  const fetchUserReviews = async () => {
+  const fetchUserReviews = async (nextPage = 0) => {
     if (!userId) return;
 
     try {
       setReviewsLoading(true);
-      console.log(`사용자 ${userId}의 리뷰 로드 시작`);
+      console.log(`사용자 ${userId}의 리뷰 로드 시작 (페이지: ${nextPage})`);
 
       // 영화 리뷰와 TV 쇼 리뷰를 모두 가져옴
       const [movieReviews, tvShowReviews] = await Promise.all([
-        backendApi.getUserReviewsById(parseInt(userId), page),
-        backendApi.getUserTvReviewsById(parseInt(userId), page),
+        backendApi.getUserReviewsById(parseInt(userId), nextPage),
+        backendApi.getUserTvReviewsById(parseInt(userId), nextPage),
       ]);
 
       // 영화 리뷰에 콘텐츠 타입 추가
@@ -439,7 +479,21 @@ const UserProfilePage: React.FC = () => {
       );
 
       console.log(`사용자 리뷰 ${allReviews.length}개 로드 완료`);
-      setReviews(allReviews);
+
+      if (nextPage === 0) {
+        setReviews(allReviews);
+      } else {
+        setReviews((prevReviews) => [...prevReviews, ...allReviews]);
+      }
+
+      setPage(nextPage);
+      // 두 API 중 더 많은 페이지를 가진 것으로 설정
+      const maxTotalPages = Math.max(
+        movieReviews.totalPages,
+        tvShowReviews.totalPages
+      );
+      setTotalPages(maxTotalPages);
+      setHasMore(nextPage < maxTotalPages - 1);
     } catch (error) {
       console.error("사용자 리뷰 로드 실패", error);
     } finally {
@@ -767,9 +821,21 @@ const UserProfilePage: React.FC = () => {
     }
   };
 
+  // 다음 페이지 로드 함수
+  const handleLoadMore = () => {
+    if (postsLoading || reviewsLoading) return;
+
+    const nextPage = page + 1;
+    if (activeTab === "posts") {
+      fetchUserPosts(nextPage);
+    } else if (activeTab === "reviews") {
+      fetchUserReviews(nextPage);
+    }
+  };
+
   // 리뷰 탭 렌더링
   const renderReviewsTab = () => {
-    if (reviewsLoading) {
+    if (reviewsLoading && reviews.length === 0) {
       return <div className="text-center py-8">로딩 중...</div>;
     }
 
@@ -782,41 +848,35 @@ const UserProfilePage: React.FC = () => {
     }
 
     return (
-      <div className="mt-4">
-        <div className="space-y-4">
-          {reviews.map((review) => (
-            <div
-              key={review.id}
-              className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-lg">{review.movieTitle}</h3>
-                    <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
-                      {review.contentType === "tv" ? "TV" : "영화"}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center">
-                  <span className="text-yellow-400 mr-1">★</span>
-                  <span className="font-medium">{review.rating}</span>
-                </div>
-              </div>
-              <p className="text-gray-700 mb-3">{review.content}</p>
-              <div className="text-sm text-gray-500">
-                {formatDate(review.createdAt)}
-              </div>
-            </div>
-          ))}
+      <InfiniteScroll
+        dataLength={reviews.length}
+        next={handleLoadMore}
+        hasMore={hasMore}
+        loader={
+          <div className="flex justify-center py-4">
+            <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
+          </div>
+        }
+        endMessage={
+          <p className="text-center text-gray-500 py-4">
+            모든 리뷰를 불러왔습니다.
+          </p>
+        }
+      >
+        <div className="mt-4">
+          <div className="space-y-4">
+            {reviews.map((review) => (
+              <ReviewCard key={`review-${review.id}`} review={review as any} />
+            ))}
+          </div>
         </div>
-      </div>
+      </InfiniteScroll>
     );
   };
 
   // 포스트 탭 렌더링
   const renderPostsTab = () => {
-    if (postsLoading) {
+    if (postsLoading && posts.length === 0) {
       return <div className="text-center py-8">로딩 중...</div>;
     }
 
@@ -827,61 +887,67 @@ const UserProfilePage: React.FC = () => {
     }
 
     return (
-      <div className="space-y-6 mt-4">
-        {posts.map((post) => (
-          <div
-            key={post.id}
-            className="border border-gray-200 rounded-lg bg-white p-4 shadow-sm"
-          >
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-lg font-semibold">{post.title}</h3>
-            </div>
-            <p className="mt-2 text-gray-700">{post.content}</p>
-            <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
-              <span>{formatDate(post.createdAt)}</span>
-              <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-1">
-                  <FaHeart
-                    className={post.liked ? "text-blue-600" : "text-gray-400"}
-                  />
-                  <span>{post.likeCount}</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <FaComment className="text-gray-400" />
-                  <span>{post.commentCount}</span>
-                </div>
-              </div>
-            </div>
+      <InfiniteScroll
+        dataLength={posts.length}
+        next={handleLoadMore}
+        hasMore={hasMore}
+        loader={
+          <div className="flex justify-center py-4">
+            <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
           </div>
-        ))}
-      </div>
+        }
+        endMessage={
+          <p className="text-center text-gray-500 py-4">
+            모든 게시물을 불러왔습니다.
+          </p>
+        }
+      >
+        <div className="space-y-6 mt-4">
+          {posts.map((post) => (
+            <PostCard key={`post-${post.id}`} post={post} />
+          ))}
+        </div>
+      </InfiniteScroll>
     );
   };
 
   // 스크랩 탭 렌더링
   const renderScrapsTab = () => {
-    if (scrapsLoading) {
-      return <div className="text-center py-8">로딩 중...</div>;
+    if (scrapsLoading && scrappedMovies.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-8">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-gray-600">스크랩 목록을 불러오는 중입니다...</p>
+        </div>
+      );
     }
 
     if (!scrappedMovies || scrappedMovies.length === 0) {
       return (
-        <div className="text-center py-8 text-gray-500">
-          스크랩한 영화가 없습니다.
+        <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+          <p className="text-lg mb-2">스크랩한 영화가 없습니다.</p>
+          <p className="text-sm">
+            영화나 TV 프로그램을 스크랩하면 여기에 표시됩니다.
+          </p>
         </div>
       );
     }
 
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
-        {scrappedMovies.map((movie) => (
-          <ContentCard
-            key={movie.id}
-            content={movie}
-            type="movie"
-            className="w-full"
-          />
-        ))}
+      <div className="py-4">
+        <h3 className="text-lg font-medium mb-4">
+          스크랩한 콘텐츠 ({scrappedMovies.length})
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {scrappedMovies.map((movie) => (
+            <ContentCard
+              key={`scrap-${movie.id}`}
+              content={movie}
+              type={movie.media_type || "movie"}
+              className="w-full hover:shadow-md transition-shadow"
+            />
+          ))}
+        </div>
       </div>
     );
   };
@@ -1011,14 +1077,7 @@ const UserProfilePage: React.FC = () => {
             </div>
 
             {/* 통계 (팔로워, 팔로잉 등) */}
-            <div className="flex space-x-6 mb-4">
-              <div className="text-center md:text-left">
-                <span className="font-semibold">
-                  {(profileData?.reviewedMoviesCount || 0) +
-                    (posts.length || 0)}
-                </span>
-                <span className="ml-1">게시물</span>
-              </div>
+            <div className="flex space-x-6 mt-2">
               <button
                 onClick={loadFollowers}
                 className="text-center md:text-left hover:underline"
@@ -1037,6 +1096,13 @@ const UserProfilePage: React.FC = () => {
                 </span>
                 <span className="ml-1">팔로우</span>
               </button>
+              <div className="text-center md:text-left">
+                <span className="font-semibold">
+                  {(profileData?.reviewCount || 0) +
+                    (profileData?.postCount || 0)}
+                </span>
+                <span className="ml-1">게시물</span>
+              </div>
             </div>
 
             {/* 프로필 소개 */}
