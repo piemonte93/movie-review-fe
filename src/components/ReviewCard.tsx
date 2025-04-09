@@ -101,6 +101,14 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
               <h3 className="font-bold text-lg truncate" title={reviewTitle}>
                 {reviewTitle || "제목 없음"}
               </h3>
+            </div>
+            <div className="flex items-center gap-2 mb-1">
+              <div
+                className="text-md font-medium text-gray-700 truncate"
+                title={title}
+              >
+                {title}
+              </div>
               <span
                 className={`text-xs px-1.5 py-0.5 rounded-full ${
                   contentType === "movie"
@@ -110,9 +118,6 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
               >
                 {contentType === "movie" ? "영화" : "TV쇼"}
               </span>
-            </div>
-            <div className="text-sm text-gray-700 truncate mb-1" title={title}>
-              {title}
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-600">
               {authorProfileImg ? (
