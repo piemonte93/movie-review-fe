@@ -1,17 +1,26 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { backendApi, CombinedReview, Review } from "../api/backendApi";
+import {
+  backendApi,
+  CombinedReview,
+  Review,
+  Page,
+  Comment,
+} from "../api/backendApi";
 import { ContentDetail, Review as TmdbReview } from "../types/content";
 import {
   FaArrowLeft,
   FaStar,
   FaUserCircle,
   FaCalendarAlt,
+  FaTrashAlt,
 } from "react-icons/fa";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { StarRating } from "../components/StarRating";
 import { formatDate } from "../utils/dateUtils";
 import defaultProfile from "../assets/default-profile.svg";
+import { useAuth } from "../context/AuthContext";
+import { toast } from "react-toastify";
 
 const ReviewListPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -21,12 +30,30 @@ const ReviewListPage = () => {
   const [combinedReviews, setCombinedReviews] = useState<CombinedReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [reviewImageErrors, setReviewImageErrors] = useState<Record<string, boolean>>({});
+  const [reviewImageErrors, setReviewImageErrors] = useState<
+    Record<string, boolean>
+  >({});
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchField, setSearchField] = useState('all');
+  const [searchField, setSearchField] = useState("all");
 
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+
+  const { isLoggedIn, user } = useAuth();
+
+  const [commentsVisible, setCommentsVisible] = useState<
+    Record<string, boolean>
+  >({});
+  const [loadedComments, setLoadedComments] = useState<
+    Record<string, Page<Comment>>
+  >({});
+  const [newCommentInputs, setNewCommentInputs] = useState<
+    Record<string, string>
+  >({});
+  const [commentLoading, setCommentLoading] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [commentPage, setCommentPage] = useState<Record<string, number>>({});
 
   const mediaType = location.pathname.includes("/tv/") ? "tv" : "movie";
   const contentId = id ? parseInt(id) : 0;
@@ -47,17 +74,25 @@ const ReviewListPage = () => {
       setCombinedReviews([]);
       setPage(0);
       setHasMore(true);
+      setCommentsVisible({});
+      setLoadedComments({});
+      setNewCommentInputs({});
+      setCommentLoading({});
+      setCommentPage({});
 
       try {
-        const detailsPromise = mediaType === "tv"
+        const detailsPromise =
+          mediaType === "tv"
             ? backendApi.getTvDetails(contentId)
             : backendApi.getMovieDetails(contentId);
 
-        const localReviewsPromise = mediaType === "tv"
+        const localReviewsPromise =
+          mediaType === "tv"
             ? backendApi.getTvShowReviewsByTmdbId(contentId, 0)
             : backendApi.getMovieReviewsByTmdbId(contentId, 0);
 
-        const tmdbReviewsPromise = mediaType === "tv"
+        const tmdbReviewsPromise =
+          mediaType === "tv"
             ? backendApi.getTvReviews(contentId)
             : backendApi.getMovieReviews(contentId);
 
@@ -86,21 +121,21 @@ const ReviewListPage = () => {
           })
         );
 
-        const initialReviews = [...localReviewsWithSource, ...tmdbReviewsWithSource].sort(
-          (a, b) => {
-            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            if (dateA === 0 && dateB !== 0) return 1;
-            if (dateA !== 0 && dateB === 0) return -1;
-            if (dateA === 0 && dateB === 0) return 0;
-            return dateB - dateA;
-          }
-        );
+        const initialReviews = [
+          ...localReviewsWithSource,
+          ...tmdbReviewsWithSource,
+        ].sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          if (dateA === 0 && dateB !== 0) return 1;
+          if (dateA !== 0 && dateB === 0) return -1;
+          if (dateA === 0 && dateB === 0) return 0;
+          return dateB - dateA;
+        });
 
         setCombinedReviews(initialReviews);
         setHasMore(!localReviewsPage.last);
         setPage(0);
-
       } catch (err) {
         console.error("초기 리뷰 정보 가져오기 오류:", err);
         setError("리뷰 정보를 불러오는데 실패했습니다.");
@@ -118,7 +153,8 @@ const ReviewListPage = () => {
     console.log(`Fetching more local reviews, page: ${nextPage}`);
 
     try {
-      const localReviewsPage = mediaType === "tv"
+      const localReviewsPage =
+        mediaType === "tv"
           ? await backendApi.getTvShowReviewsByTmdbId(contentId, nextPage)
           : await backendApi.getMovieReviewsByTmdbId(contentId, nextPage);
 
@@ -132,10 +168,76 @@ const ReviewListPage = () => {
       setCombinedReviews((prevReviews) => [...prevReviews, ...newLocalReviews]);
       setPage(nextPage);
       setHasMore(!localReviewsPage.last);
-
     } catch (err) {
       console.error(`다음 페이지 리뷰(${nextPage}) 가져오기 오류:`, err);
       setHasMore(false);
+    }
+  };
+
+  const fetchComments = async (reviewId: number, page = 0) => {
+    setCommentLoading((prev) => ({ ...prev, [reviewId]: true }));
+    try {
+      const commentsPage = await backendApi.getReviewComments(reviewId, page);
+      setLoadedComments((prev) => {
+        const existingComments =
+          page === 0 ? [] : prev[reviewId]?.content || [];
+        return {
+          ...prev,
+          [reviewId]: {
+            ...commentsPage,
+            content: [...existingComments, ...commentsPage.content],
+          },
+        };
+      });
+      setCommentPage((prev) => ({ ...prev, [reviewId]: page }));
+    } catch (error) {
+      console.error(`리뷰 ${reviewId}의 댓글 로딩 실패:`, error);
+    } finally {
+      setCommentLoading((prev) => ({ ...prev, [reviewId]: false }));
+    }
+  };
+
+  const toggleComments = (reviewId: number) => {
+    const isVisible = !commentsVisible[reviewId];
+    setCommentsVisible((prev) => ({ ...prev, [reviewId]: isVisible }));
+    if (isVisible && !loadedComments[reviewId]) {
+      fetchComments(reviewId, 0);
+    }
+  };
+
+  const handleCreateComment = async (reviewId: number) => {
+    if (!isLoggedIn) {
+      toast.info("댓글을 작성하려면 로그인이 필요합니다.");
+      return;
+    }
+    if (user?.status === "BLOCKED") {
+      toast.error("차단된 사용자는 댓글을 작성할 수 없습니다.");
+      return;
+    }
+    if (!newCommentInputs[reviewId]?.trim()) return;
+
+    const content = newCommentInputs[reviewId].trim();
+    try {
+      await backendApi.createReviewComment(reviewId, content);
+      setNewCommentInputs((prev) => ({ ...prev, [reviewId]: "" }));
+      await fetchComments(reviewId, 0);
+      toast.success("댓글이 등록되었습니다.");
+    } catch (error) {
+      console.error(`리뷰 ${reviewId} 댓글 작성 실패:`, error);
+      toast.error("댓글 등록에 실패했습니다.");
+    }
+  };
+
+  const handleDeleteComment = async (reviewId: number, commentId: number) => {
+    if (!window.confirm("정말로 이 댓글을 삭제하시겠습니까?")) return;
+
+    try {
+      await backendApi.deleteReviewComment(reviewId, commentId);
+      toast.success("댓글이 삭제되었습니다.");
+      await fetchComments(reviewId, 0);
+    } catch (error) {
+      console.error(`댓글 ID ${commentId} 삭제 실패:`, error);
+      toast.error("댓글 삭제에 실패했습니다.");
     }
   };
 
@@ -143,10 +245,21 @@ const ReviewListPage = () => {
     const key = `${review.source}-${review.id}`;
     const isImageError = reviewImageErrors[String(review.id)];
 
-    if (review.source === 'local') {
+    if (review.source === "local") {
+      const currentReviewId = review.id as number;
+      const commentsData = loadedComments[currentReviewId];
+      const isLoadingComments = commentLoading[currentReviewId];
+      const isCommentSectionVisible = commentsVisible[currentReviewId];
+      const currentCommentPage = commentPage[currentReviewId] ?? 0;
+      const hasMoreComments = commentsData && !commentsData.last;
+      const commentCount = review.commentCount ?? 0;
+
       return (
-        <div key={key} className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center gap-2 mb-2">
+        <div
+          key={key}
+          className="bg-white rounded-lg shadow p-4 flex flex-col gap-2"
+        >
+          <div className="flex items-center gap-2">
             {!isImageError && review.userProfileImageUrl ? (
               <img
                 src={review.userProfileImageUrl}
@@ -161,40 +274,157 @@ const ReviewListPage = () => {
             )}
             <span className="font-semibold">{review.username}</span>
           </div>
-          <div className="flex items-center mb-2">
+          <div className="flex items-center">
             <StarRating rating={review.rating || 0} />
             <span className="ml-2 text-sm text-gray-600">
               ({review.rating || 0}점)
             </span>
           </div>
-          <div className="flex items-center text-xs text-gray-500 mb-2">
+          <div className="flex items-center text-xs text-gray-500">
             <FaCalendarAlt className="mr-1" />
             {review.createdAt ? formatDate(review.createdAt) : ""}
           </div>
-          {review.isSpoiler ? (
+          {(review.is_spoiler ?? review.isSpoiler) ? (
             <div className="group relative cursor-pointer">
-              <span className="inline-block bg-red-500 text-white px-2 py-1 text-xs font-bold rounded mr-2">
-                스포일러
-              </span>
-              <span className="text-sm text-gray-500 group-hover:hidden">
-                (내용을 보려면 마우스를 올리세요)
-              </span>
+              <div>
+                <span className="inline-block bg-red-500 text-white px-2 py-1 text-xs font-bold rounded mr-2">
+                  스포일러
+                </span>
+                <span className="text-sm text-gray-500 group-hover:hidden">
+                  (내용을 보려면 마우스를 올리세요)
+                </span>
+              </div>
               <div className="hidden group-hover:block mt-1">
-                {review.title && <h3 className="font-medium mb-1">{review.title}</h3>}
+                {review.title && (
+                  <h3 className="font-medium mb-1">{review.title}</h3>
+                )}
                 <p className="text-gray-600 text-sm mb-1">{review.content}</p>
               </div>
             </div>
           ) : (
             <>
-              {review.title && <h3 className="font-medium mb-1">{review.title}</h3>}
+              {review.title && (
+                <h3 className="font-medium mb-1">{review.title}</h3>
+              )}
               <p className="text-gray-600 text-sm mb-1">{review.content}</p>
             </>
           )}
+          <div className="mt-2 pt-2 border-t border-gray-200">
+            <button
+              onClick={() => toggleComments(currentReviewId)}
+              className="text-sm text-blue-600 hover:underline disabled:text-gray-400 disabled:no-underline"
+              disabled={commentCount === 0 && !isLoggedIn}
+            >
+              댓글 {commentCount}개{" "}
+              {isCommentSectionVisible ? "숨기기" : "보기"}
+            </button>
+
+            {isCommentSectionVisible && (
+              <div className="mt-3 space-y-3 pl-2 border-l-2 border-gray-100">
+                {isLoadingComments && (
+                  <p className="text-sm text-gray-500">댓글 로딩 중...</p>
+                )}
+
+                {!isLoadingComments &&
+                  commentsData?.content &&
+                  commentsData.content.length > 0 &&
+                  commentsData.content.map((comment) => {
+                    const canDelete =
+                      isLoggedIn && user?.id === comment.user?.id;
+                    return (
+                      <div key={comment.id} className="text-sm relative group">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          {comment.user?.profileImageUrl ? (
+                            <img
+                              src={comment.user.profileImageUrl}
+                              alt={comment.user.username}
+                              className="w-5 h-5 rounded-full object-cover"
+                            />
+                          ) : (
+                            <FaUserCircle className="text-gray-400 w-5 h-5" />
+                          )}
+                          <span className="font-medium">
+                            {comment.user?.username ?? "사용자"}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {formatDate(comment.createdAt)}
+                          </span>
+                        </div>
+                        <p className="ml-6 text-gray-700 whitespace-pre-wrap pr-6">
+                          {comment.content}
+                        </p>
+                        {canDelete && (
+                          <button
+                            onClick={() =>
+                              handleDeleteComment(currentReviewId, comment.id)
+                            }
+                            className="absolute top-0 right-0 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            aria-label="댓글 삭제"
+                          >
+                            <FaTrashAlt size={12} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                {!isLoadingComments &&
+                  (!commentsData || commentsData.content.length === 0) && (
+                    <p className="text-sm text-gray-500">
+                      작성된 댓글이 없습니다.
+                    </p>
+                  )}
+
+                {!isLoadingComments && hasMoreComments && (
+                  <button
+                    onClick={() =>
+                      fetchComments(currentReviewId, currentCommentPage + 1)
+                    }
+                    className="text-sm text-blue-600 hover:underline mt-2"
+                  >
+                    댓글 더 보기
+                  </button>
+                )}
+
+                {isLoggedIn && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <textarea
+                      rows={2}
+                      placeholder={
+                        user?.status === "BLOCKED"
+                          ? "차단된 사용자는 댓글을 작성할 수 없습니다."
+                          : "댓글을 입력하세요..."
+                      }
+                      value={newCommentInputs[currentReviewId] || ""}
+                      onChange={(e) =>
+                        setNewCommentInputs((prev) => ({
+                          ...prev,
+                          [currentReviewId]: e.target.value,
+                        }))
+                      }
+                      className={`w-full p-2 border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 ${user?.status === "BLOCKED" ? "bg-gray-100 cursor-not-allowed" : ""}`}
+                      disabled={user?.status === "BLOCKED"}
+                    />
+                    <button
+                      onClick={() => handleCreateComment(currentReviewId)}
+                      disabled={
+                        !newCommentInputs[currentReviewId]?.trim() ||
+                        user?.status === "BLOCKED"
+                      }
+                      className="mt-1 px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    >
+                      등록
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       );
     }
 
-    if (review.source === 'tmdb') {
+    if (review.source === "tmdb") {
       const createdAt = review.createdAt;
       return (
         <div key={key} className="bg-white rounded-lg shadow p-4">
@@ -212,7 +442,11 @@ const ReviewListPage = () => {
               />
             ) : (
               <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center">
-                <img src={defaultProfile} alt={review.author} className="w-4 h-4 object-contain opacity-70" />
+                <img
+                  src={defaultProfile}
+                  alt={review.author}
+                  className="w-4 h-4 object-contain opacity-70"
+                />
               </div>
             )}
             <span className="font-medium">{review.author}</span>
@@ -221,10 +455,10 @@ const ReviewListPage = () => {
             </span>
           </div>
           {createdAt && (
-              <div className="flex items-center text-xs text-gray-500 mb-2">
-                  <FaCalendarAlt className="mr-1" />
-                  {formatDate(createdAt)}
-              </div>
+            <div className="flex items-center text-xs text-gray-500 mb-2">
+              <FaCalendarAlt className="mr-1" />
+              {formatDate(createdAt)}
+            </div>
           )}
           {review.author_details?.rating !== null &&
             review.author_details?.rating !== undefined && (
@@ -249,47 +483,62 @@ const ReviewListPage = () => {
     }
     const lowerCaseQuery = searchQuery.toLowerCase();
     return combinedReviews.filter((review) => {
-      const content = review.content?.toLowerCase() || '';
+      const content = review.content?.toLowerCase() || "";
 
-      if (review.source === 'local') {
-          const title = review.title?.toLowerCase() || '';
-          const author = review.username?.toLowerCase() || '';
+      if (review.source === "local") {
+        const title = review.title?.toLowerCase() || "";
+        const author = review.username?.toLowerCase() || "";
 
-          switch (searchField) {
-            case 'title':
-              return title.includes(lowerCaseQuery);
-            case 'content':
-              return content.includes(lowerCaseQuery);
-            case 'author':
-              return author.includes(lowerCaseQuery);
-            case 'all':
-            default:
-              return title.includes(lowerCaseQuery) || content.includes(lowerCaseQuery) || author.includes(lowerCaseQuery);
-          }
+        switch (searchField) {
+          case "title":
+            return title.includes(lowerCaseQuery);
+          case "content":
+            return content.includes(lowerCaseQuery);
+          case "author":
+            return author.includes(lowerCaseQuery);
+          case "all":
+          default:
+            return (
+              title.includes(lowerCaseQuery) ||
+              content.includes(lowerCaseQuery) ||
+              author.includes(lowerCaseQuery)
+            );
+        }
       } else {
-          const author = review.author?.toLowerCase() || '';
-          
-          switch (searchField) {
-              case 'title':
-                  return false; 
-              case 'content':
-                  return content.includes(lowerCaseQuery);
-              case 'author':
-                  return author.includes(lowerCaseQuery);
-              case 'all':
-              default:
-                  return content.includes(lowerCaseQuery) || author.includes(lowerCaseQuery);
-          }
+        const author = review.author?.toLowerCase() || "";
+
+        switch (searchField) {
+          case "title":
+            return false;
+          case "content":
+            return content.includes(lowerCaseQuery);
+          case "author":
+            return author.includes(lowerCaseQuery);
+          case "all":
+          default:
+            return (
+              content.includes(lowerCaseQuery) ||
+              author.includes(lowerCaseQuery)
+            );
+        }
       }
     });
   }, [combinedReviews, searchQuery, searchField]);
 
   if (loading && combinedReviews.length === 0) {
-    return <div className="flex justify-center items-center h-screen">로딩 중...</div>;
+    return (
+      <div className="flex justify-center items-center h-screen">
+        로딩 중...
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="flex justify-center items-center h-screen text-red-500">{error}</div>;
+    return (
+      <div className="flex justify-center items-center h-screen text-red-500">
+        {error}
+      </div>
+    );
   }
 
   if (!content) {
@@ -304,91 +553,97 @@ const ReviewListPage = () => {
     <div className="min-h-screen bg-gray-100 py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6 flex items-start gap-4 bg-white p-4 rounded-lg shadow sticky top-20 z-10">
-            <button
-                onClick={() => navigate(-1)}
-                className="text-gray-600 hover:text-gray-800 p-2 rounded-full hover:bg-gray-200 transition-colors"
-                aria-label="뒤로가기"
-            >
-                <FaArrowLeft size={20} />
-            </button>
-            <div className="flex items-center gap-3 flex-1">
-                {(content.posterPath || content.poster_path) && (
-                <img
-                    src={`https://image.tmdb.org/t/p/w92${
-                    content.posterPath || content.poster_path
-                    }`}
-                    alt="Poster"
-                    className="w-16 h-auto rounded flex-shrink-0"
-                />
-                )}
-                <div className="flex-grow">
-                <h1 className="text-2xl font-bold leading-tight">
-                    {content.title || content.name}
-                </h1>
-                <p className="text-gray-600 mt-1">
-                    {searchQuery ? 
-                      `리뷰 검색 결과 (${filteredReviews.length} / ${combinedReviews.length}개)` : 
-                      `전체 리뷰 (${combinedReviews.length}개)`
-                    }
-                </p>
-                </div>
+          <button
+            onClick={() => navigate(-1)}
+            className="text-gray-600 hover:text-gray-800 p-2 rounded-full hover:bg-gray-200 transition-colors"
+            aria-label="뒤로가기"
+          >
+            <FaArrowLeft size={20} />
+          </button>
+          <div className="flex items-center gap-3 flex-1">
+            {(content.posterPath || content.poster_path) && (
+              <img
+                src={`https://image.tmdb.org/t/p/w92${
+                  content.posterPath || content.poster_path
+                }`}
+                alt="Poster"
+                className="w-16 h-auto rounded flex-shrink-0"
+              />
+            )}
+            <div className="flex-grow">
+              <h1 className="text-2xl font-bold leading-tight">
+                {content.title || content.name}
+              </h1>
+              <p className="text-gray-600 mt-1">
+                {searchQuery
+                  ? `리뷰 검색 결과 (${filteredReviews.length} / ${combinedReviews.length}개)`
+                  : `전체 리뷰 (${combinedReviews.length}개)`}
+              </p>
             </div>
+          </div>
         </div>
 
         <div className="mb-6 flex gap-2 px-1 items-center">
-           <select
-             value={searchField}
-             onChange={(e) => setSearchField(e.target.value)}
-             className="p-3 border border-gray-300 rounded-md shadow-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-[46px] flex-shrink-0"
-           >
-             <option value="all">전체</option>
-             <option value="title">제목</option>
-             <option value="content">내용</option>
-             <option value="author">작성자</option>
-           </select>
+          <select
+            value={searchField}
+            onChange={(e) => setSearchField(e.target.value)}
+            className="p-3 border border-gray-300 rounded-md shadow-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-[46px] flex-shrink-0"
+          >
+            <option value="all">전체</option>
+            <option value="title">제목</option>
+            <option value="content">내용</option>
+            <option value="author">작성자</option>
+          </select>
 
-           <input
-             type="text"
-             placeholder={
-                searchField === 'title' ? "리뷰 제목 검색..." :
-                searchField === 'content' ? "리뷰 내용 검색..." :
-                searchField === 'author' ? "리뷰 작성자 검색..." :
-                "리뷰 전체 검색..."
-             }
-             value={searchQuery}
-             onChange={(e) => setSearchQuery(e.target.value)}
-             className="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-[46px]"
-           />
+          <input
+            type="text"
+            placeholder={
+              searchField === "title"
+                ? "리뷰 제목 검색..."
+                : searchField === "content"
+                  ? "리뷰 내용 검색..."
+                  : searchField === "author"
+                    ? "리뷰 작성자 검색..."
+                    : "리뷰 전체 검색..."
+            }
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-[46px]"
+          />
         </div>
 
         <InfiniteScroll
-            dataLength={filteredReviews.length}
-            next={fetchMoreReviews}
-            hasMore={hasMore && !searchQuery}
-            loader={<div className="text-center py-4">로딩 중...</div>}
-            endMessage={
-                <p style={{ textAlign: 'center' }} className="py-4 text-gray-500">
-                {searchQuery ? 
-                  (filteredReviews.length === 0 ? '검색 결과가 없습니다.' : '검색 결과의 끝입니다.') :
-                  '모든 리뷰를 보셨습니다.'
-                }
-                </p>
-            }
-            className="space-y-4"
+          dataLength={filteredReviews.length}
+          next={fetchMoreReviews}
+          hasMore={hasMore && !searchQuery}
+          loader={<div className="text-center py-4">로딩 중...</div>}
+          endMessage={
+            <p style={{ textAlign: "center" }} className="py-4 text-gray-500">
+              {searchQuery
+                ? filteredReviews.length === 0
+                  ? "검색 결과가 없습니다."
+                  : "검색 결과의 끝입니다."
+                : "모든 리뷰를 보셨습니다."}
+            </p>
+          }
+          className="space-y-4"
         >
-            {filteredReviews.map(renderReviewCard)}
+          {filteredReviews.map(renderReviewCard)}
         </InfiniteScroll>
 
         {!loading && combinedReviews.length === 0 && (
-           <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 mt-4">
-              작성된 리뷰가 없습니다.
-           </div>
+          <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 mt-4">
+            작성된 리뷰가 없습니다.
+          </div>
         )}
-        {!loading && combinedReviews.length > 0 && filteredReviews.length === 0 && searchQuery && (
-           <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 mt-4">
+        {!loading &&
+          combinedReviews.length > 0 &&
+          filteredReviews.length === 0 &&
+          searchQuery && (
+            <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 mt-4">
               검색 결과가 없습니다.
-           </div>
-        )}
+            </div>
+          )}
       </div>
     </div>
   );

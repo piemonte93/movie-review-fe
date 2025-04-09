@@ -2828,6 +2828,48 @@ export const backendApi = {
   },
 
   checkUserStatus,
+
+  // 리뷰 댓글 생성 함수 추가
+  createReviewComment: async (
+    reviewId: number,
+    content: string
+  ): Promise<Comment> => {
+    console.log(`[API] 리뷰 댓글 생성 요청: reviewId=${reviewId}`);
+    try {
+      const response = await apiClient.post<Comment>(
+        `/api/reviews/${reviewId}/comments`,
+        { content }
+      );
+      console.log("[API] 리뷰 댓글 생성 성공:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("[API] 리뷰 댓글 생성 실패:", error);
+      throw error;
+    }
+  },
+
+  // 게시글 댓글 가져오기
+  getPostComments: async (
+    postId: number,
+    page = 0,
+    size = 10
+  ): Promise<{
+    content: Comment[];
+    totalElements: number;
+    totalPages: number;
+    currentPage: number;
+    size: number;
+  }> => {
+    try {
+      const response = await apiClient.get(`/api/community/posts/${postId}/comments`, {
+        params: { page, size },
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`게시글 ID ${postId}의 댓글 목록 가져오기 실패:`, error);
+      throw error;
+    }
+  },
 };
 
 // 신고 관련 타입 정의
@@ -2944,31 +2986,35 @@ export const searchUsers = async (
 // TMDB 리뷰와 로컬 리뷰를 모두 포함할 수 있는 통합 타입
 export interface CombinedReview {
   id: number | string;
-  user?: {
+  user?: { // 로컬 리뷰용
     id: number;
     username: string;
     profileImageUrl: string | null;
   };
-  title?: string;
+  title?: string; // 로컬 리뷰용
   content: string;
-  rating?: number;
-  createdAt?: string;
-  modifiedAt?: string;
-  is_spoiler?: boolean;
+  rating?: number; // 로컬 리뷰용 (TMDB는 author_details.rating)
+  createdAt?: string; // 공통 (TMDB는 created_at에서 매핑됨)
+  modifiedAt?: string; // 로컬 리뷰용
+  isSpoiler?: boolean; // 로컬 리뷰용 (is_spoiler에서 변환 필요? DTO 확인)
+  is_spoiler?: boolean; // ReviewResponse DTO 필드명 확인 필요
+  commentCount?: number; // 로컬 리뷰용
   likeCount?: number;
   dislikeCount?: number;
   source: "local" | "tmdb";
-  author?: string;
-  author_details?: {
+  // --- TMDB 리뷰용 필드 ---
+  author?: string; 
+  author_details?: { 
     name?: string;
     username?: string;
     avatar_path?: string;
-    rating?: number;
+    rating?: number; // TMDB 평점 (10점 만점)
   };
-  avatar_path?: string;
+  // Linter 오류 해결을 위해 avatar_path 추가 (Optional chaining으로 접근하므로 안전)
+  avatar_path?: string; 
 }
 
-// 로컬 리뷰를 위한 Review 인터페이스 추가
+// 로컬 리뷰를 위한 Review 인터페이스 추가 (CombinedReview와 중복 줄이기 위해 개선 가능)
 export interface Review {
   id: number;
   user?: {
