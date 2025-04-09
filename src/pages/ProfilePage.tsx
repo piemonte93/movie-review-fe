@@ -27,6 +27,7 @@ import {
   getMyFollowers,
   getMyFollowing,
   toggleFollow,
+  getUserPostCount,
 } from "../api/userApi";
 import { UserProfile, UserActivity } from "../types/user";
 import ContentCard from "../components/ContentCard";
@@ -140,6 +141,33 @@ const ProfilePage: React.FC = () => {
         setActivityData(activity);
         setFollowRecommendations(recommendations);
         setScrappedMovies(scraps);
+
+        // 게시물 수 디버깅
+        console.log("리뷰 수:", profile?.reviewCount);
+        console.log("게시글 수:", profile?.postCount);
+        console.log(
+          "합산 게시물 수:",
+          (profile?.reviewCount || 0) + (profile?.postCount || 0)
+        );
+
+        // 게시글 수가 없거나 0인 경우 별도로 가져옵니다
+        if (!profile.postCount && user) {
+          try {
+            const postCount = await getUserPostCount(user.id);
+            console.log("별도로 가져온 게시글 수:", postCount);
+
+            // 프로필 데이터 업데이트
+            setProfileData((prevData) => {
+              if (!prevData) return profile;
+              return {
+                ...prevData,
+                postCount: postCount,
+              };
+            });
+          } catch (countError) {
+            console.error("별도 게시글 수 가져오기 실패:", countError);
+          }
+        }
       } catch (error) {
         console.error("Failed to fetch user data", error);
       } finally {
@@ -967,9 +995,14 @@ const ProfilePage: React.FC = () => {
             <div className="flex space-x-6 mb-4">
               <div className="text-center md:text-left">
                 <span className="font-semibold">
-                  {profileData?.reviewCount || 0}
+                  {(profileData?.reviewCount || 0) +
+                    (profileData?.postCount || 0)}
                 </span>
                 <span className="ml-1">게시물</span>
+                <div className="text-xs text-gray-500">
+                  (리뷰: {profileData?.reviewCount || 0}, 게시글:{" "}
+                  {profileData?.postCount || 0})
+                </div>
               </div>
               <button
                 onClick={loadFollowers}

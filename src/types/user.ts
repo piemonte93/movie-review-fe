@@ -17,6 +17,7 @@ export interface UserProfile {
   watchedMoviesCount: number;
   reviewedMoviesCount: number;
   reviewCount?: number;
+  postCount?: number;
   isFollowing?: boolean;
   mutualFollow?: boolean;
   followsMe?: boolean;

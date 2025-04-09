@@ -13,30 +13,53 @@ export const getUserProfile = async (): Promise<UserProfile> => {
 
     const localUser = JSON.parse(userStr);
     const userId = localUser.id;
+    const username = localUser.username;
 
     // 실제 API 연결 코드 활성화 - 현재 로그인한 사용자의 ID를 사용
     const response = await apiClient.get(`/api/profile/id/${userId}`);
     console.log("서버에서 받은 프로필 응답:", response.data);
-    return response.data;
 
-    // 백엔드 연결이 되지 않는 경우를 위한 폴백 처리
-    /* 
-    return {
-      user: {
-        id: 1,
-        username: "사용자",
-        email: "user@example.com",
-        bio: "영화를 좋아하는 사용자입니다.",
-        roles: ["USER"],
-        createdAt: "2023-01-01",
-        updatedAt: "2023-01-01",
-      },
-      followingCount: 0,
-      followerCount: 0,
-      watchedMoviesCount: 0,
-      reviewedMoviesCount: 0,
-    };
-    */
+    // 프로필 데이터 가져오기
+    const profileData = response.data;
+
+    // 백엔드에서 postCount가 없는 경우 게시글 수를 가져오기 위한 추가 요청
+    if (profileData.postCount === undefined) {
+      try {
+        console.log(`사용자 ${username}의 게시글 수 조회 시작`);
+
+        // 여러 방법으로 게시글 수 가져오기 시도
+        let postCount = 0;
+
+        // 방법 1: 전용 카운트 API 시도
+        try {
+          const countResponse = await apiClient.get(
+            `/api/community/posts/count/${userId}`
+          );
+          if (typeof countResponse.data === "number") {
+            console.log("게시글 수 카운트 API 응답:", countResponse.data);
+            postCount = countResponse.data;
+          }
+        } catch (countError) {
+          console.log("게시글 수 카운트 API 호출 실패:", countError);
+        }
+
+        // 방법 1이 실패하면 방법 2 시도: getUserPostCount 함수 사용
+        if (postCount === 0) {
+          postCount = await getUserPostCount(userId);
+          console.log("getUserPostCount로 가져온 게시글 수:", postCount);
+        }
+
+        // 결과 설정
+        profileData.postCount = postCount;
+        console.log(`최종 게시글 수: ${postCount}`);
+      } catch (postError) {
+        console.error("게시글 수 가져오기 실패:", postError);
+        console.log("게시글 수 기본값 0으로 설정");
+        profileData.postCount = 0;
+      }
+    }
+
+    return profileData;
   } catch (error) {
     console.error("Failed to fetch user profile", error);
     // API 요청 실패 시 로컬 스토리지의 사용자 정보 사용
@@ -60,6 +83,8 @@ export const getUserProfile = async (): Promise<UserProfile> => {
           followerCount: 0,
           watchedMoviesCount: 0,
           reviewedMoviesCount: 0,
+          reviewCount: 0,
+          postCount: 0,
         };
       } catch (parseError) {
         console.error("로컬 스토리지 사용자 정보 파싱 오류:", parseError);
@@ -81,6 +106,8 @@ export const getUserProfile = async (): Promise<UserProfile> => {
       followerCount: 0,
       watchedMoviesCount: 0,
       reviewedMoviesCount: 0,
+      reviewCount: 0,
+      postCount: 0,
     };
   }
 };
@@ -901,5 +928,36 @@ export const checkContentScrapStatus = async (
   } catch (error) {
     console.error("스크랩 상태 확인 실패:", error);
     return false;
+  }
+};
+
+// 사용자 게시글 수를 직접 가져오는 함수
+export const getUserPostCount = async (userId: number): Promise<number> => {
+  try {
+    console.log(`사용자 ID ${userId}의 게시글 수 직접 조회 시도`);
+
+    // 사용자의 게시글 목록을 가져옵니다 (첫 페이지만)
+    const response = await apiClient.get(
+      `/api/community/posts/user/${userId}`,
+      {
+        params: { page: 0, size: 1 }, // 페이지네이션 정보만 필요하므로 사이즈를 작게 설정
+      }
+    );
+
+    // totalElements 필드에서 총 게시글 수를 확인합니다
+    if (response.data && typeof response.data.totalElements === "number") {
+      console.log(
+        `사용자 ID ${userId}의 게시글 수: ${response.data.totalElements}`
+      );
+      return response.data.totalElements;
+    }
+
+    console.log(
+      `사용자 ID ${userId}의 게시글 수를 가져오지 못함, 기본값 0 반환`
+    );
+    return 0;
+  } catch (error) {
+    console.error(`사용자 ID ${userId}의 게시글 수 조회 실패:`, error);
+    return 0;
   }
 };
