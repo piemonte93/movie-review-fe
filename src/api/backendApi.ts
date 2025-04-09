@@ -2861,15 +2861,81 @@ export const backendApi = {
     size: number;
   }> => {
     try {
-      const response = await apiClient.get(`/api/community/posts/${postId}/comments`, {
-        params: { page, size },
-      });
+      const response = await apiClient.get(
+        `/api/community/posts/${postId}/comments`,
+        {
+          params: { page, size },
+        }
+      );
       return response.data;
     } catch (error) {
       console.error(`게시글 ID ${postId}의 댓글 목록 가져오기 실패:`, error);
       throw error;
     }
   },
+
+  // ------------------ 좋아요 관련 API 추가 ------------------
+
+  // 내가 좋아요 누른 리뷰 목록 가져오기 (페이지네이션)
+  getMyLikedReviews: async (
+    page = 0,
+    size = 10
+  ): Promise<Page<MovieReview | TvShowReview>> => {
+    console.log(
+      `[API] 내가 좋아요 누른 리뷰 목록 요청: page=${page}, size=${size}`
+    );
+    try {
+      // TODO: 백엔드 구현 후 실제 엔드포인트로 변경
+      const response = await apiClient.get<Page<MovieReview | TvShowReview>>(
+        "/api/my/likes/reviews",
+        {
+          params: { page, size },
+        }
+      );
+      console.log("[API] 내가 좋아요 누른 리뷰 목록 응답:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("[API] 내가 좋아요 누른 리뷰 목록 가져오기 실패:", error);
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        number: page,
+        size: size,
+        first: true,
+        last: true,
+        empty: true,
+      };
+    }
+  },
+
+  // 내가 좋아요 누른 게시글 목록 가져오기 (페이지네이션)
+  getMyLikedPosts: async (page = 0, size = 10): Promise<Page<Post>> => {
+    console.log(
+      `[API] 내가 좋아요 누른 게시글 목록 요청: page=${page}, size=${size}`
+    );
+    try {
+      // TODO: 백엔드 구현 후 실제 엔드포인트로 변경
+      const response = await apiClient.get<Page<Post>>("/api/my/likes/posts", {
+        params: { page, size },
+      });
+      console.log("[API] 내가 좋아요 누른 게시글 목록 응답:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("[API] 내가 좋아요 누른 게시글 목록 가져오기 실패:", error);
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        number: page,
+        size: size,
+        first: true,
+        last: true,
+        empty: true,
+      };
+    }
+  },
+  // ---------------------------------------------------------
 };
 
 // 신고 관련 타입 정의
@@ -2986,7 +3052,8 @@ export const searchUsers = async (
 // TMDB 리뷰와 로컬 리뷰를 모두 포함할 수 있는 통합 타입
 export interface CombinedReview {
   id: number | string;
-  user?: { // 로컬 리뷰용
+  user?: {
+    // 로컬 리뷰용
     id: number;
     username: string;
     profileImageUrl: string | null;
@@ -3003,15 +3070,15 @@ export interface CombinedReview {
   dislikeCount?: number;
   source: "local" | "tmdb";
   // --- TMDB 리뷰용 필드 ---
-  author?: string; 
-  author_details?: { 
+  author?: string;
+  author_details?: {
     name?: string;
     username?: string;
     avatar_path?: string;
     rating?: number; // TMDB 평점 (10점 만점)
   };
   // Linter 오류 해결을 위해 avatar_path 추가 (Optional chaining으로 접근하므로 안전)
-  avatar_path?: string; 
+  avatar_path?: string;
 }
 
 // 로컬 리뷰를 위한 Review 인터페이스 추가 (CombinedReview와 중복 줄이기 위해 개선 가능)

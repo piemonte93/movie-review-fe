@@ -108,19 +108,116 @@ const CommunityPage: React.FC = () => {
 
   const postTextAreaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Function to fetch users for mentions
+  // 검색 결과 페이지네이션 상태 추가
+  const [searchPage, setSearchPage] = useState(0);
+  const [searchTotalPages, setSearchTotalPages] = useState(0);
+  const [searchHasMore, setSearchHasMore] = useState(true);
+
+  // 검색 처리 함수 정의 복원
+  const handleSearch = useCallback(
+    async (query: string, category: string, newSearch = true) => {
+      console.log(
+        "handleSearch triggered with:",
+        query,
+        category,
+        "newSearch:",
+        newSearch
+      ); // Add logging
+      try {
+        setLoading(true);
+        console.log("Setting loading to true");
+        const targetPage = newSearch ? 0 : searchPage + 1;
+        const response = await backendApi.searchPosts(
+          query,
+          category,
+          targetPage,
+          postsPerPage
+        );
+        console.log("Search API response received:", response); // Log entire response
+
+        if (response && response.content) {
+          // Check if response and content exist
+          console.log("Response content:", response.content);
+          if (newSearch) {
+            setSearchResults(response.content);
+            setSearchPage(0);
+            console.log("Set searchResults (new):", response.content);
+          } else {
+            setSearchResults((prevResults) => [
+              ...prevResults,
+              ...response.content,
+            ]);
+            setSearchPage(targetPage);
+            console.log("Appended searchResults:", response.content);
+          }
+
+          setSearchTotalPages(response.totalPages);
+          setSearchHasMore(response.totalPages > targetPage + 1);
+          setShowSearch(true); // Ensure this is set *after* results are updated
+          console.log(
+            "Set showSearch to true, searchPage:",
+            targetPage,
+            "searchTotalPages:",
+            response.totalPages,
+            "searchHasMore:",
+            response.totalPages > targetPage + 1
+          );
+        } else {
+          console.error("Search API response is invalid or content is missing");
+          // Handle invalid response
+          setSearchResults([]);
+          setSearchPage(0);
+          setSearchTotalPages(0);
+          setSearchHasMore(false);
+          setShowSearch(true); // Still show search mode, but indicate no results
+          toast.error("검색 결과를 가져오는데 문제가 발생했습니다.");
+        }
+      } catch (error) {
+        console.error("검색 실패:", error);
+        toast.error("검색에 실패했습니다.");
+        // Reset search state on error
+        setSearchResults([]);
+        setSearchPage(0);
+        setSearchTotalPages(0);
+        setSearchHasMore(false);
+        setShowSearch(false);
+      } finally {
+        setLoading(false);
+        console.log("Setting loading to false");
+      }
+    },
+    [searchPage, postsPerPage]
+  ); // searchPage, postsPerPage 의존성 추가
+
+  // MentionsInput의 onChange 핸들러 타입 수정
+  const handleMentionsInputChange = (
+    event: { target: { value: string } },
+    newValue: string, // The new value of the input, including markup
+    newPlainTextValue: string, // The new value without markup
+    mentions: any[] // Information about the mentions detected
+  ) => {
+    setContent(newValue); // 마크업 포함된 값 저장
+    console.log("MentionsInput changed:", {
+      newValue,
+      newPlainTextValue,
+      mentions,
+    });
+    // 필요 시 커서 위치 로직 추가 (MentionsInput에서는 더 복잡할 수 있음)
+  };
+
+  // fetchUsers 함수 정의 복원
   const fetchUsers = useCallback(
     async (query: string, callback: (data: UserMentionData[]) => void) => {
       if (!query) {
         callback([]);
         return;
-      } // Return empty array if query is empty
+      }
       try {
         const response: Page<UserResponse> = await apiSearchUsers(query);
         if (response && response.content) {
           const users: UserMentionData[] = response.content.map(
             (user: UserResponse) => ({
-              id: user.username,
+              id: user.username, // 멘션용 id로 username 사용
               display: user.username,
             })
           );
@@ -133,36 +230,14 @@ const CommunityPage: React.FC = () => {
         callback([]);
       }
     },
-    [apiSearchUsers] // Dependency
+    [] // apiSearchUsers가 안정적이라면 의존성 필요 없음
   );
 
-  // onChange handler for post content MentionsInput
-  const handlePostContentChange = (event: any, newValue: string) => {
-    setContent(newValue);
-  };
-
-  // 글쓰기 버튼 클릭 처리 핸들러
-  const handleWriteButtonClick = async () => {
-    try {
-      if (isUserBlocked()) {
-        toast.error(
-          "현재 글쓰기 기능이 제한되었습니다. 관리자에게 문의해주세요."
-        );
-        return;
-      }
-
-      // 정상 상태인 경우 글쓰기 폼 표시
-      setShowWriteForm(true);
-    } catch (error) {
-      console.error("사용자 상태 확인 실패:", error);
-      toast.error("사용자 정보를 확인할 수 없습니다. 다시 시도해주세요.");
-    }
-  };
-
-  // URL 쿼리 파라미터 확인하여 특정 게시글 표시
+  // URL 쿼리 파라미터 확인 useEffect 복원 (handleSearch 의존성 포함)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const postId = params.get("post");
+    const searchParam = params.get("search");
 
     if (postId) {
       const id = parseInt(postId, 10);
@@ -170,9 +245,15 @@ const CommunityPage: React.FC = () => {
         setExpandedPostId(id);
       }
     }
-  }, [location]);
 
-  // 게시글 데이터 가져오기
+    if (searchParam) {
+      setSearchQuery(searchParam);
+      setSearchCategory("title");
+      handleSearch(searchParam, "title"); // newSearch=true 기본값 사용
+    }
+  }, [location, handleSearch]); // handleSearch 의존성 유지
+
+  // 게시글 데이터 가져오기 useEffect (변경 없음)
   useEffect(() => {
     const fetchPosts = async () => {
       try {
@@ -881,21 +962,6 @@ const CommunityPage: React.FC = () => {
     }
   };
 
-  // 검색 처리
-  const handleSearch = async (query: string, category: string) => {
-    try {
-      setLoading(true);
-      const response = await backendApi.searchPosts(query, category);
-      setSearchResults(response.content);
-      setShowSearch(true);
-    } catch (error) {
-      console.error("검색 실패:", error);
-      toast.error("검색에 실패했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // 검색 카테고리를 표시하는 텍스트 반환
   const getCategoryText = () => {
     switch (searchCategory) {
@@ -939,17 +1005,21 @@ const CommunityPage: React.FC = () => {
     });
   };
 
-  // 다음 페이지 게시글을 불러오는 함수
+  // 다음 페이지 게시글을 불러오는 함수 수정
   const fetchMorePosts = async () => {
-    if (page + 1 >= totalPages) {
-      setHasMore(false);
+    const currentPage = showSearch ? searchPage : page;
+    const currentTotalPages = showSearch ? searchTotalPages : totalPages;
+
+    if (currentPage + 1 >= currentTotalPages) {
+      if (showSearch) setSearchHasMore(false);
+      else setHasMore(false);
       return;
     }
 
-    try {
-      const nextPage = page + 1;
-      let response;
+    const nextPage = currentPage + 1;
 
+    try {
+      let response;
       if (showSearch && searchQuery) {
         // 검색 결과 더 불러오기
         response = await backendApi.searchPosts(
@@ -958,18 +1028,18 @@ const CommunityPage: React.FC = () => {
           nextPage,
           postsPerPage
         );
+        setSearchResults((prevResults) => [
+          ...prevResults,
+          ...response.content,
+        ]);
+        setSearchPage(nextPage);
+        setSearchHasMore(response.totalPages > nextPage + 1);
       } else {
         // 일반 게시글 더 불러오기
         response = await backendApi.getPosts(nextPage, postsPerPage);
-      }
-
-      // 기존 게시글에 새로 불러온 게시글 추가
-      setVisiblePosts((prevPosts) => [...prevPosts, ...response.content]);
-      setPage(nextPage);
-
-      // 더 불러올 게시글이 없는 경우 hasMore를 false로 설정
-      if (nextPage + 1 >= response.totalPages) {
-        setHasMore(false);
+        setVisiblePosts((prevPosts) => [...prevPosts, ...response.content]);
+        setPage(nextPage);
+        setHasMore(response.totalPages > nextPage + 1);
       }
     } catch (error) {
       console.error("게시글 더 불러오기 실패:", error);
@@ -1117,6 +1187,91 @@ const CommunityPage: React.FC = () => {
     }
   };
 
+  // 신고 관련 함수 추가
+  const openReportModal = (targetId: number, type: "comment" | "post") => {
+    setReportTargetId(targetId);
+    setReportTargetType(type);
+    setReportContent("");
+    setShowReportModal(true);
+  };
+
+  const handleReportSubmit = async () => {
+    if (!reportContent.trim()) {
+      toast.error("신고 내용을 입력해주세요.");
+      return;
+    }
+
+    if (!reportTargetId || !reportTargetType) {
+      toast.error("신고 대상 정보가 잘못되었습니다.");
+      return;
+    }
+
+    try {
+      // 현재 신고 대상이 되는 사용자 ID 찾기
+      const targetUserId =
+        reportTargetType === "post"
+          ? posts.find((post) => post.id === reportTargetId)?.user.id
+          : posts
+              .find((post) =>
+                post.comments.some((comment) => comment.id === reportTargetId)
+              )
+              ?.comments.find((comment) => comment.id === reportTargetId)?.user
+              .id;
+
+      if (!targetUserId) {
+        toast.error("신고 대상의、사용자 정보를 찾을 수 없습니다.");
+        return;
+      }
+
+      // 신고 API 호출
+      await backendApi.createReport({
+        targetId: reportTargetId,
+        targetUserId: targetUserId,
+        reportType: reportTargetType,
+        content: reportContent,
+      });
+
+      toast.success("신고가 접수되었습니다. 검토 후 조치하겠습니다.");
+      setShowReportModal(false);
+    } catch (error) {
+      console.error("신고 접수 실패:", error);
+      toast.error("신고 접수에 실패했습니다. 다시 시도해주세요.");
+    }
+  };
+
+  // 다른 상태 변경 로직 확인 필요 (예: 검색어 입력 변경, 카테고리 변경 등)
+  // 예시: 검색어 상태 변경 시 로깅
+  const handleSearchQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newQuery = e.target.value;
+    setSearchQuery(newQuery);
+    console.log("Search query changed to:", newQuery);
+    // 검색어가 비워지면 검색 상태를 리셋할 수 있음
+    if (newQuery === "") {
+      setShowSearch(false);
+      setSearchResults([]);
+      console.log("Search query cleared, resetting search state");
+    }
+  };
+
+  // 예시: 카테고리 변경 시 로깅
+  const handleCategoryChange = (category: "title" | "content" | "author") => {
+    setSearchCategory(category);
+    console.log("Search category changed to:", category);
+    // 카테고리 변경 시 검색을 다시 실행하거나 상태를 리셋할 수 있음
+    // handleSearch(searchQuery, category); // 또는
+    // setShowSearch(false);
+    // setSearchResults([]);
+  };
+
+  // 게시글 목록을 렌더링할 데이터 결정 (return 문 바로 위에 추가)
+  const postsToRender = showSearch ? searchResults : visiblePosts;
+  // 검색 결과 메시지 (return 문 바로 위에 추가)
+  const searchResultMessage = showSearch
+    ? searchResults.length > 0
+      ? `${searchResults.length}개의 검색 결과가 있습니다.`
+      : "검색 결과가 없습니다."
+    : "";
+
   return (
     <div className="container mx-auto px-4 py-2">
       {/* 상단 검색 및 버튼 영역 - 고정 헤더로 변경 */}
@@ -1198,7 +1353,12 @@ const CommunityPage: React.FC = () => {
             </div>
 
             <form
-              onSubmit={() => handleSearch(searchQuery, searchCategory)}
+              onSubmit={(e) => {
+                // 이벤트 객체(e)를 받도록 수정
+                e.preventDefault(); // 기본 폼 제출(새로고침) 방지
+                handleSearch(searchQuery, searchCategory); // 검색 실행
+                setShowSearchModal(false); // 모달 닫기
+              }}
               className="mb-4"
             >
               <div className="relative">
@@ -1215,7 +1375,7 @@ const CommunityPage: React.FC = () => {
                         className="px-3 py-1 hover:bg-gray-100 text-xs cursor-pointer"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSearchCategory("title");
+                          handleCategoryChange("title"); // 핸들러 연결
                           setShowCategoryDropdown(false);
                         }}
                       >
@@ -1225,7 +1385,7 @@ const CommunityPage: React.FC = () => {
                         className="px-3 py-1 hover:bg-gray-100 text-xs cursor-pointer"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSearchCategory("content");
+                          handleCategoryChange("content"); // 핸들러 연결
                           setShowCategoryDropdown(false);
                         }}
                       >
@@ -1235,7 +1395,7 @@ const CommunityPage: React.FC = () => {
                         className="px-3 py-1 hover:bg-gray-100 text-xs cursor-pointer"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSearchCategory("author");
+                          handleCategoryChange("author"); // 핸들러 연결
                           setShowCategoryDropdown(false);
                         }}
                       >
@@ -1248,12 +1408,12 @@ const CommunityPage: React.FC = () => {
                   type="text"
                   placeholder="검색어 입력..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={handleSearchQueryChange} // 핸들러 연결
                   className="w-full rounded-md border border-gray-300 py-2 pl-20 pr-10 text-sm focus:border-blue-500 focus:outline-none"
                   autoFocus
                 />
                 <button
-                  type="submit"
+                  type="submit" // 이 버튼이 폼 제출을 담당
                   className="absolute right-2 top-1/2 -translate-y-1/2 transform text-gray-400 cursor-pointer"
                 >
                   <FaSearch />
@@ -1262,6 +1422,7 @@ const CommunityPage: React.FC = () => {
             </form>
 
             <div className="flex space-x-2">
+              {/* 이 버튼은 이제 폼 제출을 유발하지 않으므로, 클릭 시 검색 실행 및 모달 닫기만 수행 */}
               <button
                 onClick={() => {
                   handleSearch(searchQuery, searchCategory);
@@ -1316,16 +1477,15 @@ const CommunityPage: React.FC = () => {
                 {/* Replace textarea with MentionsInput */}
                 <MentionsInput
                   value={content}
-                  onChange={handlePostContentChange}
+                  onChange={handleMentionsInputChange} // 수정된 핸들러 연결
                   placeholder="내용은 450자까지 입력 가능합니다. @를 입력하여 다른 사용자를 언급하세요."
                   className="mentions-input w-full h-32 rounded-md border border-gray-300 p-2 focus:border-blue-500 focus:outline-none"
                   a11ySuggestionsListLabel={"Suggested users for mention"}
-                  // inputRef={postTextAreaRef} // Optional ref
                   maxLength={450}
                 >
                   <Mention
                     trigger="@"
-                    data={fetchUsers}
+                    data={fetchUsers} // 복원된 함수 연결
                     displayTransform={(username: string) => `@${username}`}
                     className="mentions__mention"
                     appendSpaceOnAdd={true}
@@ -1358,388 +1518,15 @@ const CommunityPage: React.FC = () => {
       )}
 
       {/* 게시글 목록 - 무한 스크롤 적용 */}
-      {loading ? (
+      {loading && page === 0 && !showSearch ? ( // 초기 로딩 시에만 전체 스피너 표시 (검색 로딩은 다르게 처리 가능)
         <div className="flex justify-center py-8">
           <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
         </div>
-      ) : showSearch ? (
-        searchResults.length > 0 ? (
-          <InfiniteScroll
-            dataLength={visiblePosts.length}
-            next={fetchMorePosts}
-            hasMore={hasMore}
-            loader={
-              <div className="flex justify-center py-4">
-                <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
-              </div>
-            }
-            endMessage={
-              <p className="text-center text-gray-500 py-4">
-                모든 게시글을 불러왔습니다.
-              </p>
-            }
-            scrollThreshold={0.9}
-          >
-            <div className="space-y-6">
-              {visiblePosts.map((post) => (
-                <div
-                  key={post.id}
-                  className="border border-gray-200 rounded-lg bg-white p-4 shadow-sm"
-                >
-                  {/* 게시글 본문 */}
-                  <div className="flex">
-                    {/* 사용자 프로필 영역 */}
-                    <div className="mr-4 flex flex-col items-center">
-                      <Link
-                        to={
-                          post.user.id === user?.id
-                            ? "/profile"
-                            : `/user-profile/${post.user.id}`
-                        }
-                        className="flex-shrink-0"
-                      >
-                        <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden cursor-pointer flex items-center justify-center">
-                          {post.user.profileImageUrl ? (
-                            <img
-                              src={post.user.profileImageUrl}
-                              alt={post.user.username}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <FaUser className="text-gray-400 text-xl" />
-                          )}
-                        </div>
-                      </Link>
-                      <div className="text-center mt-1">
-                        <Link
-                          to={
-                            post.user.id === user?.id
-                              ? "/profile"
-                              : `/user-profile/${post.user.id}`
-                          }
-                          className="font-bold text-sm hover:underline"
-                        >
-                          {post.user.username}
-                        </Link>
-                        <div className="text-xs text-gray-500">
-                          {new Date(post.createdAt).toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 게시글 내용 영역 */}
-                    <div className="flex-1">
-                      <div className="flex justify-between items-center mb-2">
-                        <h3 className="text-lg font-semibold">{post.title}</h3>
-                        <div className="flex gap-2">
-                          {isLoggedIn &&
-                            user?.id === post.user.id &&
-                            !isUserBlocked() && (
-                              <button
-                                onClick={() => handleEditPost(post)}
-                                className="text-gray-500 hover:text-blue-500"
-                                title="수정"
-                              >
-                                <FaEdit />
-                              </button>
-                            )}
-                          {isLoggedIn &&
-                            ((user?.id === post.user.id && !isUserBlocked()) ||
-                              isAdminOrModerator()) && (
-                              <button
-                                onClick={() => handleDeletePost(post.id)}
-                                className="text-gray-500 hover:text-red-500"
-                                title="삭제"
-                              >
-                                <FaTrash />
-                              </button>
-                            )}
-                        </div>
-                      </div>
-                      <p
-                        className="mt-2 text-gray-700"
-                        dangerouslySetInnerHTML={{
-                          __html: formatContentWithMentions(post.content),
-                        }}
-                      ></p>
-
-                      {/* 멘션된 사용자 표시 */}
-                      {post.mentions && post.mentions.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {post.mentions.map((user) => (
-                            <span
-                              key={user.id}
-                              className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700"
-                            >
-                              @{user.username}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
-                        <span>{formatDate(post.createdAt)}</span>
-                        <div className="flex items-center space-x-3">
-                          {isLoggedIn &&
-                            !isUserBlocked() &&
-                            user?.id !== post.user.id && (
-                              <button
-                                className="p-1 rounded-md text-red-500"
-                                title="게시글 신고하기"
-                                onClick={() => openReportModal(post.id, "post")}
-                              >
-                                <FaBell size={14} />
-                              </button>
-                            )}
-                          <div className="flex items-center space-x-1">
-                            <button
-                              className={`p-1 rounded-md ${post.liked ? "text-blue-600" : "text-gray-400 hover:text-blue-600"}`}
-                              onClick={() => handlePostLike(post.id)}
-                              disabled={!isLoggedIn}
-                              title={isLoggedIn ? "좋아요" : "로그인 필요"}
-                            >
-                              <FaThumbsUp size={14} />
-                            </button>
-                            <span className="text-sm">
-                              {post.likeCount !== undefined
-                                ? post.likeCount
-                                : 0}
-                            </span>
-                          </div>
-                          <div className="flex items-center space-x-1">
-                            <button
-                              className={`p-1 rounded-md ${post.disliked ? "text-red-600" : "text-gray-400 hover:text-red-600"}`}
-                              onClick={() => handlePostDislike(post.id)}
-                              disabled={!isLoggedIn}
-                              title={isLoggedIn ? "싫어요" : "로그인 필요"}
-                            >
-                              <FaThumbsDown size={14} />
-                            </button>
-                            <span className="text-sm">
-                              {post.dislikeCount !== undefined
-                                ? post.dislikeCount
-                                : 0}
-                            </span>
-                          </div>
-                          <button
-                            className="flex items-center cursor-pointer hover:text-blue-600"
-                            onClick={() => toggleComments(post.id)}
-                          >
-                            댓글 : {post.comments?.length || 0}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 댓글 영역 */}
-                  {expandedPostId === post.id && (
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                      <h4 className="text-sm font-semibold mb-3">
-                        댓글 {post.comments?.length || 0}개
-                      </h4>
-
-                      {/* 댓글 목록 */}
-                      <div className="space-y-3 mb-4">
-                        {post.comments?.map((comment) => (
-                          <div key={comment.id} className="flex">
-                            <div className="flex flex-col items-center mr-2">
-                              <Link
-                                to={`/user-profile/${comment.user.id}`}
-                                className="flex-shrink-0"
-                              >
-                                <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden cursor-pointer flex items-center justify-center">
-                                  {comment.user.profileImageUrl ? (
-                                    <img
-                                      src={comment.user.profileImageUrl}
-                                      alt={comment.user.username}
-                                      className="w-full h-full object-cover"
-                                    />
-                                  ) : (
-                                    <FaUser className="text-gray-400 text-sm" />
-                                  )}
-                                </div>
-                              </Link>
-                              <Link
-                                to={`/user-profile/${comment.user.id}`}
-                                className="text-xs font-medium hover:underline text-center mt-1"
-                              >
-                                {comment.user.username}
-                              </Link>
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex justify-between items-center mb-1">
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs text-gray-500">
-                                    {new Date(
-                                      comment.createdAt
-                                    ).toLocaleString()}
-                                  </span>
-                                  {isLoggedIn &&
-                                    !isUserBlocked() &&
-                                    user?.id !== comment.user.id && (
-                                      <button
-                                        className="p-1 hover:bg-gray-100 rounded-full"
-                                        title="댓글 신고하기"
-                                        onClick={() =>
-                                          openReportModal(comment.id, "comment")
-                                        }
-                                      >
-                                        <FaBell className="text-red-500 text-xs" />
-                                      </button>
-                                    )}
-                                </div>
-                                {isLoggedIn &&
-                                  user?.id === comment.user.id &&
-                                  !isUserBlocked() && (
-                                    <button
-                                      onClick={() =>
-                                        handleDeleteComment(post.id, comment.id)
-                                      }
-                                      className="text-xs text-gray-500 hover:text-red-500"
-                                      title="삭제"
-                                    >
-                                      <FaTrash />
-                                    </button>
-                                  )}
-                              </div>
-                              <div
-                                className="text-sm"
-                                dangerouslySetInnerHTML={{
-                                  __html: formatContentWithMentions(
-                                    comment.content
-                                  ),
-                                }}
-                              />
-                              <div className="mt-1 flex items-center space-x-4">
-                                <button
-                                  onClick={() => handleCommentLike(comment.id)}
-                                  className={`flex items-center text-xs space-x-1 ${
-                                    comment.liked
-                                      ? "text-blue-500"
-                                      : "text-gray-500"
-                                  }`}
-                                >
-                                  <FaThumbsUp />
-                                  <span>
-                                    {Number.isInteger(comment.likeCount)
-                                      ? comment.likeCount
-                                      : parseInt(
-                                          String(comment.likeCount || "0"),
-                                          10
-                                        )}
-                                  </span>
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    handleCommentDislike(comment.id)
-                                  }
-                                  className={`flex items-center text-xs space-x-1 ${
-                                    comment.disliked
-                                      ? "text-red-500"
-                                      : "text-gray-500"
-                                  }`}
-                                >
-                                  <FaThumbsDown />
-                                  <span>
-                                    {Number.isInteger(comment.dislikeCount)
-                                      ? comment.dislikeCount
-                                      : parseInt(
-                                          String(comment.dislikeCount || "0"),
-                                          10
-                                        )}
-                                  </span>
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-
-                        {(!post.comments || post.comments.length === 0) && (
-                          <p className="text-sm text-gray-500 text-center py-2">
-                            아직 댓글이 없습니다. 첫 댓글을 작성해보세요!
-                          </p>
-                        )}
-                      </div>
-
-                      {/* 댓글 작성 폼 */}
-                      {isLoggedIn ? (
-                        <div className="flex">
-                          <div className="mr-2 h-8 w-8 overflow-hidden rounded-full bg-gray-200">
-                            {user?.profileImageUrl ? (
-                              <img
-                                src={user.profileImageUrl}
-                                alt="내 프로필"
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center bg-gray-200">
-                                <FaUser className="text-gray-500" size={12} />
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex-1 flex">
-                            <input
-                              type="text"
-                              placeholder={
-                                isUserBlocked()
-                                  ? "댓글 작성이 제한되었습니다"
-                                  : "댓글을 입력하세요..."
-                              }
-                              className="flex-1 rounded-l-md border border-gray-300 px-3 py-1 text-sm focus:border-blue-500 focus:outline-none"
-                              value={newComment}
-                              onChange={(e) => setNewComment(e.target.value)}
-                              disabled={isUserBlocked()}
-                            />
-                            <button
-                              className={`rounded-r-md bg-gray-800 px-3 py-1 text-sm text-white ${
-                                isUserBlocked()
-                                  ? "opacity-50 cursor-not-allowed"
-                                  : ""
-                              }`}
-                              onClick={() => handleCommentSubmit(post.id)}
-                              disabled={isUserBlocked()}
-                            >
-                              <FaReply />
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-2">
-                          <p className="text-sm text-gray-500 mb-1">
-                            댓글을 작성하려면 로그인이 필요합니다.
-                          </p>
-                          <Link
-                            to="/login"
-                            className="text-sm text-blue-600 hover:underline"
-                          >
-                            로그인하기
-                          </Link>
-                        </div>
-                      )}
-
-                      {isLoggedIn && isUserBlocked() && (
-                        <p className="text-xs text-red-500 mt-1 text-center">
-                          현재 댓글 기능이 제한되었습니다. 관리자에게
-                          문의해주세요.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </InfiniteScroll>
-        ) : (
-          <div className="text-center py-8">
-            <p className="text-gray-500">검색 결과가 없습니다.</p>
-          </div>
-        )
       ) : (
         <InfiniteScroll
-          dataLength={visiblePosts.length}
+          dataLength={postsToRender.length}
           next={fetchMorePosts}
-          hasMore={hasMore}
+          hasMore={showSearch ? searchHasMore : hasMore}
           loader={
             <div className="flex justify-center py-4">
               <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
@@ -1747,13 +1534,17 @@ const CommunityPage: React.FC = () => {
           }
           endMessage={
             <p className="text-center text-gray-500 py-4">
-              모든 게시글을 불러왔습니다.
+              {postsToRender.length > 0
+                ? "모든 게시글을 불러왔습니다."
+                : showSearch
+                  ? "검색 결과가 없습니다."
+                  : "게시글이 없습니다."}
             </p>
           }
           scrollThreshold={0.9}
         >
           <div className="space-y-6">
-            {visiblePosts.map((post) => (
+            {postsToRender.map((post) => (
               <div
                 key={post.id}
                 className="border border-gray-200 rounded-lg bg-white p-4 shadow-sm"
