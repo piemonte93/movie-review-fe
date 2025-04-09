@@ -2982,6 +2982,64 @@ export const backendApi = {
       return []; // 실패 시 빈 배열 반환
     }
   },
+
+  // 팔로우 관련 함수들
+  toggleFollow: async (targetUserId: number): Promise<UserFollowResponse> => {
+    const response = await apiClient.post<UserFollowResponse>(`/api/users/follow/${targetUserId}`);
+    return response.data;
+  },
+
+  getMyFollowers: async (): Promise<FollowUserResponse[]> => {
+    const response = await apiClient.get<FollowUserResponse[]>('/api/users/followers');
+    return response.data;
+  },
+
+  getMyFollowing: async (): Promise<FollowUserResponse[]> => {
+    const response = await apiClient.get<FollowUserResponse[]>('/api/users/following');
+    return response.data;
+  },
+
+  getUserFollowers: async (userId: number): Promise<FollowUserResponse[]> => {
+    const response = await apiClient.get<FollowUserResponse[]>(`/api/users/${userId}/followers`);
+    return response.data;
+  },
+
+  getUserFollowing: async (userId: number): Promise<FollowUserResponse[]> => {
+    const response = await apiClient.get<FollowUserResponse[]>(`/api/users/${userId}/following`);
+    return response.data;
+  },
+
+  /**
+   * 내가 팔로우하는 사용자들이 스크랩한 컨텐츠 목록을 가져옵니다.
+   * @returns 팔로잉 중인 사용자들의 스크랩 목록
+   */
+  getFollowingScraps: async (): Promise<any[]> => {
+    try {
+      const response = await apiClient.get<any[]>('/api/users/following/scraps');
+      // API 응답을 적절한 형태로 매핑하여 반환
+      return response.data.map(item => ({
+        id: item.id,
+        title: item.title || '',
+        name: item.name || '',
+        poster_path: item.poster_path || '',
+        backdrop_path: item.backdrop_path || '',
+        overview: item.overview || '',
+        vote_average: item.vote_average || 0,
+        vote_count: item.vote_count || 0,
+        release_date: item.release_date || '',
+        first_air_date: item.first_air_date || '',
+        media_type: item.media_type || 'movie',
+        // Content 인터페이스 호환을 위한 필드 추가
+        genre_ids: [],
+        popularity: 0,
+        adult: false,
+        original_language: 'ko'
+      }));
+    } catch (error) {
+      console.error('팔로잉 사용자들의 스크랩 목록 조회 실패:', error);
+      return [];
+    }
+  },
 };
 
 // 신고 관련 타입 정의
@@ -3143,4 +3201,18 @@ export interface Review {
   is_spoiler?: boolean;
   likeCount?: number;
   dislikeCount?: number;
+}
+
+// 팔로우 관련 인터페이스 정의
+export interface UserFollowResponse {
+  following: boolean;
+  message: string;
+}
+
+export interface FollowUserResponse {
+  id: number;
+  username: string;
+  profileImageUrl: string | null;
+  bio: string | null;
+  following: boolean;
 }

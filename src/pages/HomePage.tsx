@@ -13,6 +13,11 @@ const HomePage: React.FC = () => {
   const [hotReviewsLoading, setHotReviewsLoading] = useState(true);
   const [hotReviewsError, setHotReviewsError] = useState<string | null>(null);
   const [reviewImageUrls, setReviewImageUrls] = useState<Record<number, string | null>>({});
+  
+  // 팔로잉 사용자 스크랩 상태 추가
+  const [followingScraps, setFollowingScraps] = useState<any[]>([]);
+  const [followingScrapsLoading, setFollowingScrapsLoading] = useState(false);
+  const [followingScrapsError, setFollowingScrapsError] = useState<string | null>(null);
 
   const {
     contents: trendingAllContent,
@@ -55,6 +60,29 @@ const HomePage: React.FC = () => {
 
     fetchHotReviews();
   }, []);
+
+  // 팔로잉 사용자의 스크랩 목록 가져오기
+  useEffect(() => {
+    const fetchFollowingScraps = async () => {
+      if (!isLoggedIn) return;
+      
+      try {
+        setFollowingScrapsLoading(true);
+        setFollowingScrapsError(null);
+        const scraps = await backendApi.getFollowingScraps();
+        setFollowingScraps(scraps);
+      } catch (error) {
+        console.error("팔로잉 사용자 스크랩 로딩 실패:", error);
+        setFollowingScrapsError("친구가 보고있는 작품을 불러오는데 실패했습니다.");
+      } finally {
+        setFollowingScrapsLoading(false);
+      }
+    };
+
+    if (isLoggedIn) {
+      fetchFollowingScraps();
+    }
+  }, [isLoggedIn]);
 
   useEffect(() => {
     const loadReviewImages = async () => {
@@ -104,10 +132,11 @@ const HomePage: React.FC = () => {
       {isLoggedIn && (
         <ContentScrollList
           title={`${user?.username || "사용자"}님의 친구가 보고있는 작품`}
-          contents={topRatedContents}
-          loading={topRatedLoading}
-          error={topRatedError}
-          category="topRated"
+          contents={followingScraps}
+          loading={followingScrapsLoading}
+          error={followingScrapsError ? followingScrapsError : null}
+          category="followingScraps"
+          emptyMessage="친구가 스크랩한 작품이 없습니다. 팔로잉을 추가해보세요!"
         />
       )}
 
