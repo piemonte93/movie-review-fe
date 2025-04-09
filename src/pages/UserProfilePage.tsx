@@ -317,47 +317,62 @@ const UserProfilePage: React.FC = () => {
 
             // 비동기 병렬 로드로 성능 최적화
             const loadAllTabsData = async () => {
-              // 게시물 로드
-              const postsResponse = await backendApi.getUserPosts(
-                parseInt(userId),
-                0
-              );
-              if (postsResponse && postsResponse.totalElements !== undefined) {
-                console.log(
-                  `[디버그] 사전 로드: 게시물 수 = ${postsResponse.totalElements}`
-                );
-                // 현재 선택된 탭이 아니면 UI를 업데이트하지 않고 카운트만 갱신
-                if (activeTab !== "posts") {
-                  setProfileData((prev) => ({
-                    ...prev,
-                    postCount: Number(postsResponse.totalElements),
-                  }));
-                }
-              }
+              // 게시물 로드와 리뷰 로드를 동시에 실행
+              const [postsResponse, [movieReviews, tvReviews]] =
+                await Promise.all([
+                  backendApi.getUserPosts(parseInt(userId), 0).catch((err) => {
+                    console.error("[디버그] 사전 로드: 게시물 로드 실패", err);
+                    return { totalElements: 0 }; // 실패 시 기본값
+                  }),
+                  Promise.all([
+                    backendApi
+                      .getUserReviewsById(parseInt(userId), 0)
+                      .catch((err) => {
+                        console.error(
+                          "[디버그] 사전 로드: 영화 리뷰 로드 실패",
+                          err
+                        );
+                        return { totalElements: 0 }; // 실패 시 기본값
+                      }),
+                    backendApi
+                      .getUserTvReviewsById(parseInt(userId), 0)
+                      .catch((err) => {
+                        console.error(
+                          "[디버그] 사전 로드: TV 리뷰 로드 실패",
+                          err
+                        );
+                        return { totalElements: 0 }; // 실패 시 기본값
+                      }),
+                  ]),
+                ]);
 
-              // 리뷰 로드 (영화 + TV)
-              const [movieReviews, tvReviews] = await Promise.all([
-                backendApi.getUserReviewsById(parseInt(userId), 0),
-                backendApi.getUserTvReviewsById(parseInt(userId), 0),
-              ]);
-
-              const totalReviewCount =
+              const loadedPostCount = Number(postsResponse?.totalElements || 0);
+              const loadedReviewCount =
                 Number(movieReviews?.totalElements || 0) +
                 Number(tvReviews?.totalElements || 0);
 
               console.log(
-                `[디버그] 사전 로드: 총 리뷰 수 = ${totalReviewCount}`
+                `[디버그] 사전 로드 완료: 게시물 수 = ${loadedPostCount}, 총 리뷰 수 = ${loadedReviewCount}`
               );
 
-              // 현재 선택된 탭이 아니면 UI를 업데이트하지 않고 카운트만 갱신
-              if (activeTab !== "reviews") {
-                setProfileData((prev) => ({
-                  ...prev,
-                  reviewCount: totalReviewCount,
-                }));
-              }
+              // 모든 카운트를 가져온 후 상태를 한 번에 업데이트
+              setProfileData((prev) => {
+                if (!prev) return null; // 이전 상태가 null이면 업데이트하지 않음
 
-              console.log("[디버그] 모든 탭 데이터 사전 로드 완료");
+                // 이전 상태를 기반으로 새 상태 객체 생성
+                const newState = {
+                  ...prev,
+                  postCount: loadedPostCount,
+                  reviewCount: loadedReviewCount,
+                };
+
+                console.log("[디버그] 사전 로드 후 profileData 업데이트:", {
+                  postCount: newState.postCount,
+                  reviewCount: newState.reviewCount,
+                });
+
+                return newState;
+              });
             };
 
             // 비동기로 실행하여 UI 차단 방지
@@ -475,45 +490,55 @@ const UserProfilePage: React.FC = () => {
 
         // 비동기 병렬 로드로 성능 최적화
         const loadAllTabsData = async () => {
-          // 게시물 로드
-          const postsResponse = await backendApi.getUserPosts(
-            parseInt(userId),
-            0
-          );
-          if (postsResponse && postsResponse.totalElements !== undefined) {
-            console.log(
-              `[디버그] 사전 로드: 게시물 수 = ${postsResponse.totalElements}`
-            );
-            // 현재 선택된 탭이 아니면 UI를 업데이트하지 않고 카운트만 갱신
-            if (activeTab !== "posts") {
-              setProfileData((prev) => ({
-                ...prev,
-                postCount: Number(postsResponse.totalElements),
-              }));
-            }
-          }
-
-          // 리뷰 로드 (영화 + TV)
-          const [movieReviews, tvReviews] = await Promise.all([
-            backendApi.getUserReviewsById(parseInt(userId), 0),
-            backendApi.getUserTvReviewsById(parseInt(userId), 0),
+          // 게시물 로드와 리뷰 로드를 동시에 실행
+          const [postsResponse, [movieReviews, tvReviews]] = await Promise.all([
+            backendApi.getUserPosts(parseInt(userId), 0).catch((err) => {
+              console.error("[디버그] 사전 로드: 게시물 로드 실패", err);
+              return { totalElements: 0 }; // 실패 시 기본값
+            }),
+            Promise.all([
+              backendApi
+                .getUserReviewsById(parseInt(userId), 0)
+                .catch((err) => {
+                  console.error("[디버그] 사전 로드: 영화 리뷰 로드 실패", err);
+                  return { totalElements: 0 }; // 실패 시 기본값
+                }),
+              backendApi
+                .getUserTvReviewsById(parseInt(userId), 0)
+                .catch((err) => {
+                  console.error("[디버그] 사전 로드: TV 리뷰 로드 실패", err);
+                  return { totalElements: 0 }; // 실패 시 기본값
+                }),
+            ]),
           ]);
 
-          const totalReviewCount =
+          const loadedPostCount = Number(postsResponse?.totalElements || 0);
+          const loadedReviewCount =
             Number(movieReviews?.totalElements || 0) +
             Number(tvReviews?.totalElements || 0);
 
-          console.log(`[디버그] 사전 로드: 총 리뷰 수 = ${totalReviewCount}`);
+          console.log(
+            `[디버그] 사전 로드 완료: 게시물 수 = ${loadedPostCount}, 총 리뷰 수 = ${loadedReviewCount}`
+          );
 
-          // 현재 선택된 탭이 아니면 UI를 업데이트하지 않고 카운트만 갱신
-          if (activeTab !== "reviews") {
-            setProfileData((prev) => ({
+          // 모든 카운트를 가져온 후 상태를 한 번에 업데이트
+          setProfileData((prev) => {
+            if (!prev) return null; // 이전 상태가 null이면 업데이트하지 않음
+
+            // 이전 상태를 기반으로 새 상태 객체 생성
+            const newState = {
               ...prev,
-              reviewCount: totalReviewCount,
-            }));
-          }
+              postCount: loadedPostCount,
+              reviewCount: loadedReviewCount,
+            };
 
-          console.log("[디버그] 모든 탭 데이터 사전 로드 완료");
+            console.log("[디버그] 사전 로드 후 profileData 업데이트:", {
+              postCount: newState.postCount,
+              reviewCount: newState.reviewCount,
+            });
+
+            return newState;
+          });
         };
 
         // 비동기로 실행하여 UI 차단 방지
@@ -579,14 +604,14 @@ const UserProfilePage: React.FC = () => {
       if (nextPage === 0) {
         setPosts(response.content);
 
-        // postCount 업데이트
-        if (profileData && response.totalElements !== undefined) {
-          console.log(`[디버그] 게시물 수 업데이트: ${response.totalElements}`);
-          setProfileData({
-            ...profileData,
-            postCount: response.totalElements,
-          });
-        }
+        // postCount 업데이트 -> loadAllTabsData에서 처리하므로 제거
+        // if (profileData && response.totalElements !== undefined) {
+        //   console.log(`[디버그] 게시물 수 업데이트: ${response.totalElements}`);
+        //   setProfileData({
+        //     ...profileData,
+        //     postCount: response.totalElements,
+        //   });
+        // }
       } else {
         setPosts((prevPosts) => [...prevPosts, ...response.content]);
       }
@@ -645,19 +670,19 @@ const UserProfilePage: React.FC = () => {
       if (nextPage === 0) {
         setReviews(allReviews);
 
-        // reviewCount 업데이트 (영화 리뷰와 TV 쇼 리뷰의 총 개수)
-        if (profileData) {
-          const totalReviewCount =
-            (movieReviews.totalElements || 0) +
-            (tvShowReviews.totalElements || 0);
-          console.log(
-            `[디버그] 리뷰 수 업데이트: ${totalReviewCount} (영화: ${movieReviews.totalElements || 0}, TV: ${tvShowReviews.totalElements || 0})`
-          );
-          setProfileData({
-            ...profileData,
-            reviewCount: totalReviewCount,
-          });
-        }
+        // reviewCount 업데이트 (영화 리뷰와 TV 쇼 리뷰의 총 개수) -> loadAllTabsData에서 처리하므로 제거
+        // if (profileData) {
+        //   const totalReviewCount =
+        //     (movieReviews.totalElements || 0) +
+        //     (tvShowReviews.totalElements || 0);
+        //   console.log(
+        //     `[디버그] 리뷰 수 업데이트: ${totalReviewCount} (영화: ${movieReviews.totalElements || 0}, TV: ${tvShowReviews.totalElements || 0})`
+        //   );
+        //   setProfileData({
+        //     ...profileData,
+        //     reviewCount: totalReviewCount,
+        //   });
+        // }
       } else {
         setReviews((prevReviews) => [...prevReviews, ...allReviews]);
       }
@@ -929,7 +954,7 @@ const UserProfilePage: React.FC = () => {
             }
           } catch (profileUpdateError) {
             console.error(
-              "[디버그] 내 프로필 정보 업데이트 처리 중 오류:",
+              "[디버그] 내 프로필 정보 업데이트 중 오류:",
               profileUpdateError
             );
           }
