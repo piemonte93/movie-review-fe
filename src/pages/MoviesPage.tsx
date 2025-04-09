@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useFilteredMovies } from "../hooks/useSearch";
 import ContentCard from "../components/ContentCard";
 import FilterPanel from "../components/FilterPanel";
 import { FaFilter } from "react-icons/fa";
-import Pagination from "../components/Pagination";
+import InfiniteScroll from "react-infinite-scroll-component";
 
 // genres와 sortOptions 정의
 const movieGenres = [
@@ -84,6 +84,9 @@ const MoviesPage: React.FC = () => {
   // 모바일에서 필터 패널 표시 여부를 위한 상태
   const [isFilterVisible, setIsFilterVisible] = useState<boolean>(false);
 
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [allContents, setAllContents] = useState<any[]>([]);
+
   // URL 변경 시 필터 상태 업데이트
   useEffect(() => {
     const genres = queryParams.get("genres");
@@ -120,6 +123,14 @@ const MoviesPage: React.FC = () => {
 
     setIsKoreanMovie(isKorean === "true");
     setIsForeignMovie(isForeign === "true");
+
+    // 페이지 변경 시에만 기존 컨텐츠를 유지, 다른 필터가 변경되면 초기화
+    if (page && (!location.state || !location.state.filterChanged)) {
+      setHasMore(true);
+    } else {
+      setAllContents([]);
+      setCurrentPage(1);
+    }
   }, [location.search]);
 
   // 필터링된 영화 목록을 가져오는 함수
@@ -134,6 +145,26 @@ const MoviesPage: React.FC = () => {
       isKoreanMovie,
       isForeignMovie
     );
+
+  // 새 컨텐츠를 받을 때마다 누적
+  useEffect(() => {
+    if (!loading && contents.length > 0) {
+      // 페이지가 1이면 초기화, 1보다 크면 추가
+      if (currentPage === 1) {
+        setAllContents(contents);
+      } else {
+        // 중복 제거하면서 추가
+        setAllContents((prev) => {
+          const existingIds = new Set(prev.map((item) => item.id));
+          const newItems = contents.filter((item) => !existingIds.has(item.id));
+          return [...prev, ...newItems];
+        });
+      }
+
+      // 다음 페이지가 있는지 확인
+      setHasMore(currentPage < totalPages);
+    }
+  }, [contents, loading, currentPage, totalPages]);
 
   // 장르 토글 함수
   const toggleGenre = (genreId: number) => {
@@ -157,6 +188,18 @@ const MoviesPage: React.FC = () => {
     }
   };
 
+  // 무한 스크롤 다음 페이지 로드 함수
+  const fetchMoreData = useCallback(() => {
+    if (currentPage < totalPages) {
+      const nextPage = currentPage + 1;
+      const params = new URLSearchParams(location.search);
+      params.set("page", nextPage.toString());
+      navigate(`/movies?${params.toString()}`, {
+        state: { filterChanged: false },
+      });
+    }
+  }, [currentPage, totalPages, location.search, navigate]);
+
   // 필터 적용 함수
   const applyFilters = () => {
     const params = new URLSearchParams();
@@ -166,12 +209,14 @@ const MoviesPage: React.FC = () => {
     if (selectedYear) params.set("year", selectedYear.toString());
     if (selectedSort) params.set("sort_by", selectedSort);
     if (searchInput.trim()) params.set("query", searchInput.trim());
-    if (currentPage > 1) params.set("page", currentPage.toString());
+    params.set("page", "1"); // 필터 변경 시 항상 1페이지부터
     if (voteRange > 0) params.set("vote_min", voteRange.toString());
     if (isKoreanMovie) params.set("is_korean", "true");
     if (isForeignMovie) params.set("is_foreign", "true");
 
-    navigate(`/movies?${params.toString()}`);
+    navigate(`/movies?${params.toString()}`, {
+      state: { filterChanged: true },
+    });
     // 모바일 필터 패널 닫기
     setIsFilterVisible(false);
   };
@@ -186,19 +231,6 @@ const MoviesPage: React.FC = () => {
     setIsKoreanMovie(false);
     setIsForeignMovie(false);
     // 검색어는 초기화하지 않음
-  };
-
-  // 페이지 변경 핸들러
-  const handlePageChange = (page: number) => {
-    const params = new URLSearchParams(location.search);
-    if (page > 1) {
-      params.set("page", page.toString());
-    } else {
-      params.delete("page");
-    }
-    navigate(`/movies?${params.toString()}`);
-    // 페이지 상단으로 스크롤
-    window.scrollTo(0, 0);
   };
 
   // 검색어 입력 핸들러
@@ -225,7 +257,7 @@ const MoviesPage: React.FC = () => {
   };
 
   // 검색 타임아웃 참조
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 컴포넌트 언마운트 시 타이머 정리
   useEffect(() => {
@@ -320,39 +352,91 @@ const MoviesPage: React.FC = () => {
 
         {/* 영화 목록 */}
         <div className="flex-1">
-          {loading ? (
-            <div className="flex justify-center items-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-            </div>
-          ) : error ? (
-            <div className="text-red-500 text-center py-8">{error}</div>
-          ) : contents.length > 0 ? (
-            <>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {contents.map((movie) => (
-                  <ContentCard key={movie.id} content={movie} />
-                ))}
+          {/* 필터링된 결과 섹션 */}
+          <div className="mt-8">
+            {/* 결과 정보 */}
+            {/* {!loading && !error && allContents.length > 0 && (
+              <div className="mb-4 text-gray-600">
+                총 {totalResults.toLocaleString()}개의 영화 중{" "}
+                <span className="font-medium">
+                  {allContents.length.toLocaleString()}개
+                </span>
+                의 영화를 보고 있습니다.
               </div>
+            )} */}
 
-              {/* 페이지네이션 */}
-              {totalPages > 1 && (
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPageChange={handlePageChange}
-                  className="mt-8"
-                />
-              )}
-            </>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              {searchQuery
-                ? `"${searchQuery}"에 대한 검색 결과가 없습니다.`
-                : "조건에 맞는 영화가 없습니다. 다른 필터를 시도해보세요."}
-            </div>
-          )}
+            {/* 로딩 상태 및 에러 처리 */}
+            {loading && allContents.length === 0 ? (
+              <div className="flex justify-center py-10">
+                <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600"></div>
+              </div>
+            ) : error ? (
+              <div className="rounded-lg bg-red-50 p-4 text-center text-red-600">
+                {error}
+              </div>
+            ) : allContents.length === 0 ? (
+              <div className="rounded-lg bg-gray-50 p-6 text-center">
+                <p className="text-lg text-gray-600">
+                  {searchQuery
+                    ? `"${searchQuery}"에 대한 검색 결과가 없습니다.`
+                    : "조건에 맞는 영화가 없습니다."}
+                </p>
+                <div className="mt-4 text-sm text-gray-500">
+                  <p>다른 필터 옵션을 시도해보세요.</p>
+                </div>
+              </div>
+            ) : (
+              <InfiniteScroll
+                dataLength={allContents.length}
+                next={fetchMoreData}
+                hasMore={hasMore}
+                loader={
+                  <div className="flex justify-center py-6 mt-4">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600"></div>
+                  </div>
+                }
+                endMessage={
+                  <p className="text-center text-gray-500 py-4 mt-4">
+                    모든 영화를 불러왔습니다.
+                  </p>
+                }
+              >
+                <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                  {allContents.map((content) => (
+                    <ContentCard
+                      key={`${content.id}-${content.title}`}
+                      content={content}
+                      type="movie"
+                    />
+                  ))}
+                </div>
+              </InfiniteScroll>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* 스크롤 최상단 버튼 */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        className="fixed bottom-8 right-8 bg-blue-600 text-white p-3 rounded-full shadow-lg hover:bg-blue-700 transition-all"
+        style={{ display: window.pageYOffset > 300 ? "block" : "none" }}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-6 w-6"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M5 10l7-7m0 0l7 7m-7-7v18"
+          />
+        </svg>
+      </button>
     </div>
   );
 };
