@@ -1013,7 +1013,10 @@ const UserProfilePage: React.FC = () => {
             {/* 통계 (팔로워, 팔로잉 등) */}
             <div className="flex space-x-6 mb-4">
               <div className="text-center md:text-left">
-                <span className="font-semibold">{posts.length || 0}</span>
+                <span className="font-semibold">
+                  {(profileData?.reviewedMoviesCount || 0) +
+                    (posts.length || 0)}
+                </span>
                 <span className="ml-1">게시물</span>
               </div>
               <button
