@@ -748,9 +748,7 @@ const ContentDetailPage = () => {
                             <FaUserCircle className="text-gray-400" />
                           </div>
                         )}
-                        <span className="font-medium">
-                          {review.user?.username || "사용자"}
-                        </span>
+                        <span className="font-semibold">{review.username}</span>
                       </div>
 
                       {/* 별점 표시 */}
