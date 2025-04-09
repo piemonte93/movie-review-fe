@@ -27,7 +27,8 @@ const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onDelete }) => {
     if ((e.target as HTMLElement).closest(".post-actions")) {
       return;
     }
-    navigate(`/community/${post.id}`);
+    // 커뮤니티 페이지에서 해당 게시물 제목을 검색
+    navigate(`/community?search=${encodeURIComponent(post.title)}`);
   };
 
   const handleEditClick = (e: React.MouseEvent) => {

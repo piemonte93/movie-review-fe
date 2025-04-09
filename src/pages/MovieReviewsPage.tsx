@@ -1073,6 +1073,30 @@ const MovieReviewsPage: React.FC = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // URL 쿼리 파라미터 확인하여 검색 실행
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const searchParam = params.get("search");
+
+    // 검색어가 있으면 자동으로 검색 실행
+    if (searchParam) {
+      setSearchQuery(searchParam);
+      setSearchCategory("title"); // 기본 검색 카테고리를 제목으로 설정
+
+      // 데이터 로드 후 검색 수행
+      if (reviews.length > 0) {
+        const filtered = reviews.filter((review) => {
+          const query = searchParam.toLowerCase();
+          return review.title.toLowerCase().includes(query);
+        });
+
+        setSearchResults(filtered);
+        setVisibleReviews(filtered);
+        setHasMore(false);
+      }
+    }
+  }, [location, reviews]);
+
   // 최상단으로 스크롤하는 함수
   const scrollToTop = () => {
     window.scrollTo({

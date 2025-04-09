@@ -108,6 +108,21 @@ const CommunityPage: React.FC = () => {
 
   const postTextAreaRef = useRef<HTMLTextAreaElement>(null);
 
+  // 검색 처리 - handleSearch 함수를 상단으로 이동
+  const handleSearch = useCallback(async (query: string, category: string) => {
+    try {
+      setLoading(true);
+      const response = await backendApi.searchPosts(query, category);
+      setSearchResults(response.content);
+      setShowSearch(true);
+    } catch (error) {
+      console.error("검색 실패:", error);
+      toast.error("검색에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Function to fetch users for mentions
   const fetchUsers = useCallback(
     async (query: string, callback: (data: UserMentionData[]) => void) => {
@@ -133,7 +148,7 @@ const CommunityPage: React.FC = () => {
         callback([]);
       }
     },
-    [apiSearchUsers] // Dependency
+    [] // 의존성 배열에서 apiSearchUsers 제거
   );
 
   // onChange handler for post content MentionsInput
@@ -159,18 +174,27 @@ const CommunityPage: React.FC = () => {
     }
   };
 
-  // URL 쿼리 파라미터 확인하여 특정 게시글 표시
+  // URL 쿼리 파라미터 확인하여 특정 게시글 표시 또는 검색 실행
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const postId = params.get("post");
+    const searchParam = params.get("search");
 
+    // 특정 게시글 ID가 있으면 해당 게시글 확장
     if (postId) {
       const id = parseInt(postId, 10);
       if (!isNaN(id)) {
         setExpandedPostId(id);
       }
     }
-  }, [location]);
+
+    // 검색어가 있으면 자동으로 검색 실행
+    if (searchParam) {
+      setSearchQuery(searchParam);
+      setSearchCategory("title"); // 기본 검색 카테고리를 제목으로 설정
+      handleSearch(searchParam, "title");
+    }
+  }, [location, handleSearch]);
 
   // 게시글 데이터 가져오기
   useEffect(() => {
@@ -881,21 +905,6 @@ const CommunityPage: React.FC = () => {
     }
   };
 
-  // 검색 처리
-  const handleSearch = async (query: string, category: string) => {
-    try {
-      setLoading(true);
-      const response = await backendApi.searchPosts(query, category);
-      setSearchResults(response.content);
-      setShowSearch(true);
-    } catch (error) {
-      console.error("검색 실패:", error);
-      toast.error("검색에 실패했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // 검색 카테고리를 표시하는 텍스트 반환
   const getCategoryText = () => {
     switch (searchCategory) {
@@ -1114,6 +1123,58 @@ const CommunityPage: React.FC = () => {
     } catch (error) {
       console.error("댓글 싫어요 처리 실패:", error);
       toast.error("싫어요 처리에 실패했습니다.");
+    }
+  };
+
+  // 신고 관련 함수 추가
+  const openReportModal = (targetId: number, type: "comment" | "post") => {
+    setReportTargetId(targetId);
+    setReportTargetType(type);
+    setReportContent("");
+    setShowReportModal(true);
+  };
+
+  const handleReportSubmit = async () => {
+    if (!reportContent.trim()) {
+      toast.error("신고 내용을 입력해주세요.");
+      return;
+    }
+
+    if (!reportTargetId || !reportTargetType) {
+      toast.error("신고 대상 정보가 잘못되었습니다.");
+      return;
+    }
+
+    try {
+      // 현재 신고 대상이 되는 사용자 ID 찾기
+      const targetUserId =
+        reportTargetType === "post"
+          ? posts.find((post) => post.id === reportTargetId)?.user.id
+          : posts
+              .find((post) =>
+                post.comments.some((comment) => comment.id === reportTargetId)
+              )
+              ?.comments.find((comment) => comment.id === reportTargetId)?.user
+              .id;
+
+      if (!targetUserId) {
+        toast.error("신고 대상의、사용자 정보를 찾을 수 없습니다.");
+        return;
+      }
+
+      // 신고 API 호출
+      await backendApi.createReport({
+        targetId: reportTargetId,
+        targetUserId: targetUserId,
+        reportType: reportTargetType,
+        content: reportContent,
+      });
+
+      toast.success("신고가 접수되었습니다. 검토 후 조치하겠습니다.");
+      setShowReportModal(false);
+    } catch (error) {
+      console.error("신고 접수 실패:", error);
+      toast.error("신고 접수에 실패했습니다. 다시 시도해주세요.");
     }
   };
 

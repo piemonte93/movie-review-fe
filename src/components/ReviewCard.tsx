@@ -49,6 +49,9 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
   // (백엔드에서 TV 쇼 제목도 movieTitle에 저장하고 있음)
   const title = review.movieTitle || "제목 없음";
 
+  // 리뷰 작성글 제목 - 검색에 사용할 값
+  const reviewTitle = review.title || "";
+
   // 마찬가지로 포스터 경로도 moviePoster 필드 사용
   const posterPath = review.moviePoster || "";
 
@@ -57,8 +60,13 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
   const authorProfileImg = review.user?.profileImageUrl;
 
   const handleCardClick = () => {
-    if (contentId) {
-      navigate(`/${contentType}/${contentId}`);
+    // contentType과 contentId에 따라 적절한 페이지로 이동
+    if (isMovieReview(review)) {
+      // 영화 리뷰인 경우 영화 리뷰 페이지에서 검색
+      navigate(`/movie-reviews?search=${encodeURIComponent(reviewTitle)}`);
+    } else {
+      // TV 쇼 리뷰인 경우 TV 쇼 리뷰 페이지에서 검색
+      navigate(`/tv-reviews?search=${encodeURIComponent(reviewTitle)}`);
     }
   };
 
@@ -71,9 +79,11 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
         <div className="flex items-center gap-3 flex-grow min-w-0">
           {posterPath && (
             <img
-              src={posterPath.startsWith('/') || posterPath.startsWith('http') 
-                ? posterPath 
-                : `https://image.tmdb.org/t/p/w92${posterPath}`}
+              src={
+                posterPath.startsWith("/") || posterPath.startsWith("http")
+                  ? posterPath
+                  : `https://image.tmdb.org/t/p/w92${posterPath}`
+              }
               alt={title}
               className="w-12 h-[72px] object-cover rounded flex-shrink-0"
               onError={(e) => {
@@ -88,8 +98,8 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
               ) : (
                 <FaTv className="text-green-500 flex-shrink-0" />
               )}
-              <h3 className="font-bold text-lg truncate" title={title}>
-                {title}
+              <h3 className="font-bold text-lg truncate" title={reviewTitle}>
+                {reviewTitle || "제목 없음"}
               </h3>
               <span
                 className={`text-xs px-1.5 py-0.5 rounded-full ${
@@ -100,6 +110,9 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ review }) => {
               >
                 {contentType === "movie" ? "영화" : "TV쇼"}
               </span>
+            </div>
+            <div className="text-sm text-gray-700 truncate mb-1" title={title}>
+              {title}
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-600">
               {authorProfileImg ? (
