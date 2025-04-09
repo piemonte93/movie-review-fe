@@ -1,5 +1,5 @@
 import React from "react";
-import { Post } from "../api/backendApi";
+import { Post, BASE_URL } from "../api/backendApi";
 import { useNavigate } from "react-router-dom";
 import { formatDate } from "../utils/dateUtils";
 import {
@@ -11,6 +11,7 @@ import {
   FaTrash,
 } from "react-icons/fa";
 import { useAuth } from "../context/AuthContext";
+import defaultAvatar from "../assets/default-profile.png";
 
 interface PostCardProps {
   post: Post;
@@ -48,6 +49,27 @@ const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onDelete }) => {
 
   const authorUsername = post.user?.username || "익명";
   const authorProfileImg = post.user?.profileImageUrl;
+  console.log("PostCard - 작성자 정보:", post.user);
+  console.log("PostCard - 프로필 이미지 URL:", authorProfileImg);
+
+  // 프로필 이미지 URL 처리 함수
+  const getProfileImageUrl = (imageUrl: string | undefined) => {
+    if (!imageUrl) return null;
+
+    // 절대 URL이면 그대로 사용
+    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+      return imageUrl;
+    }
+
+    // 상대 URL이면 BASE_URL 추가
+    return `${BASE_URL}${imageUrl}`;
+  };
+
+  const profileImageUrl = authorProfileImg
+    ? getProfileImageUrl(authorProfileImg)
+    : null;
+  console.log("PostCard - 최종 프로필 이미지 URL:", profileImageUrl);
+
   // Check if the current user is the author to show edit/delete buttons
   const isAuthor = user?.id === post.user?.id;
 
@@ -58,11 +80,14 @@ const PostCard: React.FC<PostCardProps> = ({ post, onEdit, onDelete }) => {
     >
       <div className="flex justify-between items-start mb-2">
         <div className="flex items-center gap-2 flex-grow min-w-0">
-          {authorProfileImg ? (
+          {profileImageUrl ? (
             <img
-              src={authorProfileImg}
+              src={profileImageUrl}
               alt={authorUsername}
               className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+              onError={(e) => {
+                e.currentTarget.src = defaultAvatar; // 이미지 로드 실패 시 기본 아바타로 대체
+              }}
             />
           ) : (
             <FaUserCircle className="w-6 h-6 text-gray-400 flex-shrink-0" />

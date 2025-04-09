@@ -54,7 +54,7 @@ const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [posts, setPosts] = useState<Post[]>([]);
-  const [reviews, setReviews] = useState<MovieReview[]>([]);
+  const [reviews, setReviews] = useState<(MovieReview | TvShowReview)[]>([]);
   const [totalPages, setTotalPages] = useState(0);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -113,6 +113,7 @@ const ProfilePage: React.FC = () => {
   const { username } = useParams<{ username: string }>();
   const { user: currentUser } = useAuth();
   const [isOwnProfile, setIsOwnProfile] = useState(false);
+  const [error, setError] = useState<boolean>(false);
 
   useEffect(() => {
     // 경로가 실제로 변경된 경우에만 로그 출력
@@ -177,10 +178,10 @@ const ProfilePage: React.FC = () => {
       }
     };
 
-    if (isLoggedIn) {
+    if (isLoggedIn && user) {
       fetchUserData();
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, user]);
 
   // 팔로워 모달을 위한 데이터 로딩
   const loadFollowers = async () => {
@@ -437,47 +438,46 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  // 리뷰 데이터 로드
+  // 리뷰 목록 조회
   const fetchReviews = useCallback(
-    async (pageToFetch: number) => {
+    async (pageToFetch = 0) => {
       if (!user) return;
+      setLoading(true);
+      setError(false);
       try {
-        setLoading(true);
-        console.log(
-          `사용자 ${user.username}의 리뷰 데이터 로드 시작 (페이지: ${pageToFetch})`
-        );
-        const [movieReviewsResponse, tvReviewsResponse] = await Promise.all([
+        const [movieResponse, tvResponse] = await Promise.all([
           backendApi.getUserReviews(user.username, pageToFetch),
           backendApi.getUserTvReviews(user.username, pageToFetch),
         ]);
-        console.log(
-          `영화 리뷰 ${movieReviewsResponse.content.length}개, TV 쇼 리뷰 ${tvReviewsResponse.content.length}개 로드 완료`
-        );
-        const allReviews: (MovieReview | TvShowReview)[] = [
-          ...movieReviewsResponse.content,
-          ...tvReviewsResponse.content,
-        ];
+
+        console.log("영화 리뷰 데이터:", movieResponse);
+        console.log("TV 리뷰 데이터:", tvResponse);
+
+        const movieReviews = movieResponse.content || [];
+        const tvReviews = tvResponse.content || [];
+
+        const allReviews = [...movieReviews, ...tvReviews];
+
         const sortedReviews = allReviews.sort(
           (a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
 
-        if (pageToFetch === 0) {
-          setReviews(sortedReviews);
-        } else {
-          setReviews((prev) => [...prev, ...sortedReviews]);
-        }
-        setPage(pageToFetch);
+        console.log("정렬된 전체 리뷰 데이터:", sortedReviews);
 
+        setReviews((prev) =>
+          pageToFetch === 0 ? sortedReviews : [...prev, ...sortedReviews]
+        );
+        setPage(pageToFetch);
         const maxTotalPages = Math.max(
-          movieReviewsResponse.totalPages || 0,
-          tvReviewsResponse.totalPages || 0
+          movieResponse.totalPages || 0,
+          tvResponse.totalPages || 0
         );
         setTotalPages(maxTotalPages);
         setHasMore(pageToFetch < maxTotalPages - 1);
-      } catch (error) {
-        console.error("리뷰 로딩 실패:", error);
-        toast.error("리뷰를 불러오는데 실패했습니다.");
+      } catch (err) {
+        console.error("리뷰 조회 중 에러 발생:", err);
+        setError(true);
       } finally {
         setLoading(false);
       }
@@ -547,9 +547,29 @@ const ProfilePage: React.FC = () => {
         let response: Page<MovieReview | TvShowReview | Post>;
         if (type === "reviews") {
           response = await backendApi.getMyLikedReviews(pageToFetch);
+
+          // 좋아요한 리뷰 데이터 로깅
+          if (response.content && response.content.length > 0) {
+            console.log("좋아요한 첫 번째 리뷰 정보:", response.content[0]);
+            if ("user" in response.content[0]) {
+              console.log(
+                "좋아요한 첫 번째 리뷰 작성자:",
+                response.content[0].user
+              );
+            }
+          }
         } else {
           response = await backendApi.getMyLikedPosts(pageToFetch);
         }
+
+        console.log(
+          `좋아요 ${type} 데이터 로드 완료:`,
+          response.content.length
+        );
+        if (response.content.length > 0) {
+          console.log("첫 번째 항목 샘플:", response.content[0]);
+        }
+
         const newContent = response.content || [];
         setLikedContent((prev) =>
           pageToFetch === 0 ? newContent : [...prev, ...newContent]
@@ -566,7 +586,7 @@ const ProfilePage: React.FC = () => {
         setLoadingLikedContent(false);
       }
     },
-    [loadingLikedContent, likedContentType]
+    [loadingLikedContent]
   );
 
   // 탭 변경 시 데이터 로드
@@ -582,6 +602,9 @@ const ProfilePage: React.FC = () => {
     setIsLoading(false);
     setLoadingLikedContent(false);
     setLoading(false);
+    setError(false);
+
+    if (!user) return;
 
     if (activeTab === "posts") {
       fetchPosts(0);
@@ -593,7 +616,7 @@ const ProfilePage: React.FC = () => {
       loadScraps();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, likedContentType]);
+  }, [activeTab, likedContentType, user]);
 
   // 게시물 탭 렌더링
   const renderPostsTab = () => {
@@ -700,7 +723,13 @@ const ProfilePage: React.FC = () => {
     if (loading) {
       return <div className="text-center py-8">로딩 중...</div>;
     }
-
+    if (error) {
+      return (
+        <div className="text-center py-8 text-red-500">
+          리뷰를 불러오는 중 오류가 발생했습니다.
+        </div>
+      );
+    }
     if (!reviews || reviews.length === 0) {
       return (
         <div className="text-center py-8 text-gray-500">
