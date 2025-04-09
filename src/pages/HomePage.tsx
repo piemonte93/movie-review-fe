@@ -121,10 +121,21 @@ const HomePage: React.FC = () => {
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
             {hotReviews.map((review) => {
               const isMovie = review.contentType === 'movie';
+              const searchQuery = encodeURIComponent(review.title); // URL 인코딩
+              let linkTarget = '';
+
+              if (isMovie) {
+                // 영화 리뷰: MovieReviewsPage로 이동 + 제목으로 검색
+                linkTarget = `/movie-reviews?search=${searchQuery}`;
+              } else {
+                // TV 리뷰: TvReviewsPage로 이동 + 제목으로 검색
+                linkTarget = `/tv-reviews?search=${searchQuery}`;
+              }
+
               return (
                 <Link 
                   key={review.id} 
-                  to={`/${isMovie ? 'movie-reviews' : 'tv-reviews'}/${review.id}`}
+                  to={linkTarget} // 동적으로 설정된 링크 경로 사용
                   className="block rounded-lg border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow"
                 >
                   <div className="flex items-center mb-3">
