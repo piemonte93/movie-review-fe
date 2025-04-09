@@ -24,13 +24,14 @@ import {
 import { FaStarHalfStroke } from "react-icons/fa6";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
-import { backendApi } from "../api/backendApi";
+import { backendApi, BASE_URL } from "../api/backendApi";
 import { toast } from "react-toastify";
 import { Content } from "../types/content";
 import axios from "axios";
 import { formatDate } from "../utils/dateUtils";
-import { useNotifications } from "../context/NotificationContext";
 import Modal from "react-modal";
+import defaultAvatar from "../assets/default-profile.png";
+import type { Page as ApiPage } from "../api/backendApi";
 
 // Content 타입을 Movie 타입으로 매핑하는 함수
 const mapContentToMovie = (content: Content): Movie | null => {
@@ -224,7 +225,6 @@ const convertBackendDateToISO = (
 const MovieReviewsPage: React.FC = () => {
   const { isLoggedIn, user, isUserBlocked } = useAuth();
   const navigate = useNavigate();
-  const { addNotification } = useNotifications();
   const location = useLocation();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -348,129 +348,40 @@ const MovieReviewsPage: React.FC = () => {
   };
 
   // 리뷰 목록 가져오기 함수
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await backendApi.getReviews(page, reviewsPerPage);
-      console.log("리뷰 API 응답 원본:", JSON.stringify(response, null, 2));
-
-      // response 객체 유효성 검사 강화
-      if (response && Array.isArray(response.content)) {
-        // 타입 안전성 강화를 위해 타입 명시
-        const validReviews: ReviewResponse["content"] = response.content
-          .filter(
-            (review: any) => review && typeof review === "object" && review.id
-          )
-          // 명시적으로 movie 타입의 리뷰만 필터링
-          .filter((review: any) => review.contentType === "movie");
-
-        console.log(
-          `영화 리뷰 필터링 결과: ${validReviews.length}개 (contentType: movie)`,
-          validReviews.map((r) => ({ id: r.id, contentType: r.contentType }))
-        );
-
-        // 빈 리뷰 목록 처리
-        if (validReviews.length === 0) {
-          console.log("유효한 리뷰가 없습니다.");
-          setReviews([]);
-          setVisibleReviews([]);
-          setTotalPages(response.totalPages || 0);
-          setHasMore(false);
-          setLoading(false);
-          return;
-        }
-
-        console.log(
-          "리뷰의 comment_count 값들:",
-          validReviews.map((review) => ({
-            id: review.id,
-            comment_count: review.commentCount || 0,
-          }))
-        );
-
-        const mappedComments: Comment[] = [];
-        console.log(`리뷰 ID ${validReviews[0].id}의 댓글 데이터:`, []);
-        console.log(
-          `리뷰 ID ${validReviews[0].id}의 변환된 댓글:`,
-          mappedComments
-        );
-
-        // 필드명 매핑 처리 개선 및 타입 안전성 강화
-        const mappedReviews: MovieReview[] = validReviews.map((review) => {
-          console.log(`리뷰 ID ${review.id}의 좋아요/싫어요 상태:`, {
-            isLiked: review.isLiked,
-            isDisliked: review.isDisliked,
-            likeCount: review.likeCount,
-            dislikeCount: review.dislikeCount,
-          });
-
-          return {
-            id: review.id,
-            title: review.title,
-            content: review.content,
-            rating: review.rating,
-            movieTitle: review.movieTitle || "",
-            movieId: review.movieId,
-            moviePoster: review.moviePosterPath || "",
-            createdAt: new Date(review.createdAt),
-            comments: mappedComments,
-            likes: [],
-            dislikes: [],
-            isSpoiler: review.isSpoiler,
-            isLiked: review.isLiked || false,
-            isDisliked: review.isDisliked || false,
-            likeCount: review.likeCount || 0,
-            dislikeCount: review.dislikeCount || 0,
-            commentCount: review.commentCount || 0,
-            user: {
-              id: review.userId || 0,
-              username: review.username || "",
-              profileImageUrl: review.userProfileImageUrl,
-              reviewCount: 0,
-            },
-          };
-        });
-
-        console.log("변환된 리뷰:", mappedReviews);
-
-        if (page === 0) {
-          setReviews(mappedReviews);
-          setVisibleReviews(mappedReviews);
-        } else {
-          setReviews((prev) => [...prev, ...mappedReviews]);
-          setVisibleReviews((prev) => [...prev, ...mappedReviews]);
-        }
-
-        setTotalPages(response.totalPages || 0);
-        setHasMore(response.currentPage < (response.totalPages || 0) - 1);
-      } else {
-        console.error("Invalid response format:", response);
-        setReviews([]);
-        setVisibleReviews([]);
-        setTotalPages(0);
-        setHasMore(false);
+      const response = await backendApi.getReviews(0, reviewsPerPage);
+      if (response.content) {
+        const formattedReviews = response.content.map((review: any) => ({
+          ...review,
+          createdAt: convertBackendDateToISO(review.createdAt),
+          comments: [],
+          user: {
+            id: review.userId,
+            username: review.username,
+            profileImageUrl: review.userProfileImageUrl,
+            reviewCount: 0,
+          },
+          moviePoster: review.moviePosterPath,
+        }));
+        setReviews(formattedReviews);
+        setVisibleReviews(formattedReviews);
+        setTotalPages(response.totalPages);
+        setHasMore(response.totalPages > 1);
       }
+      setLoading(false);
     } catch (error) {
-      console.error("리뷰 목록 불러오기 실패:", error);
-      if (error instanceof Error && error.message === "로그인이 필요합니다.") {
-        toast.error("로그인이 필요합니다.");
-        navigate("/login", { state: { from: location } });
-      } else {
-        toast.error("리뷰 목록을 불러오는데 실패했습니다.");
-      }
-      setReviews([]);
-      setVisibleReviews([]);
-      setTotalPages(0);
-      setHasMore(false);
-    } finally {
+      console.error("영화 리뷰 로딩 실패:", error);
+      toast.error("리뷰를 불러오는데 실패했습니다.");
       setLoading(false);
     }
-  };
+  }, [reviewsPerPage]);
 
   // useEffect에서 fetchReviews 호출
   useEffect(() => {
     fetchReviews();
-  }, [page, navigate, location]);
+  }, [page, navigate, location, fetchReviews]);
 
   // 리뷰 작성 처리
   const handleSubmitReview = async (e: React.FormEvent) => {
@@ -1106,9 +1017,37 @@ const MovieReviewsPage: React.FC = () => {
   };
 
   // 다음 페이지 리뷰를 불러오는 함수
-  const fetchMoreReviews = () => {
-    if (!hasMore || loading) return;
-    setPage(page + 1);
+  const fetchMoreReviews = async () => {
+    const nextPage = page + 1;
+    if (nextPage >= totalPages) {
+      setHasMore(false);
+      return;
+    }
+    try {
+      const response = await backendApi.getReviews(nextPage, reviewsPerPage);
+      if (response.content) {
+        const formattedReviews = response.content.map((review: any) => ({
+          ...review, // 기존 속성들 유지
+          createdAt: convertBackendDateToISO(review.createdAt),
+          comments: [],
+          user: {
+            id: review.userId,
+            username: review.username,
+            profileImageUrl: review.userProfileImageUrl,
+            reviewCount: 0,
+          },
+          // 백엔드의 moviePosterPath를 프론트엔드의 moviePoster로 명시적 매핑
+          moviePoster: review.moviePosterPath,
+        }));
+        setReviews((prev) => [...prev, ...formattedReviews]);
+        setVisibleReviews((prev) => [...prev, ...formattedReviews]);
+        setPage(nextPage);
+        setHasMore(response.totalPages > nextPage + 1);
+      }
+    } catch (error) {
+      console.error("영화 리뷰 더 불러오기 실패:", error);
+      toast.error("리뷰를 더 불러오는데 실패했습니다.");
+    }
   };
 
   // 포스터 URL 가져오기 함수
@@ -1505,6 +1444,9 @@ const MovieReviewsPage: React.FC = () => {
 
   // --- End: Restore toggleComments and fetchReviewComments ---
 
+  // Determine reviews to render
+  const reviewsToRender = showSearch ? searchResults : visibleReviews;
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* 리뷰 작성 버튼 */}
@@ -1588,7 +1530,7 @@ const MovieReviewsPage: React.FC = () => {
 
       {/* 리뷰 목록 */}
       <InfiniteScroll
-        dataLength={visibleReviews.length}
+        dataLength={reviewsToRender.length}
         next={fetchMoreReviews}
         hasMore={hasMore}
         loader={
@@ -1598,17 +1540,17 @@ const MovieReviewsPage: React.FC = () => {
         }
         endMessage={
           <div className="text-center text-gray-500 my-4">
-            {visibleReviews.length > 0
+            {reviewsToRender.length > 0
               ? "모든 리뷰를 불러왔습니다."
               : "작성된 리뷰가 없습니다."}
           </div>
         }
       >
-        <div className="space-y-8">
-          {visibleReviews.map((review) => (
+        <div className="space-y-6">
+          {reviewsToRender.map((review) => (
             <div
               key={review.id}
-              className="bg-white rounded-lg shadow p-6 border border-gray-300"
+              className="border border-gray-200 rounded-lg bg-white p-4 shadow-sm"
             >
               {/* 리뷰 헤더 - 작성자 정보 */}
               <div className="flex items-center mb-4">
@@ -1623,12 +1565,17 @@ const MovieReviewsPage: React.FC = () => {
                   <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center cursor-pointer">
                     {review.user?.profileImageUrl ? (
                       <img
-                        src={review.user.profileImageUrl}
-                        alt={review.user.username}
+                        src={`${BASE_URL}${review.user.profileImageUrl}`}
+                        alt={review.user?.username || "사용자"}
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          if (e.currentTarget.src !== defaultAvatar) {
+                            e.currentTarget.src = defaultAvatar;
+                          }
+                        }}
                       />
                     ) : (
-                      <FaUser className="text-gray-400 text-2xl" />
+                      <FaUser className="text-gray-400 w-full h-full p-2" />
                     )}
                   </div>
                 </Link>

@@ -20,11 +20,14 @@ import {
 import { FaStarHalfStroke, FaTv } from "react-icons/fa6";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InfiniteScroll from "react-infinite-scroll-component";
-import { backendApi } from "../api/backendApi";
+import { backendApi, BASE_URL } from "../api/backendApi";
 import { toast } from "react-toastify";
 import { Content } from "../types/content";
 import axios from "axios";
 import { formatDate } from "../utils/dateUtils";
+// import Modal from "react-modal"; // 임시 주석 처리
+import defaultAvatar from "../assets/default-profile.png";
+import type { Page as ApiPage } from "../api/backendApi";
 
 // Content 타입을 TvShow 타입으로 매핑하는 함수
 const mapContentToTvShow = (content: Content): TvShow => {
@@ -90,7 +93,7 @@ interface TvShowReview {
   movieTitle: string;
   movieId: number;
   moviePoster?: string;
-  createdAt: string;
+  createdAt: string; // Changed to string to match backend data format more closely
   comments: Comment[];
   likes: { userId: number }[];
   dislikes: { userId: number }[];
@@ -106,6 +109,7 @@ interface TvShowReview {
     profileImageUrl: string | null;
     reviewCount: number;
   };
+  tvPoster?: string;
 }
 
 // 백엔드에서 반환하는 리뷰 형식
@@ -338,166 +342,70 @@ const TvReviewsPage: React.FC = () => {
 
   // 리뷰 목록 가져오기
   const fetchReviews = async () => {
-    setLoading(true);
-    setError("");
-
     try {
-      console.log(`TV 쇼 리뷰 페이지 ${page}/${reviewsPerPage} 요청 시작`);
-      const response = await backendApi.getAllTvReviews(page, reviewsPerPage);
-      console.log("API 응답 원본:", response);
-
-      // 응답이 없는 경우
-      if (!response) {
-        console.log("API 응답이 없습니다.");
-        setLoading(false);
-        return;
-      }
-
-      // 응답의 키 확인
-      console.log("응답 키:", Object.keys(response));
-
-      // content 배열이 없는 경우
-      if (!response.content || !Array.isArray(response.content)) {
-        console.error("응답에 content 배열이 없습니다:", response);
-        setLoading(false);
-        setHasMore(false);
-        return;
-      }
-
-      // 받아온 리뷰가 없는 경우
-      if (response.content.length === 0) {
-        console.log(`TV 쇼 리뷰 데이터 0개 수신 성공`);
-        setLoading(false);
-        setHasMore(false);
-        setTotalPages(response.totalPages || 0);
-        return;
-      }
-
-      // 첫 번째 리뷰 구조 확인
-      if (response.content.length > 0) {
-        const firstReview = response.content[0] as any;
-        console.log("첫 번째 리뷰 구조:", firstReview);
-        console.log("첫 번째 리뷰의 user 객체:", firstReview.user);
-        console.log("첫 번째 리뷰의 userId:", firstReview.userId);
-        console.log("첫 번째 리뷰의 username:", firstReview.username);
-        console.log("첫 번째 리뷰의 contentType:", firstReview.contentType);
-      }
-
-      // contentType이 "tv"인 리뷰만 필터링
-      const filteredReviews = response.content.filter(
-        (review: any) => review.contentType === "tv"
-      );
-
-      console.log(
-        `TV 타입 리뷰 ${filteredReviews.length}개 필터링됨 (contentType: tv)`,
-        filteredReviews.map((r) => ({ id: r.id, contentType: r.contentType }))
-      );
-
-      // 원본 리뷰와 필터링된 리뷰의 차이가 있다면 로그
-      if (filteredReviews.length < response.content.length) {
-        console.log(
-          `필터링으로 제외된 리뷰: ${response.content.length - filteredReviews.length}개`
-        );
-        const excludedReviews = response.content.filter(
-          (review: any) => review.contentType !== "tv"
-        );
-        console.log(
-          "제외된 리뷰:",
-          excludedReviews.map((r) => ({
-            id: r.id,
-            contentType: r.contentType || "없음",
-          }))
-        );
-      }
-
-      // 유효한 리뷰만 필터링
-      const validReviews = filteredReviews.filter(
-        (review) => review && review.id && review.title
-      );
-
-      console.log(`유효한 리뷰 ${validReviews.length}개 추출`);
-
-      // 리뷰 데이터 매핑
-      const mappedReviews = validReviews.map((review: any) => {
-        // 포스터 경로 디버깅
-        console.log(`리뷰 ID ${review.id}의 포스터 정보:`, {
-          moviePoster: review.moviePoster,
-          moviePosterPath: review.moviePosterPath,
-        });
-
-        // 좋아요/싫어요 상태 디버깅
-        console.log(`리뷰 ID ${review.id}의 좋아요/싫어요 상태:`, {
-          isLiked: review.isLiked,
-          isDisliked: review.isDisliked,
-          likeCount: review.likeCount,
-          dislikeCount: review.dislikeCount,
-        });
-
-        // 포스터 경로 처리: 백엔드에서 여러 가지 필드명으로 올 수 있음
-        const posterPath = review.moviePoster || review.moviePosterPath || "";
-        console.log(`리뷰 ID ${review.id}의 최종 포스터 경로:`, posterPath);
-
-        return {
-          id: review.id,
-          title: review.title,
-          content: review.content,
-          rating: review.rating,
-          movieId: review.movieId,
-          movieTitle: review.movieTitle,
-          moviePoster: posterPath,
-          isSpoiler: review.isSpoiler,
-          isLiked: review.isLiked || false,
-          isDisliked: review.isDisliked || false,
-          likeCount: review.likeCount,
-          dislikeCount: review.dislikeCount,
-          commentCount: review.commentCount,
-          createdAt: review.createdAt,
+      setLoading(true);
+      const response = await backendApi.getAllTvReviews(0, reviewsPerPage);
+      if (response.content) {
+        const formattedReviews = response.content.map((review: any) => ({
+          ...review, // 기존 속성들 유지
+          createdAt: convertBackendDateToISO(review.createdAt),
           comments: [],
-          likes: [],
-          dislikes: [],
           user: {
-            id: review.user?.id || review.userId || 0,
-            username: review.user?.username || review.username || "알 수 없음",
-            profileImageUrl:
-              review.user?.profileImageUrl || review.userProfileUrl || null,
+            id: review.userId,
+            username: review.username,
+            profileImageUrl: review.userProfileImageUrl,
+            reviewCount: 0, // Assuming reviewCount is not directly available, fetch later if needed
+          },
+          // 수정: review.tvPosterPath -> review.moviePosterPath
+          tvPoster: review.moviePosterPath,
+        }));
+        setReviews(formattedReviews);
+        setVisibleReviews(formattedReviews);
+        setTotalPages(response.totalPages);
+        setHasMore(response.totalPages > 1);
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error("TV 리뷰 로딩 실패:", error);
+      toast.error("리뷰를 불러오는데 실패했습니다.");
+      setLoading(false);
+    }
+  };
+
+  // Fix fetchMoreReviews similarly
+  const fetchMoreReviews = async () => {
+    const nextPage = page + 1;
+    if (nextPage >= totalPages) {
+      setHasMore(false);
+      return;
+    }
+    try {
+      const response = await backendApi.getAllTvReviews(
+        nextPage,
+        reviewsPerPage
+      );
+      if (response.content) {
+        const formattedReviews = response.content.map((review: any) => ({
+          ...review, // 기존 속성들 유지
+          createdAt: convertBackendDateToISO(review.createdAt),
+          comments: [],
+          user: {
+            id: review.userId,
+            username: review.username,
+            profileImageUrl: review.userProfileImageUrl,
             reviewCount: 0,
           },
-        };
-      });
-
-      console.log(`매핑된 리뷰 ${mappedReviews.length}개 생성 완료`);
-
-      if (page === 0) {
-        // 첫 페이지인 경우, 리뷰 목록을 새로 설정
-        setReviews(mappedReviews);
-        setVisibleReviews(mappedReviews);
-      } else {
-        // 페이지 추가인 경우, 기존 리뷰 목록에 추가
-        setReviews((prevReviews) => [...prevReviews, ...mappedReviews]);
-        setVisibleReviews((prevReviews) => [...prevReviews, ...mappedReviews]);
+          // 수정: review.tvPosterPath -> review.moviePosterPath
+          tvPoster: review.moviePosterPath,
+        }));
+        setReviews((prev) => [...prev, ...formattedReviews]);
+        setVisibleReviews((prev) => [...prev, ...formattedReviews]);
+        setPage(nextPage);
+        setHasMore(response.totalPages > nextPage + 1);
       }
-
-      // 총 페이지 수 설정
-      setTotalPages(response.totalPages);
-
-      // 다음 페이지가 있는지 여부 설정
-      setHasMore(page < response.totalPages - 1);
-
-      console.log(
-        `TV 쇼 리뷰 데이터 ${mappedReviews.length}개 수신 성공, 총 페이지: ${response.totalPages}, 현재 페이지: ${page}`
-      );
     } catch (error) {
-      console.error("TV 쇼 리뷰 목록 가져오기 실패:", error);
-
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        setError("리뷰를 보려면 로그인이 필요합니다.");
-        toast.error("리뷰를 보려면 로그인이 필요합니다.");
-      } else {
-        setError("리뷰 목록을 불러오는 중 오류가 발생했습니다.");
-        toast.error("리뷰 목록을 불러오는 중 오류가 발생했습니다.");
-      }
-    } finally {
-      setLoading(false);
+      console.error("TV 리뷰 더 불러오기 실패:", error);
+      toast.error("리뷰를 더 불러오는데 실패했습니다.");
     }
   };
 
@@ -950,11 +858,13 @@ const TvReviewsPage: React.FC = () => {
     });
   };
 
-  // 다음 페이지 리뷰를 불러오는 함수
+  // 다음 페이지 리뷰를 불러오는 함수 <<-- 이 함수를 삭제합니다.
+  /* // 주석 처리 또는 삭제
   const fetchMoreReviews = () => {
     if (!hasMore || loading) return;
     setPage(page + 1);
   };
+  */
 
   // 포스터 URL 가져오기 함수
   const getPosterUrl = (posterPath: string | null, size = "original") => {
@@ -1421,6 +1331,9 @@ const TvReviewsPage: React.FC = () => {
     }
   };
 
+  // Determine reviews to render
+  const reviewsToRender = showSearch ? searchResults : visibleReviews;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6">TV 쇼 리뷰</h1>
@@ -1513,7 +1426,7 @@ const TvReviewsPage: React.FC = () => {
 
       {/* 리뷰 목록 */}
       <InfiniteScroll
-        dataLength={visibleReviews.length}
+        dataLength={reviewsToRender.length}
         next={fetchMoreReviews}
         hasMore={hasMore}
         loader={
@@ -1523,17 +1436,17 @@ const TvReviewsPage: React.FC = () => {
         }
         endMessage={
           <div className="text-center text-gray-500 my-4">
-            {visibleReviews.length > 0
+            {reviewsToRender.length > 0
               ? "모든 리뷰를 불러왔습니다."
               : "작성된 리뷰가 없습니다."}
           </div>
         }
       >
-        <div className="space-y-8">
-          {visibleReviews.map((review) => (
+        <div className="space-y-6">
+          {reviewsToRender.map((review) => (
             <div
               key={review.id}
-              className="bg-white rounded-lg shadow p-6 border border-gray-300"
+              className="border border-gray-200 rounded-lg bg-white p-4 shadow-sm"
             >
               {/* 리뷰 헤더 - 작성자 정보 */}
               <div className="flex items-center mb-4">
@@ -1548,12 +1461,17 @@ const TvReviewsPage: React.FC = () => {
                   <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center cursor-pointer">
                     {review.user?.profileImageUrl ? (
                       <img
-                        src={review.user.profileImageUrl}
+                        src={`${BASE_URL}${review.user.profileImageUrl}`}
                         alt={review.user.username}
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          if (e.currentTarget.src !== defaultAvatar) {
+                            e.currentTarget.src = defaultAvatar;
+                          }
+                        }}
                       />
                     ) : (
-                      <FaUser className="text-gray-400 text-2xl" />
+                      <FaUser className="text-gray-400 w-full h-full p-2" />
                     )}
                   </div>
                 </Link>
@@ -1623,18 +1541,21 @@ const TvReviewsPage: React.FC = () => {
               {/* TV 쇼 정보와 리뷰 내용 */}
               <div className="flex flex-col sm:flex-row mb-4">
                 <div className="flex flex-col w-full sm:w-32 mb-3 sm:mb-0 sm:mr-4 flex-shrink-0 items-center sm:items-start">
-                  {review.moviePoster ? (
+                  {/* 수정: review.moviePoster -> review.tvPoster */}
+                  {review.tvPoster ? (
                     <div
                       className="cursor-pointer"
                       onClick={() => navigateToTvShowDetail(review.movieId)}
                     >
                       <img
-                        src={getPosterUrl(review.moviePoster, "w500")}
+                        /* 수정: review.moviePoster -> review.tvPoster */
+                        src={getPosterUrl(review.tvPoster, "w500")}
                         alt={review.movieTitle}
                         className="w-auto max-w-[150px] h-auto max-h-[225px] sm:w-32 sm:h-48 object-cover rounded mb-2"
                         onError={(e) => {
                           console.log(
-                            `이미지 로드 실패: ${review.moviePoster}`
+                            /* 수정: review.moviePoster -> review.tvPoster */
+                            `이미지 로드 실패: ${review.tvPoster}`
                           );
                           (e.target as HTMLImageElement).src =
                             "https://via.placeholder.com/1000x1500?text=No+Image";
@@ -2141,7 +2062,8 @@ const TvReviewsPage: React.FC = () => {
         </button>
       )}
 
-      {/* 신고 모달 */}
+      {/* 신고 모달 - 임시 주석 처리 */}
+      {/*
       {showReportModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
           <div className="relative w-full max-w-md bg-white rounded-lg shadow-lg p-6">
@@ -2182,6 +2104,7 @@ const TvReviewsPage: React.FC = () => {
           </div>
         </div>
       )}
+      */}
     </div>
   );
 };

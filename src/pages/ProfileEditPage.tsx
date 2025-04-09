@@ -235,6 +235,22 @@ const ProfileEditPage: React.FC = () => {
         await updateMyProfileApi(formData);
       console.log("API call successful, response:", updatedProfileData);
 
+      // 토큰 관련 디버깅 정보 출력
+      const token = localStorage.getItem("token");
+      console.log("현재 저장된 토큰 상태:", token ? "토큰 있음" : "토큰 없음");
+      if (token) {
+        try {
+          // 토큰 디코딩하여 내용 확인
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          console.log("현재 토큰에 저장된 사용자명:", payload.sub);
+          // 만료 시간 확인
+          const expTime = new Date(payload.exp * 1000).toLocaleString();
+          console.log("토큰 만료 시간:", expTime);
+        } catch (e) {
+          console.error("토큰 파싱 오류:", e);
+        }
+      }
+
       // 5. Update AuthContext
       // Map the received UserProfile data to the structure expected by updateUserInfo
       // Assuming updateUserInfo expects an object with user properties directly
@@ -248,6 +264,18 @@ const ProfileEditPage: React.FC = () => {
         // Add any other fields AuthContext/updateUserInfo might expect
       };
       console.log("Updating AuthContext with:", userInfoForContext);
+
+      // 사용자 이름 변경 감지
+      const usernameChanged = originalUsername !== updatedProfileData.username;
+      if (usernameChanged) {
+        console.log(
+          `사용자 이름이 '${originalUsername}'에서 '${updatedProfileData.username}'로 변경되었습니다.`
+        );
+        console.log(
+          "새 토큰으로 인증 정보가 갱신되었습니다. 로그아웃되지 않을 것입니다."
+        );
+      }
+
       updateUserInfo(userInfoForContext);
 
       // 6. Reset state and show success
