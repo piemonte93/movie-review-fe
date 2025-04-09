@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { backendApi, CombinedReview, Review } from "../api/backendApi";
 import { ContentDetail, Review as TmdbReview } from "../types/content";
@@ -22,6 +22,8 @@ const ReviewListPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reviewImageErrors, setReviewImageErrors] = useState<Record<string, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchField, setSearchField] = useState('all');
 
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -193,6 +195,7 @@ const ReviewListPage = () => {
     }
 
     if (review.source === 'tmdb') {
+      const createdAt = review.createdAt;
       return (
         <div key={key} className="bg-white rounded-lg shadow p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -217,10 +220,10 @@ const ReviewListPage = () => {
               TMDB
             </span>
           </div>
-          {review.createdAt && (
+          {createdAt && (
               <div className="flex items-center text-xs text-gray-500 mb-2">
                   <FaCalendarAlt className="mr-1" />
-                  {formatDate(review.createdAt)}
+                  {formatDate(createdAt)}
               </div>
           )}
           {review.author_details?.rating !== null &&
@@ -239,6 +242,47 @@ const ReviewListPage = () => {
 
     return null;
   };
+
+  const filteredReviews = useMemo(() => {
+    if (!searchQuery) {
+      return combinedReviews;
+    }
+    const lowerCaseQuery = searchQuery.toLowerCase();
+    return combinedReviews.filter((review) => {
+      const content = review.content?.toLowerCase() || '';
+
+      if (review.source === 'local') {
+          const title = review.title?.toLowerCase() || '';
+          const author = review.username?.toLowerCase() || '';
+
+          switch (searchField) {
+            case 'title':
+              return title.includes(lowerCaseQuery);
+            case 'content':
+              return content.includes(lowerCaseQuery);
+            case 'author':
+              return author.includes(lowerCaseQuery);
+            case 'all':
+            default:
+              return title.includes(lowerCaseQuery) || content.includes(lowerCaseQuery) || author.includes(lowerCaseQuery);
+          }
+      } else {
+          const author = review.author?.toLowerCase() || '';
+          
+          switch (searchField) {
+              case 'title':
+                  return false; 
+              case 'content':
+                  return content.includes(lowerCaseQuery);
+              case 'author':
+                  return author.includes(lowerCaseQuery);
+              case 'all':
+              default:
+                  return content.includes(lowerCaseQuery) || author.includes(lowerCaseQuery);
+          }
+      }
+    });
+  }, [combinedReviews, searchQuery, searchField]);
 
   if (loading && combinedReviews.length === 0) {
     return <div className="flex justify-center items-center h-screen">로딩 중...</div>;
@@ -282,30 +326,67 @@ const ReviewListPage = () => {
                     {content.title || content.name}
                 </h1>
                 <p className="text-gray-600 mt-1">
-                    전체 리뷰 ({combinedReviews.length}개)
+                    {searchQuery ? 
+                      `리뷰 검색 결과 (${filteredReviews.length} / ${combinedReviews.length}개)` : 
+                      `전체 리뷰 (${combinedReviews.length}개)`
+                    }
                 </p>
                 </div>
             </div>
         </div>
 
+        <div className="mb-6 flex gap-2 px-1 items-center">
+           <select
+             value={searchField}
+             onChange={(e) => setSearchField(e.target.value)}
+             className="p-3 border border-gray-300 rounded-md shadow-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-[46px] flex-shrink-0"
+           >
+             <option value="all">전체</option>
+             <option value="title">제목</option>
+             <option value="content">내용</option>
+             <option value="author">작성자</option>
+           </select>
+
+           <input
+             type="text"
+             placeholder={
+                searchField === 'title' ? "리뷰 제목 검색..." :
+                searchField === 'content' ? "리뷰 내용 검색..." :
+                searchField === 'author' ? "리뷰 작성자 검색..." :
+                "리뷰 전체 검색..."
+             }
+             value={searchQuery}
+             onChange={(e) => setSearchQuery(e.target.value)}
+             className="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-[46px]"
+           />
+        </div>
+
         <InfiniteScroll
-            dataLength={combinedReviews.length}
+            dataLength={filteredReviews.length}
             next={fetchMoreReviews}
-            hasMore={hasMore}
+            hasMore={hasMore && !searchQuery}
             loader={<div className="text-center py-4">로딩 중...</div>}
             endMessage={
                 <p style={{ textAlign: 'center' }} className="py-4 text-gray-500">
-                <b>모든 리뷰를 보셨습니다.</b>
+                {searchQuery ? 
+                  (filteredReviews.length === 0 ? '검색 결과가 없습니다.' : '검색 결과의 끝입니다.') :
+                  '모든 리뷰를 보셨습니다.'
+                }
                 </p>
             }
             className="space-y-4"
         >
-            {combinedReviews.map(renderReviewCard)}
+            {filteredReviews.map(renderReviewCard)}
         </InfiniteScroll>
 
         {!loading && combinedReviews.length === 0 && (
            <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 mt-4">
               작성된 리뷰가 없습니다.
+           </div>
+        )}
+        {!loading && combinedReviews.length > 0 && filteredReviews.length === 0 && searchQuery && (
+           <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500 mt-4">
+              검색 결과가 없습니다.
            </div>
         )}
       </div>
