@@ -765,15 +765,44 @@ const ContentDetailPage = () => {
                         {review.createdAt ? formatDate(review.createdAt) : ""}
                       </div>
 
-                      {/* 리뷰 제목 */}
-                      {review.title && (
-                        <h3 className="font-medium mb-1">{review.title}</h3>
-                      )}
+                      {/* Spoiler Handling */}
+                      {review.isSpoiler ? (
+                        <div className="group relative cursor-pointer">
+                          {/* Spoiler Warning (always visible when spoiler) - Updated colors */}
+                          <span className="inline-block bg-red-500 text-white px-2 py-1 text-xs font-bold rounded mr-2">
+                            스포일러
+                          </span>
+                          <span className="text-sm text-gray-500 group-hover:hidden">
+                            (내용을 보려면 마우스를 올리세요)
+                          </span>
 
-                      {/* 리뷰 내용 */}
-                      <p className="text-gray-600 text-sm mb-1 line-clamp-3">
-                        {review.content}
-                      </p>
+                          {/* Hidden Content (visible on hover) */}
+                          <div className="hidden group-hover:block mt-1">
+                            {/* 리뷰 제목 */}
+                            {review.title && (
+                              <h3 className="font-medium mb-1">
+                                {review.title}
+                              </h3>
+                            )}
+                            {/* 리뷰 내용 */}
+                            <p className="text-gray-600 text-sm mb-1">
+                              {review.content}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        // Not a spoiler - display normally
+                        <>
+                          {/* 리뷰 제목 */}
+                          {review.title && (
+                            <h3 className="font-medium mb-1">{review.title}</h3>
+                          )}
+                          {/* 리뷰 내용 */}
+                          <p className="text-gray-600 text-sm mb-1 line-clamp-3">
+                            {review.content}
+                          </p>
+                        </>
+                      )}
                     </>
                   ) : (
                     // TMDB 리뷰 표시 (기존 방식)
@@ -803,6 +832,10 @@ const ContentDetailPage = () => {
                           </div>
                         )}
                         <span className="font-medium">{review.author}</span>
+                        {/* TMDB 태그 추가 */}
+                        <span className="ml-2 inline-block bg-gray-200 text-gray-600 px-2 py-0.5 text-xs font-semibold rounded">
+                          TMDB
+                        </span>
                       </div>
 
                       {/* TMDB 별점 표시 (있는 경우) */}
