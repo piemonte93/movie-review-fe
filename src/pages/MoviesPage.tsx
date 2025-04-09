@@ -5,6 +5,7 @@ import ContentCard from "../components/ContentCard";
 import FilterPanel from "../components/FilterPanel";
 import { FaFilter } from "react-icons/fa";
 import InfiniteScroll from "react-infinite-scroll-component";
+import { backendApi } from "../api/backendApi";
 
 // genres와 sortOptions 정의
 const movieGenres = [
@@ -86,6 +87,9 @@ const MoviesPage: React.FC = () => {
 
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [allContents, setAllContents] = useState<any[]>([]);
+  const [localRatings, setLocalRatings] = useState<
+    Record<number, number | null>
+  >({});
 
   // URL 변경 시 필터 상태 업데이트
   useEffect(() => {
@@ -165,6 +169,41 @@ const MoviesPage: React.FC = () => {
       setHasMore(currentPage < totalPages);
     }
   }, [contents, loading, currentPage, totalPages]);
+
+  // 로컬 평점 가져오기
+  useEffect(() => {
+    const fetchLocalRatings = async () => {
+      const ratings: Record<number, number | null> = {};
+      const contentsToFetch =
+        currentPage === 1
+          ? contents
+          : contents.filter((content) => !localRatings[content.id]);
+
+      for (const content of contentsToFetch) {
+        if (content.id) {
+          try {
+            const rating = await backendApi.getAverageContentRating(
+              content.id,
+              "movie"
+            );
+            ratings[content.id] = rating;
+          } catch (error) {
+            console.error(
+              `콘텐츠 ID ${content.id}의 로컬 평점을 가져오는 중 오류 발생:`,
+              error
+            );
+            ratings[content.id] = null;
+          }
+        }
+      }
+
+      setLocalRatings((prev) => ({ ...prev, ...ratings }));
+    };
+
+    if (contents.length > 0 && !loading) {
+      fetchLocalRatings();
+    }
+  }, [contents, loading, currentPage]);
 
   // 장르 토글 함수
   const toggleGenre = (genreId: number) => {
@@ -407,6 +446,7 @@ const MoviesPage: React.FC = () => {
                       key={`${content.id}-${content.title}`}
                       content={content}
                       type="movie"
+                      localRating={content.id ? localRatings[content.id] : null}
                     />
                   ))}
                 </div>

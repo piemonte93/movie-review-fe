@@ -75,6 +75,12 @@ const UserProfilePage: React.FC = () => {
   const [followersData, setFollowersData] = useState<any[]>([]);
   const [followingData, setFollowingData] = useState<any[]>([]);
 
+  // 스크랩 상태
+  const [scraps, setScraps] = useState<any[]>([]);
+  const [scrapLocalRatings, setScrapLocalRatings] = useState<
+    Record<number, number | null>
+  >({});
+
   // 모달 내 팔로우 토글 처리 함수
   const handleModalToggleFollow = (modalUserId: number, newStatus: boolean) => {
     console.log(
@@ -723,6 +729,41 @@ const UserProfilePage: React.FC = () => {
     }
   };
 
+  // 스크랩된 영화/TV 콘텐츠의 로컬 평점 가져오기
+  useEffect(() => {
+    const fetchLocalRatings = async () => {
+      if (!scrappedMovies || scrappedMovies.length === 0) return;
+
+      const ratings: Record<number, number | null> = {};
+
+      for (const content of scrappedMovies) {
+        if (content.id) {
+          const mediaType =
+            content.media_type || (content.first_air_date ? "tv" : "movie");
+          try {
+            const rating = await backendApi.getAverageContentRating(
+              content.id,
+              mediaType === "tv" ? "tv" : "movie"
+            );
+            ratings[content.id] = rating;
+          } catch (error) {
+            console.error(
+              `콘텐츠 ID ${content.id}의 로컬 평점을 가져오는 중 오류 발생:`,
+              error
+            );
+            ratings[content.id] = null;
+          }
+        }
+      }
+
+      setScrapLocalRatings(ratings);
+    };
+
+    if (scrappedMovies && scrappedMovies.length > 0 && !scrapsLoading) {
+      fetchLocalRatings();
+    }
+  }, [scrappedMovies, scrapsLoading]);
+
   // 팔로워 모달 데이터 로드 및 열기
   const loadFollowers = async () => {
     if (!userId) return;
@@ -1148,6 +1189,7 @@ const UserProfilePage: React.FC = () => {
               content={movie}
               type={movie.media_type || "movie"}
               className="w-full hover:shadow-md transition-shadow"
+              localRating={movie.id ? scrapLocalRatings[movie.id] : null}
             />
           ))}
         </div>

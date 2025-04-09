@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useSearch } from "../hooks/useSearch";
 import ContentCard from "../components/ContentCard";
 import { FaSearch } from "react-icons/fa";
+import { backendApi } from "../api/backendApi";
 
 const SearchPage: React.FC = () => {
   const location = useLocation();
@@ -11,6 +12,9 @@ const SearchPage: React.FC = () => {
   const initialQuery = queryParams.get("q") || "";
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [currentPage, setCurrentPage] = useState(1);
+  const [localRatings, setLocalRatings] = useState<
+    Record<number, number | null>
+  >({});
 
   // URL의 쿼리 파라미터에서 페이지 정보를 가져옴
   useEffect(() => {
@@ -23,6 +27,41 @@ const SearchPage: React.FC = () => {
     initialQuery,
     currentPage
   );
+
+  // 로컬 평점 가져오기
+  useEffect(() => {
+    const fetchLocalRatings = async () => {
+      if (!contents.length) return;
+
+      const ratings: Record<number, number | null> = {};
+
+      for (const content of contents) {
+        if (content.id) {
+          const mediaType =
+            content.media_type || (content.first_air_date ? "tv" : "movie");
+          try {
+            const rating = await backendApi.getAverageContentRating(
+              content.id,
+              mediaType === "tv" ? "tv" : "movie"
+            );
+            ratings[content.id] = rating;
+          } catch (error) {
+            console.error(
+              `콘텐츠 ID ${content.id}의 로컬 평점을 가져오는 중 오류 발생:`,
+              error
+            );
+            ratings[content.id] = null;
+          }
+        }
+      }
+
+      setLocalRatings(ratings);
+    };
+
+    if (contents.length > 0 && !loading) {
+      fetchLocalRatings();
+    }
+  }, [contents, loading]);
 
   // 검색 폼 제출 핸들러
   const handleSubmit = (e: React.FormEvent) => {
@@ -136,6 +175,7 @@ const SearchPage: React.FC = () => {
                   content.media_type ||
                   (content.first_air_date ? "tv" : "movie")
                 }
+                localRating={content.id ? localRatings[content.id] : null}
               />
             ))}
           </div>

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useFilteredTvShows } from "../hooks/useSearch";
 import ContentCard from "../components/ContentCard";
 import { FaSearch } from "react-icons/fa";
+import { backendApi } from "../api/backendApi";
 
 // TV 쇼 장르 정의
 const tvGenres = [
@@ -39,6 +40,9 @@ const TvSearchPage: React.FC = () => {
   const initialQuery = queryParams.get("q") || "";
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [currentPage, setCurrentPage] = useState(1);
+  const [localRatings, setLocalRatings] = useState<
+    Record<number, number | null>
+  >({});
 
   // 필터 상태
   const [selectedGenres, setSelectedGenres] = useState<number[]>(
@@ -108,6 +112,39 @@ const TvSearchPage: React.FC = () => {
       isForeignShow,
       networkInput || undefined
     );
+
+  // 로컬 평점 가져오기
+  useEffect(() => {
+    const fetchLocalRatings = async () => {
+      if (!contents.length) return;
+
+      const ratings: Record<number, number | null> = {};
+
+      for (const content of contents) {
+        if (content.id) {
+          try {
+            const rating = await backendApi.getAverageContentRating(
+              content.id,
+              "tv"
+            );
+            ratings[content.id] = rating;
+          } catch (error) {
+            console.error(
+              `콘텐츠 ID ${content.id}의 로컬 평점을 가져오는 중 오류 발생:`,
+              error
+            );
+            ratings[content.id] = null;
+          }
+        }
+      }
+
+      setLocalRatings(ratings);
+    };
+
+    if (contents.length > 0 && !loading) {
+      fetchLocalRatings();
+    }
+  }, [contents, loading]);
 
   // 검색 폼 제출 핸들러
   const handleSubmit = (e: React.FormEvent) => {
@@ -451,7 +488,12 @@ const TvSearchPage: React.FC = () => {
           {/* 결과 그리드 */}
           <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {contents.map((content) => (
-              <ContentCard key={content.id} content={content} />
+              <ContentCard
+                key={content.id}
+                content={content}
+                type="tv"
+                localRating={content.id ? localRatings[content.id] : null}
+              />
             ))}
           </div>
 

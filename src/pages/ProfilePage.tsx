@@ -115,6 +115,11 @@ const ProfilePage: React.FC = () => {
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [error, setError] = useState<boolean>(false);
 
+  // 스크랩 영화/TV 콘텐츠의 로컬 평점
+  const [scrapLocalRatings, setScrapLocalRatings] = useState<
+    Record<number, number | null>
+  >({});
+
   useEffect(() => {
     // 경로가 실제로 변경된 경우에만 로그 출력
     if (prevPathname !== location.pathname) {
@@ -618,6 +623,41 @@ const ProfilePage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, likedContentType, user]);
 
+  // 스크랩된 영화/TV 콘텐츠의 로컬 평점 가져오기
+  useEffect(() => {
+    const fetchLocalRatings = async () => {
+      if (!scrappedMovies || scrappedMovies.length === 0) return;
+
+      const ratings: Record<number, number | null> = {};
+
+      for (const content of scrappedMovies) {
+        if (content.id) {
+          const mediaType =
+            content.media_type || (content.first_air_date ? "tv" : "movie");
+          try {
+            const rating = await backendApi.getAverageContentRating(
+              content.id,
+              mediaType === "tv" ? "tv" : "movie"
+            );
+            ratings[content.id] = rating;
+          } catch (error) {
+            console.error(
+              `콘텐츠 ID ${content.id}의 로컬 평점을 가져오는 중 오류 발생:`,
+              error
+            );
+            ratings[content.id] = null;
+          }
+        }
+      }
+
+      setScrapLocalRatings(ratings);
+    };
+
+    if (scrappedMovies && scrappedMovies.length > 0 && !scrapLoading) {
+      fetchLocalRatings();
+    }
+  }, [scrappedMovies, scrapLoading]);
+
   // 게시물 탭 렌더링
   const renderPostsTab = () => {
     if (isLoading && posts.length === 0) {
@@ -805,10 +845,52 @@ const ProfilePage: React.FC = () => {
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
         {scrappedMovies.map((movie) => (
-          <ContentCard key={movie.id} content={movie} className="w-full" />
+          <ContentCard
+            key={movie.id}
+            content={movie}
+            className="w-full"
+            type={movie.media_type || (movie.first_air_date ? "tv" : "movie")}
+            localRating={movie.id ? scrapLocalRatings[movie.id] : null}
+          />
         ))}
       </div>
     );
+  };
+
+  // 탭 컨텐츠 렌더링
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "posts":
+        return renderPostsTab();
+      case "reviews":
+        return renderReviewsTab();
+      case "scraps":
+        return renderScrapsTab();
+      case "likes":
+        return renderLikesTab();
+      default:
+        return null;
+    }
+  };
+
+  // 게시물 삭제 처리
+  const handleDeletePost = async (postId: number) => {
+    if (window.confirm("정말로 이 게시물을 삭제하시겠습니까?")) {
+      const toastId = toast.loading("게시물 삭제 중...");
+      try {
+        await backendApi.deletePost(postId);
+        toast.success("게시물이 삭제되었습니다.", { id: toastId });
+        setPosts((prevPosts) => prevPosts.filter((p) => p.id !== postId));
+        setLikedContent((prevLiked) =>
+          prevLiked.filter(
+            (item) => !("commentCount" in item && item.id === postId)
+          )
+        );
+      } catch (error) {
+        console.error("게시물 삭제 실패:", error);
+        toast.error("게시물 삭제에 실패했습니다.", { id: toastId });
+      }
+    }
   };
 
   // 좋아요 탭 렌더링
@@ -909,42 +991,6 @@ const ProfilePage: React.FC = () => {
         </InfiniteScroll>
       </div>
     );
-  };
-
-  // 탭 컨텐츠 렌더링
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case "posts":
-        return renderPostsTab();
-      case "reviews":
-        return renderReviewsTab();
-      case "scraps":
-        return renderScrapsTab();
-      case "likes":
-        return renderLikesTab();
-      default:
-        return null;
-    }
-  };
-
-  // 게시물 삭제 처리
-  const handleDeletePost = async (postId: number) => {
-    if (window.confirm("정말로 이 게시물을 삭제하시겠습니까?")) {
-      const toastId = toast.loading("게시물 삭제 중...");
-      try {
-        await backendApi.deletePost(postId);
-        toast.success("게시물이 삭제되었습니다.", { id: toastId });
-        setPosts((prevPosts) => prevPosts.filter((p) => p.id !== postId));
-        setLikedContent((prevLiked) =>
-          prevLiked.filter(
-            (item) => !("commentCount" in item && item.id === postId)
-          )
-        );
-      } catch (error) {
-        console.error("게시물 삭제 실패:", error);
-        toast.error("게시물 삭제에 실패했습니다.", { id: toastId });
-      }
-    }
   };
 
   if (!isLoggedIn) {

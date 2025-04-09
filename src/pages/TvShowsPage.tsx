@@ -4,6 +4,8 @@ import { useFilteredTvShows } from "../hooks/useSearch";
 import ContentCard from "../components/ContentCard";
 import FilterPanel from "../components/FilterPanel";
 import { FaFilter } from "react-icons/fa";
+import InfiniteScroll from "react-infinite-scroll-component";
+import { backendApi } from "../api/backendApi";
 import { TvShow } from "../types/content";
 
 // TV 쇼 장르 정의
@@ -367,6 +369,45 @@ const TvShowsPage: React.FC = () => {
     navigate(`/tv?${params.toString()}`);
   };
 
+  // 새 컨텐츠 받을 때마다 로컬 평점 가져오기
+  const [localRatings, setLocalRatings] = useState<
+    Record<number, number | null>
+  >({});
+
+  useEffect(() => {
+    const fetchLocalRatings = async () => {
+      const ratings: Record<number, number | null> = {};
+      const contentsToFetch =
+        currentPage === 1
+          ? tvShows
+          : tvShows.filter((show) => !localRatings[show.id]);
+
+      for (const show of contentsToFetch) {
+        if (show.id) {
+          try {
+            const rating = await backendApi.getAverageContentRating(
+              show.id,
+              "tv"
+            );
+            ratings[show.id] = rating;
+          } catch (error) {
+            console.error(
+              `콘텐츠 ID ${show.id}의 로컬 평점을 가져오는 중 오류 발생:`,
+              error
+            );
+            ratings[show.id] = null;
+          }
+        }
+      }
+
+      setLocalRatings((prev) => ({ ...prev, ...ratings }));
+    };
+
+    if (tvShows.length > 0 && !loading) {
+      fetchLocalRatings();
+    }
+  }, [tvShows, loading, currentPage]);
+
   return (
     <div className="container mx-auto px-4 py-8 mb-16">
       <div className="mb-6">
@@ -454,11 +495,22 @@ const TvShowsPage: React.FC = () => {
                   if (allShows.length === index + 1) {
                     return (
                       <div ref={lastShowElementRef} key={show.id}>
-                        <ContentCard content={show} />
+                        <ContentCard
+                          content={show}
+                          type="tv"
+                          localRating={show.id ? localRatings[show.id] : null}
+                        />
                       </div>
                     );
                   } else {
-                    return <ContentCard key={show.id} content={show} />;
+                    return (
+                      <ContentCard
+                        key={`${show.id}-${show.name}`}
+                        content={show}
+                        type="tv"
+                        localRating={show.id ? localRatings[show.id] : null}
+                      />
+                    );
                   }
                 })}
               </div>
