@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { apiClient } from "../api/backendApi";
 import { useAuth } from "./AuthContext";
-import { toast } from 'react-toastify';
+import { toast } from "react-toastify";
 
 // 알림 타입 정의
 export type NotificationType =
@@ -200,22 +200,23 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
   // 모든 알림 삭제 (Implement actual logic)
   const clearNotifications = async () => {
     if (!isLoggedIn || !user) {
-        toast.warn("로그인이 필요합니다.");
-        return;
+      toast.warn("로그인이 필요합니다.");
+      return;
     }
 
     try {
       // Call backend API to delete all notifications for the current user
       await apiClient.delete("/api/notifications");
-      
+
       // Clear notifications and unread count in the frontend state
       setNotifications([]);
       setUnreadCount(0);
       toast.success("모든 알림이 삭제되었습니다."); // Add success toast
-
     } catch (error: any) {
       console.error("Failed to delete notifications", error);
-      toast.error(error.response?.data?.message || "알림 삭제 중 오류가 발생했습니다."); // Add error toast
+      toast.error(
+        error.response?.data?.message || "알림 삭제 중 오류가 발생했습니다."
+      ); // Add error toast
     }
   };
 

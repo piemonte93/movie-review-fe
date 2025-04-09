@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { authApi } from "../api/authApi"; // handleOAuthRedirect 대신 authApi 객체 전체를 가져옴
 import { toast } from "react-toastify";
 import UsernameModal from "../components/UsernameModal";
+import { updateMyProfileApi } from "../api/userApi"; // 올바른 프로필 업데이트 함수 import
 
 // OAuth2RedirectHandler 컴포넌트
 const OAuth2RedirectHandler: React.FC = () => {
@@ -17,6 +18,80 @@ const OAuth2RedirectHandler: React.FC = () => {
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [tempToken, setTempToken] = useState<string | null>(null);
   const [tempUser, setTempUser] = useState<any>(null);
+
+  // 닉네임 저장 핸들러
+  const handleSaveUsername = async (username: string) => {
+    console.log("닉네임 저장 시도:", username);
+    if (!tempToken || !tempUser) {
+      console.error("임시 토큰 또는 사용자 정보가 없습니다");
+      setError("인증 정보가 유효하지 않습니다. 다시 로그인해주세요.");
+      return;
+    }
+
+    try {
+      console.log(
+        "토큰 확인:",
+        localStorage.getItem("token") ? "있음" : "없음"
+      );
+      // 토큰이 저장되어 있지 않다면 다시 저장
+      if (!localStorage.getItem("token")) {
+        console.log("토큰 재설정:", tempToken);
+        localStorage.setItem("token", tempToken);
+      }
+
+      // FormData 생성
+      const formData = new FormData();
+
+      // 프로필 데이터 객체 생성
+      const profileData = {
+        username: username,
+        bio: "", // 기본값 제공
+      };
+
+      // 프로필 데이터를 JSON으로 직렬화하여 FormData에 추가
+      formData.append(
+        "profileData",
+        new Blob([JSON.stringify(profileData)], { type: "application/json" })
+      );
+
+      // 프로필 업데이트 API 호출
+      await updateMyProfileApi(formData);
+
+      console.log("닉네임 업데이트 성공");
+      toast.success("닉네임이 설정되었습니다.");
+
+      // 로그인 처리
+      const loginSuccess = await login(tempToken, {
+        ...tempUser,
+        username: username,
+      });
+
+      if (loginSuccess) {
+        navigate("/", { replace: true });
+      } else {
+        throw new Error("로그인 처리에 실패했습니다");
+      }
+    } catch (err) {
+      console.error("닉네임 저장 실패:", err);
+      toast.error(
+        "닉네임을 저장하는 중 오류가 발생했습니다. 자동으로 홈으로 이동합니다."
+      );
+
+      // 오류가 발생해도 홈으로 이동
+      try {
+        // 토큰과 기존 사용자 정보를 사용해 로그인 처리
+        const loginSuccess = await login(tempToken, tempUser);
+        if (loginSuccess) {
+          navigate("/", { replace: true });
+        } else {
+          navigate("/login", { replace: true });
+        }
+      } catch (loginErr) {
+        console.error("로그인 처리 실패:", loginErr);
+        navigate("/login", { replace: true });
+      }
+    }
+  };
 
   useEffect(() => {
     const handleAuth = async () => {
@@ -55,12 +130,12 @@ const OAuth2RedirectHandler: React.FC = () => {
           console.log("최종 isNewUser 결정:", determinedIsNewUser);
 
           if (determinedIsNewUser) {
-            console.log("신규 사용자, 프로필 설정 페이지로 이동");
-            // 신규 사용자인 경우, AuthContext의 login을 호출할 필요 없이
-            // 이미 handleOAuthRedirect에서 토큰과 임시 사용자 정보가 저장되었으므로
-            // 바로 프로필 설정 페이지로 이동시킨다.
-            // ProfileEditPage에서 AuthContext를 통해 사용자 정보를 로드할 것임.
-            navigate("/profile-edit", { replace: true });
+            console.log("신규 사용자, 닉네임 모달 표시");
+            // 닉네임 모달을 표시하기 위해 임시 정보 저장
+            setTempToken(token);
+            setTempUser(fetchedUser);
+            setShowUsernameModal(true);
+            setLoading(false);
           } else if (fetchedUser) {
             console.log("기존 사용자 로그인 처리 중...");
             // 기존 사용자의 경우, AuthContext의 login 함수 호출하여 앱 상태 업데이트
@@ -117,12 +192,28 @@ const OAuth2RedirectHandler: React.FC = () => {
   }, []); // <-- 의존성 배열을 빈 배열로 설정!
 
   // 로딩 중 표시
-  if (loading) {
+  if (loading && !showUsernameModal) {
     return (
       <div className="flex justify-center items-center h-screen">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
         <p className="ml-4 text-lg">로그인 처리 중...</p>
       </div>
+    );
+  }
+
+  // 닉네임 모달 표시
+  if (showUsernameModal) {
+    return (
+      <UsernameModal
+        isOpen={showUsernameModal}
+        onClose={() => {
+          setShowUsernameModal(false);
+          navigate("/login", { replace: true });
+        }}
+        onSave={handleSaveUsername}
+        initialUsername={tempUser?.email?.split("@")[0] || ""}
+        email={tempUser?.email || ""}
+      />
     );
   }
 

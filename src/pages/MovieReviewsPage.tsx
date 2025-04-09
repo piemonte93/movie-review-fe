@@ -1447,6 +1447,19 @@ const MovieReviewsPage: React.FC = () => {
   // Determine reviews to render
   const reviewsToRender = showSearch ? searchResults : visibleReviews;
 
+  // 프로필 이미지 URL 처리 함수 추가
+  const getProfileImageUrl = (imageUrl: string | null | undefined) => {
+    if (!imageUrl) return null;
+
+    // 절대 URL이면 그대로 사용
+    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+      return imageUrl;
+    }
+
+    // 상대 URL이면 BASE_URL 추가
+    return `${BASE_URL}${imageUrl}`;
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* 리뷰 작성 버튼 */}
@@ -1792,7 +1805,9 @@ const MovieReviewsPage: React.FC = () => {
                             <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden flex items-center justify-center cursor-pointer">
                               {comment.profileImageUrl ? (
                                 <img
-                                  src={comment.profileImageUrl}
+                                  src={getProfileImageUrl(
+                                    comment.profileImageUrl
+                                  )}
                                   alt={comment.username}
                                   className="w-full h-full object-cover"
                                 />

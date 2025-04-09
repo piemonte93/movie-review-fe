@@ -456,7 +456,7 @@ const ProfileEditPage: React.FC = () => {
               ) : username === originalUsername ? (
                 "현재 이름"
               ) : usernameChecked && usernameAvailable ? (
-                <FaCheck className="inline-block mr-1" /> + "사용 가능"
+                "사용 가능"
               ) : usernameChecked && !usernameAvailable ? (
                 <FaExclamationTriangle className="inline-block mr-1" /> +
                 "사용 불가"
