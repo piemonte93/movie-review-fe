@@ -4,9 +4,11 @@ import React, {
   useState,
   useEffect,
   ReactNode,
+  useCallback,
 } from "react";
 import { authApi } from "../api/authApi";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 
 interface User {
   id: number;
@@ -23,10 +25,11 @@ interface AuthContextType {
   user: User | null;
   login: (token: string, user: User) => void;
   logout: () => void;
-  refreshAuthStatus: () => void;
+  refreshAuthStatus: () => Promise<void>;
   updateUserInfo: (updatedUser: Partial<User>) => void;
   isUserBlocked: () => boolean;
   isAdminOrModerator: () => boolean;
+  authLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -36,6 +39,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 }) => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
   const navigate = useNavigate();
 
   // 컴포넌트 마운트 시 인증 상태 확인
@@ -149,7 +153,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     };
   }, [navigate]);
 
-  const refreshAuthStatus = async () => {
+  const refreshAuthStatus = useCallback(async () => {
+    setAuthLoading(true);
     try {
       console.log("인증 상태 새로고침 시작");
 
@@ -215,74 +220,105 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       console.error("인증 상태 확인 중 오류 발생:", error);
       setIsLoggedIn(false);
       setUser(null);
+    } finally {
+      setAuthLoading(false);
+      console.log("인증 상태 새로고침 완료, authLoading: false");
     }
-  };
+  }, []);
 
-  const login = async (token: string, user: any) => {
+  const login = async (token: string, user: any): Promise<boolean> => {
     try {
-      console.log("로그인 시작:", {
-        token: token ? "있음" : "없음",
-        user: user ? "있음" : "없음",
+      console.log("AuthContext: 로그인 함수 시작", {
+        tokenProvided: !!token,
+        userProvided: !!user,
       });
 
       if (!token) {
-        console.error("로그인 실패: 토큰이 없습니다");
+        console.error("AuthContext: 로그인 실패 - 토큰 없음");
         return false;
       }
 
-      if (!user || typeof user !== "object") {
-        console.error("로그인 실패: 사용자 정보가 유효하지 않습니다", user);
+      if (!user || typeof user !== "object" || !user.username || !user.email) {
+        console.error(
+          "AuthContext: 로그인 실패 - 유효하지 않은 사용자 정보",
+          user
+        );
+        // 사용자 이름이나 이메일이 없는 경우, 기본값 설정 또는 오류 처리를 강화할 수 있습니다.
+        // 예: user.username = user.username || 'Unknown';
         return false;
       }
 
-      // 필수 값 확인
-      if (!user.email) {
-        console.warn("사용자 정보에 이메일이 없습니다");
+      // 1. 로컬 스토리지에 새 정보 저장 시도
+      console.log(
+        "AuthContext: 로컬 스토리지에 새 토큰 및 사용자 정보 저장 시도..."
+      );
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(user));
+
+      // 2. 저장 확인 (매우 중요!)
+      const savedToken = localStorage.getItem("token");
+      const savedUserStr = localStorage.getItem("user");
+
+      if (savedToken !== token || !savedUserStr) {
+        console.error(
+          "AuthContext: 로컬 스토리지 저장 실패 또는 저장된 값 불일치!",
+          {
+            expectedToken: !!token,
+            savedToken: !!savedToken,
+            tokenMatch: savedToken === token,
+            expectedUser: !!user,
+            savedUser: !!savedUserStr,
+          }
+        );
+        // 저장 실패 시 상태 업데이트 방지 및 실패 반환
+        // 필요한 경우 여기서 토큰/사용자 정보 제거 시도
+        // localStorage.removeItem("token");
+        // localStorage.removeItem("user");
+        return false;
       }
 
-      if (!user.username) {
-        console.warn("사용자 정보에 사용자 이름이 없습니다");
-        user.username = "사용자"; // 기본값 설정
-      }
-
-      // 로컬 스토리지에 저장
+      // 저장된 사용자 정보 파싱 확인
+      let parsedUser;
       try {
-        localStorage.setItem("token", token);
-        localStorage.setItem("user", JSON.stringify(user));
-
-        // 저장 확인
-        const savedToken = localStorage.getItem("token");
-        const savedUser = localStorage.getItem("user");
-
-        if (!savedToken || !savedUser) {
-          console.error("로컬 스토리지 저장 실패:", {
-            token: savedToken ? "저장됨" : "실패",
-            user: savedUser ? "저장됨" : "실패",
+        parsedUser = JSON.parse(savedUserStr);
+        if (parsedUser.username !== user.username) {
+          console.error("AuthContext: 저장된 사용자 정보의 username 불일치!", {
+            expected: user.username,
+            saved: parsedUser.username,
           });
-
-          // 재시도
-          if (!savedToken) localStorage.setItem("token", token);
-          if (!savedUser) localStorage.setItem("user", JSON.stringify(user));
-        } else {
-          console.log("로컬 스토리지 저장 성공");
+          return false;
         }
-      } catch (e) {
-        console.error("로컬 스토리지 저장 중 오류:", e);
+      } catch (parseError) {
+        console.error("AuthContext: 저장된 사용자 정보 파싱 실패!", parseError);
         return false;
       }
 
-      // 상태 업데이트
+      console.log("AuthContext: 로컬 스토리지 저장 및 확인 성공.");
+
+      // 3. 상태 업데이트 (저장 성공 확인 후)
+      console.log("AuthContext: React 상태 업데이트 중...");
       setIsLoggedIn(true);
-      setUser(user);
-      console.log("로그인 완료:", user.username);
-      return true;
+      setUser(user); // 저장된 정보(parsedUser) 대신 전달받은 user 객체 사용 (일관성)
+
+      // 상태 업데이트 확인 (비동기적이므로 즉시 반영되지 않을 수 있음)
+      // 이 로그는 실제 상태 반영 시점과 다를 수 있습니다.
+      console.log(
+        `AuthContext: 로그인 처리 완료. 사용자: ${user.username}, 로그인 상태: true`
+      );
+
+      return true; // 로그인 성공 반환
     } catch (e) {
-      console.error("로그인 처리 중 예외 발생:", e);
+      console.error("AuthContext: 로그인 처리 중 예외 발생:", e);
+      // 예외 발생 시 안전하게 로그아웃 상태로 만들고 실패 반환
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      setIsLoggedIn(false);
+      setUser(null);
       return false;
     }
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     console.log("AuthContext - 로그아웃 함수 호출됨");
 
     try {
@@ -311,12 +347,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
       // 캐시된 API 쿼리 등 정리 (필요 시 추가)
 
+      toast.info("로그아웃 되었습니다.");
+
       return true;
     } catch (error) {
       console.error("로그아웃 처리 중 오류 발생:", error);
       return false;
     }
-  };
+  }, []);
 
   // 사용자 정보 업데이트 함수
   const updateUserInfo = (updatedUser: Partial<User>) => {
@@ -354,8 +392,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const isUserBlocked = () => {
     if (!user) return false;
 
-    if (typeof user.status === 'string') {
-      return user.status === 'BLOCKED' || user.status === 'DELETED';
+    if (typeof user.status === "string") {
+      return user.status === "BLOCKED" || user.status === "DELETED";
     }
 
     return false;
@@ -364,7 +402,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   // 사용자가 관리자 또는 모더레이터인지 확인하는 함수 추가
   const isAdminOrModerator = () => {
     if (!user || !user.roles) return false;
-    return user.roles.includes('ROLE_ADMIN') || user.roles.includes('ROLE_MODERATOR');
+    return (
+      user.roles.includes("ROLE_ADMIN") || user.roles.includes("ROLE_MODERATOR")
+    );
   };
 
   return (
@@ -378,6 +418,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         updateUserInfo,
         isUserBlocked,
         isAdminOrModerator,
+        authLoading,
       }}
     >
       {children}

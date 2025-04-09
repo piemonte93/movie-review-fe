@@ -152,12 +152,12 @@ export const authApi = {
         email: loginData.email,
         password: loginData.password,
       });
-      
+
       // 백엔드 응답을 프론트엔드 AuthResponse 형식으로 변환
       if (response.data && response.data.token) {
         // 토큰 저장
         localStorage.setItem("token", response.data.token);
-        
+
         // 사용자 정보 구성
         const userData = {
           id: response.data.id,
@@ -165,17 +165,17 @@ export const authApi = {
           email: response.data.email,
           roles: response.data.roles || [],
         };
-        
+
         // 로컬 스토리지에 사용자 정보 저장
         localStorage.setItem("user", JSON.stringify(userData));
-        
+
         // 응답 형식 변환
         return {
           token: response.data.token,
-          user: userData
+          user: userData,
         };
       }
-      
+
       throw new Error("로그인 응답이 유효하지 않습니다.");
     } catch (error) {
       console.error("로그인 실패:", error);
@@ -212,7 +212,7 @@ export const authApi = {
       try {
         const parsedUser = JSON.parse(userStr);
         console.log("파싱된 사용자 정보:", parsedUser);
-        
+
         // 토큰이 있다면 사용자 상태를 서버에서 확인
         const token = localStorage.getItem("token");
         if (token) {
@@ -222,7 +222,7 @@ export const authApi = {
             if (userStatusResponse.data && userStatusResponse.data.status) {
               // 사용자 정보에 상태 추가
               parsedUser.status = userStatusResponse.data.status;
-              
+
               // 로컬 스토리지에 업데이트된 정보 저장
               localStorage.setItem("user", JSON.stringify(parsedUser));
             }
@@ -230,7 +230,7 @@ export const authApi = {
             console.error("사용자 상태 정보 로드 실패:", error);
           }
         }
-        
+
         return parsedUser;
       } catch (e) {
         console.error("사용자 정보 파싱 오류:", e);
