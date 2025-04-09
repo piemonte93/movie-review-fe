@@ -17,6 +17,8 @@ import { toast } from "react-toastify";
 import { checkContentScrapStatus, toggleContentScrap } from "../api/userApi";
 import { StarRating } from "../components/StarRating";
 import { formatDate } from "../utils/dateUtils";
+import { Swiper, SwiperSlide } from "swiper/react";
+import "swiper/css";
 
 /* // 임시 데이터는 주석 처리
 const mockMovieDetails = {
@@ -719,150 +721,183 @@ const ContentDetailPage = () => {
         {/* 출연진 섹션 */}
         {cast.length > 0 && <CastCarousel cast={cast} />}
 
-        {/* 리뷰 섹션 */}
+        {/* 리뷰 섹션: Swiper 캐러셀로 변경 */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold">리뷰</h2>
-            <button className="text-blue-600 hover:underline">전체보기</button>
+            <h2 className="text-xl font-bold">
+              리뷰 ({combinedReviews.length})
+            </h2>
+            {/* 전체보기 버튼: Link 컴포넌트로 변경 */}
+            {combinedReviews.length > 0 && (
+              <Link
+                to={`/${mediaType}/${id}/reviews`}
+                className="text-blue-600 hover:underline"
+              >
+                전체보기
+              </Link>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {combinedReviews.length > 0 ? (
-              combinedReviews.slice(0, 4).map((review) => (
-                <div key={review.id} className="border rounded-lg p-4">
-                  {review.source === "local" ? (
-                    // 로컬 리뷰 표시
-                    <>
-                      <div className="flex items-center gap-2 mb-2">
-                        {review.user?.profileImageUrl ? (
-                          <img
-                            src={review.user.profileImageUrl}
-                            alt={review.user?.username}
-                            className="w-8 h-8 rounded-full object-cover"
-                            onError={() =>
-                              handleReviewImageError(String(review.id))
-                            }
-                          />
-                        ) : (
-                          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-                            <FaUserCircle className="text-gray-400" />
-                          </div>
-                        )}
-                        <span className="font-semibold">{review.username}</span>
-                      </div>
-
-                      {/* 별점 표시 */}
-                      <div className="flex items-center mb-2">
-                        <StarRating rating={review.rating || 0} />
-                        <span className="ml-2 text-sm text-gray-600">
-                          ({review.rating || 0}점)
-                        </span>
-                      </div>
-
-                      {/* 작성 날짜 */}
-                      <div className="flex items-center text-xs text-gray-500 mb-2">
-                        <FaCalendarAlt className="mr-1" />
-                        {review.createdAt ? formatDate(review.createdAt) : ""}
-                      </div>
-
-                      {/* Spoiler Handling */}
-                      {review.isSpoiler ? (
-                        <div className="group relative cursor-pointer">
-                          {/* Spoiler Warning (always visible when spoiler) - Updated colors */}
-                          <span className="inline-block bg-red-500 text-white px-2 py-1 text-xs font-bold rounded mr-2">
-                            스포일러
-                          </span>
-                          <span className="text-sm text-gray-500 group-hover:hidden">
-                            (내용을 보려면 마우스를 올리세요)
-                          </span>
-
-                          {/* Hidden Content (visible on hover) */}
-                          <div className="hidden group-hover:block mt-1">
-                            {/* 리뷰 제목 */}
-                            {review.title && (
-                              <h3 className="font-medium mb-1">
-                                {review.title}
-                              </h3>
-                            )}
-                            {/* 리뷰 내용 */}
-                            <p className="text-gray-600 text-sm mb-1">
-                              {review.content}
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
-                        // Not a spoiler - display normally
+          {combinedReviews.length > 0 ? (
+            <Swiper
+              spaceBetween={16} // 카드 사이 간격
+              slidesPerView={1.2} // 모바일 기본값
+              breakpoints={{
+                // 화면 크기별 슬라이드 수
+                640: {
+                  // sm
+                  slidesPerView: 2.2,
+                  spaceBetween: 16,
+                },
+                768: {
+                  // md
+                  slidesPerView: 3.2,
+                  spaceBetween: 20,
+                },
+                1024: {
+                  // lg
+                  slidesPerView: 4.2,
+                  spaceBetween: 24,
+                },
+              }}
+              className="review-swiper -mx-2 px-2" // 좌우 패딩 고려
+            >
+              {combinedReviews.slice(0, 10).map(
+                (
+                  review // 최대 10개 표시
+                ) => (
+                  <SwiperSlide
+                    key={`${review.source}-${review.id}`}
+                    className="h-auto"
+                  >
+                    {/* 기존 리뷰 카드 렌더링 로직 */}
+                    <div className="border rounded-lg p-4 h-full flex flex-col">
+                      {review.source === "local" ? (
+                        // 로컬 리뷰 내용 (기존 로직 유지)
                         <>
-                          {/* 리뷰 제목 */}
-                          {review.title && (
-                            <h3 className="font-medium mb-1">{review.title}</h3>
+                          <div className="flex items-center gap-2 mb-2">
+                            {review.user?.profileImageUrl ? (
+                              <img
+                                src={review.user.profileImageUrl}
+                                alt={review.user?.username}
+                                className="w-8 h-8 rounded-full object-cover"
+                                onError={() =>
+                                  handleReviewImageError(String(review.id))
+                                }
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                                <FaUserCircle className="text-gray-400" />
+                              </div>
+                            )}
+                            <span className="font-semibold">
+                              {review.username}
+                            </span>
+                          </div>
+                          {/* 별점 표시 */}
+                          <div className="flex items-center mb-2">
+                            <StarRating rating={review.rating || 0} />
+                            <span className="ml-2 text-sm text-gray-600">
+                              ({review.rating || 0}점)
+                            </span>
+                          </div>
+                          {/* 작성 날짜 */}
+                          <div className="flex items-center text-xs text-gray-500 mb-2">
+                            <FaCalendarAlt className="mr-1" />
+                            {review.createdAt
+                              ? formatDate(review.createdAt)
+                              : ""}
+                          </div>
+                          {/* 스포일러 처리 */}
+                          {review.isSpoiler ? (
+                            <div className="group relative cursor-pointer">
+                              <span className="inline-block bg-red-500 text-white px-2 py-1 text-xs font-bold rounded mr-2">
+                                스포일러
+                              </span>
+                              <span className="text-sm text-gray-500 group-hover:hidden">
+                                (내용을 보려면 마우스를 올리세요)
+                              </span>
+                              <div className="hidden group-hover:block mt-1">
+                                {review.title && (
+                                  <h3 className="font-medium mb-1">
+                                    {review.title}
+                                  </h3>
+                                )}
+                                <p className="text-gray-600 text-sm mb-1">
+                                  {review.content}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              {review.title && (
+                                <h3 className="font-medium mb-1">
+                                  {review.title}
+                                </h3>
+                              )}
+                              <p className="text-gray-600 text-sm mb-1 line-clamp-3">
+                                {review.content}
+                              </p>
+                            </>
                           )}
-                          {/* 리뷰 내용 */}
+                        </>
+                      ) : (
+                        // TMDB 리뷰 내용 (기존 로직 유지)
+                        <>
+                          <div className="flex items-center gap-2 mb-2">
+                            {!reviewImageErrors[String(review.id)] &&
+                            review.avatar_path ? (
+                              <img
+                                src={
+                                  review.avatar_path.startsWith("/http")
+                                    ? review.avatar_path.substring(1)
+                                    : `https://image.tmdb.org/t/p/w45${review.avatar_path}`
+                                }
+                                alt={review.author}
+                                className="w-8 h-8 rounded-full object-cover"
+                                onError={() =>
+                                  handleReviewImageError(String(review.id))
+                                }
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center">
+                                <img
+                                  src={defaultProfile}
+                                  alt={review.author}
+                                  className="w-4 h-4 object-contain opacity-70"
+                                />
+                              </div>
+                            )}
+                            <span className="font-medium">{review.author}</span>
+                            <span className="ml-2 inline-block bg-gray-200 text-gray-600 px-2 py-0.5 text-xs font-semibold rounded">
+                              TMDB
+                            </span>
+                          </div>
+                          {review.author_details?.rating && (
+                            <div className="flex items-center mb-2">
+                              <StarRating
+                                rating={review.author_details.rating / 2}
+                              />
+                              <span className="ml-2 text-sm text-gray-600">
+                                ({review.author_details.rating}/10)
+                              </span>
+                            </div>
+                          )}
                           <p className="text-gray-600 text-sm mb-1 line-clamp-3">
                             {review.content}
                           </p>
                         </>
                       )}
-                    </>
-                  ) : (
-                    // TMDB 리뷰 표시 (기존 방식)
-                    <>
-                      <div className="flex items-center gap-2 mb-2">
-                        {!reviewImageErrors[String(review.id)] &&
-                        review.avatar_path ? (
-                          <img
-                            src={
-                              review.avatar_path.startsWith("/http")
-                                ? review.avatar_path.substring(1)
-                                : `https://image.tmdb.org/t/p/w200${review.avatar_path}`
-                            }
-                            alt={review.author}
-                            className="w-8 h-8 rounded-full object-cover"
-                            onError={() =>
-                              handleReviewImageError(String(review.id))
-                            }
-                          />
-                        ) : (
-                          <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center">
-                            <img
-                              src={defaultProfile}
-                              alt={review.author}
-                              className="w-4 h-4 object-contain opacity-70"
-                            />
-                          </div>
-                        )}
-                        <span className="font-medium">{review.author}</span>
-                        {/* TMDB 태그 추가 */}
-                        <span className="ml-2 inline-block bg-gray-200 text-gray-600 px-2 py-0.5 text-xs font-semibold rounded">
-                          TMDB
-                        </span>
-                      </div>
-
-                      {/* TMDB 별점 표시 (있는 경우) */}
-                      {review.author_details?.rating && (
-                        <div className="flex items-center mb-2">
-                          <StarRating
-                            rating={review.author_details.rating / 2}
-                          />
-                          <span className="ml-2 text-sm text-gray-600">
-                            ({review.author_details.rating}/10)
-                          </span>
-                        </div>
-                      )}
-
-                      <p className="text-gray-600 text-sm mb-1 line-clamp-3">
-                        {review.content}
-                      </p>
-                    </>
-                  )}
-                </div>
-              ))
-            ) : (
-              <div className="col-span-4 text-center py-4 text-gray-500">
-                작성된 리뷰가 없습니다.
-              </div>
-            )}
-          </div>
+                    </div>
+                  </SwiperSlide>
+                )
+              )}
+            </Swiper>
+          ) : (
+            <div className="text-center py-4 text-gray-500">
+              작성된 리뷰가 없습니다.
+            </div>
+          )}
         </div>
 
         {/* 비디오 섹션 */}
