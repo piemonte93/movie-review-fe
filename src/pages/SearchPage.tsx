@@ -129,7 +129,14 @@ const SearchPage: React.FC = () => {
           {/* 결과 그리드 */}
           <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {contents.map((content) => (
-              <ContentCard key={content.id} content={content} />
+              <ContentCard
+                key={content.id}
+                content={content}
+                type={
+                  content.media_type ||
+                  (content.first_air_date ? "tv" : "movie")
+                }
+              />
             ))}
           </div>
 

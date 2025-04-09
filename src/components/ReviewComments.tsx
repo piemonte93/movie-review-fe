@@ -48,18 +48,18 @@ const ReviewComments = ({ reviewId }: ReviewCommentsProps) => {
         const commentList = data.content.map((comment: any) => ({
           id: comment.id,
           content: comment.content,
-          createdAt: comment.created_at || new Date().toISOString(),
+          createdAt: comment.createdAt || new Date().toISOString(),
           username: comment.username,
-          profileImageUrl: comment.user_profile_image_url,
+          profileImageUrl: comment.profileImageUrl,
           likeCount: comment.likeCount || 0,
           dislikeCount: comment.dislikeCount || 0,
-          userId: comment.user_id,
-          liked: comment.liked || false,
-          disliked: comment.disliked || false,
+          userId: comment.userId,
+          liked: comment.isLiked || false,
+          disliked: comment.isDisliked || false,
           user: {
-            id: comment.user_id,
+            id: comment.userId,
             username: comment.username,
-            profileImageUrl: comment.user_profile_image_url,
+            profileImageUrl: comment.profileImageUrl,
           },
         }));
         setComments(commentList);

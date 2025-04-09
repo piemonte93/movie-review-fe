@@ -105,6 +105,7 @@ const ContentDetailPage = () => {
   const [isScraped, setIsScraped] = useState<boolean>(false);
   const [scrappingInProgress, setScrappingInProgress] =
     useState<boolean>(false);
+  const [localRating, setLocalRating] = useState<number | null>(null);
 
   // 리뷰 작성 모달 관련 상태
   const [showWriteForm, setShowWriteForm] = useState(false);
@@ -307,6 +308,10 @@ const ContentDetailPage = () => {
           mediaType === "tv"
             ? backendApi.getTvReviews(parseInt(id))
             : backendApi.getMovieReviews(parseInt(id));
+        const localRatingPromise = backendApi.getAverageContentRating(
+          parseInt(id),
+          mediaType as "movie" | "tv"
+        );
 
         const [
           detailsResponse,
@@ -314,17 +319,20 @@ const ContentDetailPage = () => {
           videosResponse,
           localReviewsResponse,
           tmdbReviewsResponse,
+          localRatingResponse,
         ] = await Promise.all([
           detailsPromise,
           creditsPromise,
           videosPromise,
           localReviewsPromise,
           tmdbReviewsPromise,
+          localRatingPromise,
         ]);
 
         setContent(detailsResponse);
         setCast(creditsResponse.cast || []);
         setVideos(videosResponse.results || []);
+        setLocalRating(localRatingResponse);
 
         // 로컬 리뷰 설정
         setLocalReviews(localReviewsResponse.content || []);
@@ -486,6 +494,9 @@ const ContentDetailPage = () => {
 
               {/* 별점 */}
               <div className="flex items-center mb-4">
+                <span className="mr-2 text-xs bg-gray-700 text-white px-1 py-0.5 rounded">
+                  TMDB
+                </span>
                 {[1, 2, 3, 4, 5].map((star) => (
                   <FaStar
                     key={star}
@@ -505,6 +516,30 @@ const ContentDetailPage = () => {
                   /10 ({content.voteCount || content.vote_count || 0})
                 </span>
               </div>
+
+              {/* 로컬 평점 - MovieSocial */}
+              {localRating !== null && (
+                <div className="flex items-center mb-4">
+                  <span className="mr-2 text-xs bg-blue-700 text-white px-1 py-0.5 rounded">
+                    MovieSocial
+                  </span>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <FaStar
+                      key={star}
+                      className={
+                        star <= localRating / 2
+                          ? "text-yellow-400"
+                          : "text-gray-300"
+                      }
+                      size={24}
+                    />
+                  ))}
+                  <span className="ml-2">{localRating.toFixed(1)}</span>
+                  <span className="ml-2 text-gray-500">
+                    (리뷰 {localReviews.length}개)
+                  </span>
+                </div>
+              )}
 
               {/* 줄거리 */}
               <div className="mb-4">

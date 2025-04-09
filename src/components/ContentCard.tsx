@@ -8,12 +8,14 @@ interface ContentCardProps {
   content: Content;
   className?: string;
   type?: string;
+  localRating?: number | null;
 }
 
 const ContentCard: React.FC<ContentCardProps> = ({
   content,
   className = "",
   type,
+  localRating,
 }) => {
   const navigate = useNavigate();
   const imageUrl = content.poster_path
@@ -40,7 +42,18 @@ const ContentCard: React.FC<ContentCardProps> = ({
       ? "방영일 미정"
       : "개봉일 미정";
 
-  const mediaType = content.media_type || "movie";
+  let mediaType = content.media_type || "movie";
+
+  if (!content.media_type) {
+    if (type === "tv") {
+      mediaType = "tv";
+    } else if (content.first_air_date && !content.release_date) {
+      mediaType = "tv";
+    } else if (content.name && !content.title) {
+      mediaType = "tv";
+    }
+  }
+
   const typeLabel = mediaType === "tv" ? "TV" : "영화";
 
   const handleClick = () => {
@@ -69,9 +82,21 @@ const ContentCard: React.FC<ContentCardProps> = ({
       <div className="p-3">
         <h3 className="line-clamp-1 text-base font-bold">{displayTitle}</h3>
         <div className="flex items-center gap-1 text-sm">
+          <span className="mr-1 text-xs bg-gray-700 text-white px-1 py-0.5 rounded">
+            TMDB
+          </span>
           <FaStar className="text-yellow-500" />
           <span>{content.vote_average.toFixed(1)}</span>
         </div>
+        {localRating !== undefined && localRating !== null && (
+          <div className="flex items-center gap-1 text-sm mt-1">
+            <span className="mr-1 text-xs bg-blue-700 text-white px-1 py-0.5 rounded">
+              MovieSocial
+            </span>
+            <FaStar className="text-yellow-500" />
+            <span>{localRating.toFixed(1)}</span>
+          </div>
+        )}
         <p className="text-xs text-gray-500">
           평점 ({content.vote_count}) · {formattedDate}
         </p>

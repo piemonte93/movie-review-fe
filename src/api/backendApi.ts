@@ -3104,6 +3104,25 @@ export const backendApi = {
       return [];
     }
   },
+
+  // 작품의 로컬 평점 평균을 가져오는 함수
+  getAverageContentRating: async (
+    contentId: number,
+    contentType: "movie" | "tv"
+  ): Promise<number | null> => {
+    try {
+      const response = await apiClient.get(
+        `/api/${contentType === "movie" ? "movies" : "tvshows"}/${contentId}/average-rating`
+      );
+      return response.data.averageRating;
+    } catch (error) {
+      console.error(
+        `${contentType} ID ${contentId}의 평균 평점을 가져오는 중 오류 발생:`,
+        error
+      );
+      return null;
+    }
+  },
 };
 
 // 신고 관련 타입 정의

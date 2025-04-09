@@ -1246,9 +1246,9 @@ const UserProfilePage: React.FC = () => {
               </div>
               <div className="flex space-x-2">
                 {/* 블라인드 표시 */}
-                <div className="text-sm px-4 py-1.5 rounded font-medium transition-colors bg-red-500 text-white flex items-center justify-center">
+                {/* <div className="text-sm px-4 py-1.5 rounded font-medium transition-colors bg-red-500 text-white flex items-center justify-center">
                   블라인드
-                </div>
+                </div> */}
                 {/* 팔로우/언팔로우 버튼 */}
                 {profileData.user?.id !== user?.id && (
                   <button

@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import ContentCard from "./ContentCard";
 import { Content } from "../types/content";
 import { FaChevronRight } from "react-icons/fa";
+import { backendApi } from "../api/backendApi";
 
 interface ContentScrollListProps {
   title: string;
@@ -22,7 +23,41 @@ const ContentScrollList: React.FC<ContentScrollListProps> = ({
 }) => {
   const displayContents = contents.slice(0, 9);
   const hasMoreContents = contents.length > 9;
-  
+  const [localRatings, setLocalRatings] = useState<
+    Record<number, number | null>
+  >({});
+
+  useEffect(() => {
+    const fetchLocalRatings = async () => {
+      const ratings: Record<number, number | null> = {};
+
+      for (const content of displayContents) {
+        if (content.id) {
+          const mediaType = content.media_type || "movie";
+          try {
+            const rating = await backendApi.getAverageContentRating(
+              content.id,
+              mediaType === "tv" ? "tv" : "movie"
+            );
+            ratings[content.id] = rating;
+          } catch (error) {
+            console.error(
+              `콘텐츠 ID ${content.id}의 로컬 평점을 가져오는 중 오류 발생:`,
+              error
+            );
+            ratings[content.id] = null;
+          }
+        }
+      }
+
+      setLocalRatings(ratings);
+    };
+
+    if (displayContents.length > 0 && !loading) {
+      fetchLocalRatings();
+    }
+  }, [displayContents, loading]);
+
   return (
     <div className="my-10">
       {" "}
@@ -50,10 +85,16 @@ const ContentScrollList: React.FC<ContentScrollListProps> = ({
             {" "}
             {displayContents.length > 0 ? (
               displayContents.map((content) => (
-                <ContentCard key={content.id} content={content} />
+                <ContentCard
+                  key={content.id}
+                  content={content}
+                  localRating={content.id ? localRatings[content.id] : null}
+                />
               ))
             ) : (
-              <div className="w-full py-8 text-center text-gray-500">{emptyMessage}</div>
+              <div className="w-full py-8 text-center text-gray-500">
+                {emptyMessage}
+              </div>
             )}{" "}
           </div>{" "}
         </div>
