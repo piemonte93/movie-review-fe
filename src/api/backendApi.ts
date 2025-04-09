@@ -165,6 +165,7 @@ export interface MovieReview {
   likeCount?: number;
   dislikeCount?: number;
   commentCount?: number;
+  contentType: 'movie' | 'tv'; // contentType 속성 추가
   user: {
     id: number;
     username: string;
@@ -2936,6 +2937,109 @@ export const backendApi = {
     }
   },
   // ---------------------------------------------------------
+
+  /**
+   * 인기 리뷰 목록 조회 (최근 한 달, 댓글 수 기준)
+   * @param limit 조회할 개수 (기본값 5)
+   * @returns 인기 리뷰 목록
+   */
+  getHotReviews: async (limit: number = 5): Promise<MovieReview[]> => {
+    try {
+      // 백엔드 응답 타입은 ReviewResponse[] 형태임 (User 정보가 최상위 레벨)
+      const response = await apiClient.get<any[]>("/api/reviews/hot", { // 타입을 any[] 로 임시 지정
+        params: { limit },
+      });
+      console.log("인기 리뷰 API 응답 (원본):", response.data);
+
+      // 프론트엔드 MovieReview 타입에 맞게 데이터 변환
+      const transformedData: MovieReview[] = response.data.map(review => ({
+        ...review, // 기존 review 속성 복사 (id, title, content, rating 등)
+        // 백엔드 응답의 최상위 사용자 필드를 사용하여 user 객체 생성
+        user: {
+          id: review.userId,
+          username: review.username, // 백엔드에서 null이면 여기가 null이 됨 (HomePage에서 처리)
+          profileImageUrl: review.userProfileImageUrl,
+          // reviewCount는 ReviewResponse에 없으므로 기본값 설정 또는 MovieReview 타입 수정 필요
+          reviewCount: 0, // 임시로 0 설정
+        },
+        // 백엔드 응답에 이미 있는 필드는 user 객체 생성 후에도 유지됨
+        // 예를 들어, likes, dislikes 등 MovieReview에만 있는 필드는 여기서 처리 X
+        // 만약 백엔드 응답 필드와 MovieReview 필드명이 다르다면 여기서 매핑 필요
+        // 예: moviePosterPath -> moviePoster
+        moviePoster: review.moviePosterPath, // 필드명 매핑 예시
+        
+        // likes, dislikes는 ReviewResponse에 없으므로, MovieReview 타입 정의와 맞춰야 함
+        // 여기서는 빈 배열로 초기화하거나, 타입 정의에서 옵셔널로 변경 필요
+        likes: [], // 임시 초기화
+        dislikes: [], // 임시 초기화
+      }));
+      
+      console.log("인기 리뷰 API 응답 (변환됨):", transformedData);
+      return transformedData; // 변환된 MovieReview[] 반환
+
+    } catch (error) {
+      console.error("인기 리뷰 조회 실패:", error);
+      return []; // 실패 시 빈 배열 반환
+    }
+  },
+
+  // 팔로우 관련 함수들
+  toggleFollow: async (targetUserId: number): Promise<UserFollowResponse> => {
+    const response = await apiClient.post<UserFollowResponse>(`/api/users/follow/${targetUserId}`);
+    return response.data;
+  },
+
+  getMyFollowers: async (): Promise<FollowUserResponse[]> => {
+    const response = await apiClient.get<FollowUserResponse[]>('/api/users/followers');
+    return response.data;
+  },
+
+  getMyFollowing: async (): Promise<FollowUserResponse[]> => {
+    const response = await apiClient.get<FollowUserResponse[]>('/api/users/following');
+    return response.data;
+  },
+
+  getUserFollowers: async (userId: number): Promise<FollowUserResponse[]> => {
+    const response = await apiClient.get<FollowUserResponse[]>(`/api/users/${userId}/followers`);
+    return response.data;
+  },
+
+  getUserFollowing: async (userId: number): Promise<FollowUserResponse[]> => {
+    const response = await apiClient.get<FollowUserResponse[]>(`/api/users/${userId}/following`);
+    return response.data;
+  },
+
+  /**
+   * 내가 팔로우하는 사용자들이 스크랩한 컨텐츠 목록을 가져옵니다.
+   * @returns 팔로잉 중인 사용자들의 스크랩 목록
+   */
+  getFollowingScraps: async (): Promise<any[]> => {
+    try {
+      const response = await apiClient.get<any[]>('/api/users/following/scraps');
+      // API 응답을 적절한 형태로 매핑하여 반환
+      return response.data.map(item => ({
+        id: item.id,
+        title: item.title || '',
+        name: item.name || '',
+        poster_path: item.poster_path || '',
+        backdrop_path: item.backdrop_path || '',
+        overview: item.overview || '',
+        vote_average: item.vote_average || 0,
+        vote_count: item.vote_count || 0,
+        release_date: item.release_date || '',
+        first_air_date: item.first_air_date || '',
+        media_type: item.media_type || 'movie',
+        // Content 인터페이스 호환을 위한 필드 추가
+        genre_ids: [],
+        popularity: 0,
+        adult: false,
+        original_language: 'ko'
+      }));
+    } catch (error) {
+      console.error('팔로잉 사용자들의 스크랩 목록 조회 실패:', error);
+      return [];
+    }
+  },
 };
 
 // 신고 관련 타입 정의
@@ -3097,4 +3201,18 @@ export interface Review {
   is_spoiler?: boolean;
   likeCount?: number;
   dislikeCount?: number;
+}
+
+// 팔로우 관련 인터페이스 정의
+export interface UserFollowResponse {
+  following: boolean;
+  message: string;
+}
+
+export interface FollowUserResponse {
+  id: number;
+  username: string;
+  profileImageUrl: string | null;
+  bio: string | null;
+  following: boolean;
 }

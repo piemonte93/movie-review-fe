@@ -1,10 +1,23 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import ContentScrollList from "../components/ContentScrollList";
 import { useContents, useTrendingAll } from "../hooks/useContents";
 import { useAuth } from "../context/AuthContext";
+import { backendApi, MovieReview } from "../api/backendApi";
+import { Link } from "react-router-dom";
+import { FaUser } from "react-icons/fa";
+import { fetchImageAsBlobUrl } from "../utils/imageUtils";
 
 const HomePage: React.FC = () => {
   const { isLoggedIn, user } = useAuth();
+  const [hotReviews, setHotReviews] = useState<MovieReview[]>([]);
+  const [hotReviewsLoading, setHotReviewsLoading] = useState(true);
+  const [hotReviewsError, setHotReviewsError] = useState<string | null>(null);
+  const [reviewImageUrls, setReviewImageUrls] = useState<Record<number, string | null>>({});
+  
+  // 팔로잉 사용자 스크랩 상태 추가
+  const [followingScraps, setFollowingScraps] = useState<any[]>([]);
+  const [followingScrapsLoading, setFollowingScrapsLoading] = useState(false);
+  const [followingScrapsError, setFollowingScrapsError] = useState<string | null>(null);
 
   const {
     contents: trendingAllContent,
@@ -30,6 +43,72 @@ const HomePage: React.FC = () => {
     error: nowPlayingError,
   } = useContents("nowPlaying");
 
+  useEffect(() => {
+    const fetchHotReviews = async () => {
+      try {
+        setHotReviewsLoading(true);
+        setHotReviewsError(null);
+        const reviews = await backendApi.getHotReviews(3);
+        setHotReviews(reviews);
+      } catch (error) {
+        console.error("인기 리뷰 로딩 실패:", error);
+        setHotReviewsError("인기 리뷰를 불러오는데 실패했습니다.");
+      } finally {
+        setHotReviewsLoading(false);
+      }
+    };
+
+    fetchHotReviews();
+  }, []);
+
+  // 팔로잉 사용자의 스크랩 목록 가져오기
+  useEffect(() => {
+    const fetchFollowingScraps = async () => {
+      if (!isLoggedIn) return;
+      
+      try {
+        setFollowingScrapsLoading(true);
+        setFollowingScrapsError(null);
+        const scraps = await backendApi.getFollowingScraps();
+        setFollowingScraps(scraps);
+      } catch (error) {
+        console.error("팔로잉 사용자 스크랩 로딩 실패:", error);
+        setFollowingScrapsError("친구가 보고있는 작품을 불러오는데 실패했습니다.");
+      } finally {
+        setFollowingScrapsLoading(false);
+      }
+    };
+
+    if (isLoggedIn) {
+      fetchFollowingScraps();
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    const loadReviewImages = async () => {
+      const urls: Record<number, string | null> = {};
+      for (const review of hotReviews) {
+        if (review.user.profileImageUrl) {
+          const blobUrl = await fetchImageAsBlobUrl(review.user.profileImageUrl);
+          urls[review.user.id] = blobUrl;
+        } else {
+          urls[review.user.id] = null;
+        }
+      }
+      setReviewImageUrls(urls);
+    };
+
+    if (hotReviews.length > 0) {
+      loadReviewImages();
+    }
+
+    return () => {
+      Object.values(reviewImageUrls).forEach(url => {
+        if (url) URL.revokeObjectURL(url);
+      });
+    }
+  }, [hotReviews]);
+
   return (
     <div className="container mx-auto px-5 py-10">
       <h1 className="mb-10 text-3xl font-bold">영화 정보</h1>
@@ -53,40 +132,73 @@ const HomePage: React.FC = () => {
       {isLoggedIn && (
         <ContentScrollList
           title={`${user?.username || "사용자"}님의 친구가 보고있는 작품`}
-          contents={topRatedContents}
-          loading={topRatedLoading}
-          error={topRatedError}
-          category="topRated"
+          contents={followingScraps}
+          loading={followingScrapsLoading}
+          error={followingScrapsError ? followingScrapsError : null}
+          category="followingScraps"
+          emptyMessage="친구가 스크랩한 작품이 없습니다. 팔로잉을 추가해보세요!"
         />
       )}
 
       <section className="my-14">
         <h2 className="mb-6 text-2xl font-bold">현재 HOT 코멘트🔥</h2>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-          {[1, 2, 3].map((review) => (
-            <div
-              key={review}
-              className="rounded-lg border border-gray-200 p-5 shadow-sm"
-            >
-              <p className="mb-3 text-lg font-semibold">
-                "
-                {review === 1
-                  ? "정말 재미있게 봤어요!"
-                  : review === 2
-                    ? "배우들의 연기가 훌륭했습니다."
-                    : "스토리가 탄탄하고 감동적이었습니다."}
-                "
-              </p>
-              <div className="mt-4 flex items-center">
-                <div className="h-10 w-10 rounded-full bg-gray-300"></div>
-                <div className="ml-3">
-                  <p className="font-medium">사용자</p>
-                  <p className="text-sm text-gray-500">2분 전</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        {hotReviewsLoading ? (
+          <p>인기 리뷰를 불러오는 중...</p>
+        ) : hotReviewsError ? (
+          <p className="text-red-500">{hotReviewsError}</p>
+        ) : hotReviews.length > 0 ? (
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            {hotReviews.map((review) => {
+              const isMovie = review.contentType === 'movie';
+              const searchQuery = encodeURIComponent(review.title); // URL 인코딩
+              let linkTarget = '';
+
+              if (isMovie) {
+                // 영화 리뷰: MovieReviewsPage로 이동 + 제목으로 검색
+                linkTarget = `/movie-reviews?search=${searchQuery}`;
+              } else {
+                // TV 리뷰: TvReviewsPage로 이동 + 제목으로 검색
+                linkTarget = `/tv-reviews?search=${searchQuery}`;
+              }
+
+              return (
+                <Link 
+                  key={review.id} 
+                  to={linkTarget} // 동적으로 설정된 링크 경로 사용
+                  className="block rounded-lg border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-center mb-3">
+                    <p className="text-lg font-semibold truncate flex-grow mr-2">"{review.title}"</p>
+                    <span 
+                      className={`px-2 py-0.5 rounded text-xs font-medium ${isMovie ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}
+                    >
+                      {isMovie ? '영화' : 'TV'}
+                    </span>
+                  </div>
+                  <p className="mb-4 text-gray-600 text-sm line-clamp-3">{review.content}</p>
+                  <div className="mt-auto flex items-center">
+                    <div className="h-10 w-10 rounded-full bg-gray-100 overflow-hidden border border-gray-200">
+                      {review.user && reviewImageUrls[review.user.id] ? (
+                        <img 
+                          src={reviewImageUrls[review.user.id]!}
+                          alt={review.user?.username ?? 'Unknown User'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <FaUser className="text-gray-400 w-full h-full p-2" />
+                      )}
+                    </div>
+                    <div className="ml-3">
+                      <p className="font-medium text-sm">{review.user?.username ?? 'Unknown User'}</p>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <p>최근 인기 리뷰가 없습니다.</p>
+        )}
       </section>
 
       <ContentScrollList
