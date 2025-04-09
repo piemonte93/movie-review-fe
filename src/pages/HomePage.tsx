@@ -119,32 +119,42 @@ const HomePage: React.FC = () => {
           <p className="text-red-500">{hotReviewsError}</p>
         ) : hotReviews.length > 0 ? (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            {hotReviews.map((review) => (
-              <Link 
-                key={review.id} 
-                to={`/${review.contentType === 'movie' ? 'movie-reviews' : 'tv-reviews'}/${review.id}`}
-                className="block rounded-lg border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow"
-              >
-                <p className="mb-3 text-lg font-semibold truncate">"{review.title}"</p>
-                <p className="mb-4 text-gray-600 text-sm line-clamp-3">{review.content}</p>
-                <div className="mt-auto flex items-center">
-                  <div className="h-10 w-10 rounded-full bg-gray-100 overflow-hidden border border-gray-200">
-                    {review.user && reviewImageUrls[review.user.id] ? (
-                      <img 
-                        src={reviewImageUrls[review.user.id]!}
-                        alt={review.user?.username ?? 'Unknown User'}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <FaUser className="text-gray-400 w-full h-full p-2" />
-                    )}
+            {hotReviews.map((review) => {
+              const isMovie = review.contentType === 'movie';
+              return (
+                <Link 
+                  key={review.id} 
+                  to={`/${isMovie ? 'movie-reviews' : 'tv-reviews'}/${review.id}`}
+                  className="block rounded-lg border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-center mb-3">
+                    <p className="text-lg font-semibold truncate flex-grow mr-2">"{review.title}"</p>
+                    <span 
+                      className={`px-2 py-0.5 rounded text-xs font-medium ${isMovie ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}
+                    >
+                      {isMovie ? '영화' : 'TV'}
+                    </span>
                   </div>
-                  <div className="ml-3">
-                    <p className="font-medium text-sm">{review.user?.username ?? 'Unknown User'}</p>
+                  <p className="mb-4 text-gray-600 text-sm line-clamp-3">{review.content}</p>
+                  <div className="mt-auto flex items-center">
+                    <div className="h-10 w-10 rounded-full bg-gray-100 overflow-hidden border border-gray-200">
+                      {review.user && reviewImageUrls[review.user.id] ? (
+                        <img 
+                          src={reviewImageUrls[review.user.id]!}
+                          alt={review.user?.username ?? 'Unknown User'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <FaUser className="text-gray-400 w-full h-full p-2" />
+                      )}
+                    </div>
+                    <div className="ml-3">
+                      <p className="font-medium text-sm">{review.user?.username ?? 'Unknown User'}</p>
+                    </div>
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         ) : (
           <p>최근 인기 리뷰가 없습니다.</p>
