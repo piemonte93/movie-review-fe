@@ -1585,7 +1585,7 @@ const CommunityPage: React.FC = () => {
                         {post.user.username}
                       </Link>
                       <div className="text-xs text-gray-500">
-                        {new Date(post.createdAt).toLocaleString()}
+                        {formatDate(post.createdAt)}
                       </div>
                     </div>
                   </div>
@@ -1641,7 +1641,7 @@ const CommunityPage: React.FC = () => {
                     )}
 
                     <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
-                      <span>{formatDate(post.createdAt)}</span>
+                      <span></span>
                       <div className="flex items-center space-x-3">
                         {isLoggedIn &&
                           !isUserBlocked() &&

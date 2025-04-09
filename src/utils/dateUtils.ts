@@ -134,27 +134,28 @@ export const getPostDateByPattern = (
  * @param locale - 로케일 (기본값: 'ko-KR')
  * @returns 포맷팅된 날짜 문자열
  */
-export const formatDate = (
-  dateString: string,
-  options: Intl.DateTimeFormatOptions = {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  },
-  locale: string = "ko-KR"
-): string => {
+export const formatDate = (dateString: string | Date): string => {
+  if (!dateString) return "";
+
   try {
-    const date = new Date(dateString);
+    const date =
+      typeof dateString === "string" ? new Date(dateString) : dateString;
 
-    // 유효한 날짜인지 확인
-    if (isNaN(date.getTime())) {
-      return "";
-    }
-
-    return date.toLocaleDateString(locale, options);
+    // 24시간 표기법으로 수정
+    return date.toLocaleString("ko-KR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false, // 24시간 표기법 사용
+    });
   } catch (error) {
-    console.error("Date formatting error:", error);
-    return "";
+    console.error("Error formatting date:", error);
+    // 오류 발생 시 원본 문자열이나 기본값 반환
+    return typeof dateString === "string"
+      ? dateString
+      : dateString.toISOString();
   }
 };
 
@@ -174,12 +175,8 @@ export const getRelativeTimeFromNow = (dateString: string): string => {
     const diffSeconds = Math.floor(diffTime / 1000);
 
     if (diffDays > 30) {
-      // 30일 이상이면 날짜 표시
-      return formatDate(dateString, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
+      // 30일 이상이면 날짜 표시 (formatDate 함수 수정에 맞춰 인자 1개만 전달)
+      return formatDate(dateString);
     } else if (diffDays > 0) {
       return `${diffDays}일 전`;
     } else if (diffHours > 0) {
