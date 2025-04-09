@@ -40,10 +40,12 @@ import {
   MovieReview,
   Page,
   TvShowReview,
+  BASE_URL,
 } from "../api/backendApi";
 import { toast } from "react-hot-toast";
 import ReviewCard from "../components/ReviewCard";
 import PostCard from "../components/PostCard";
+import defaultAvatar from "../assets/default-profile.png";
 
 // 프로필 페이지 컴포넌트
 const ProfilePage: React.FC = () => {
@@ -944,9 +946,12 @@ const ProfilePage: React.FC = () => {
             >
               {user?.profileImageUrl ? (
                 <img
-                  src={user.profileImageUrl}
+                  src={`${BASE_URL}${user.profileImageUrl}`}
                   alt="프로필 이미지"
                   className="h-full w-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.src = defaultAvatar;
+                  }}
                 />
               ) : (
                 <div className="h-full w-full flex items-center justify-center bg-gray-100">
