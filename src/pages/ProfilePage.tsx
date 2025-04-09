@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   FaCamera,
@@ -33,8 +33,16 @@ import ContentCard from "../components/ContentCard";
 import FollowModal from "../components/FollowModal";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { formatDate } from "../utils/dateUtils";
-import { backendApi, Post, MovieReview } from "../api/backendApi";
+import {
+  backendApi,
+  Post,
+  MovieReview,
+  Page,
+  TvShowReview,
+} from "../api/backendApi";
 import { toast } from "react-hot-toast";
+import ReviewCard from "../components/ReviewCard";
+import PostCard from "../components/PostCard";
 
 // 프로필 페이지 컴포넌트
 const ProfilePage: React.FC = () => {
@@ -74,6 +82,34 @@ const ProfilePage: React.FC = () => {
 
   // 현재 경로 디버깅을 위한 로그 - 이전 경로 비교 추가
   const [prevPathname, setPrevPathname] = useState(location.pathname);
+
+  // 좋아요 탭 관련 상태 추가
+  const [likedContent, setLikedContent] = useState<
+    (Post | MovieReview | TvShowReview)[]
+  >([]);
+  const [likedContentPage, setLikedContentPage] = useState(0);
+  const [hasMoreLikedContent, setHasMoreLikedContent] = useState(true);
+  const [loadingLikedContent, setLoadingLikedContent] = useState(false);
+  const [likedContentType, setLikedContentType] = useState<"reviews" | "posts">(
+    "reviews"
+  );
+
+  // Follow state (simplified with counts)
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [isFollowing, setIsFollowing] = useState(false); // For follow button
+  const [loadingFollow, setLoadingFollow] = useState(false);
+
+  // Scraps state
+  const [scraps, setScraps] = useState<any[]>([]);
+  const [loadingScraps, setLoadingScraps] = useState(false);
+  const [scrapPage, setScrapPage] = useState(0);
+  const [hasMoreScraps, setHasMoreScraps] = useState(true);
+
+  const profileImageInput = useRef<HTMLInputElement>(null);
+  const { username } = useParams<{ username: string }>();
+  const { user: currentUser } = useAuth();
+  const [isOwnProfile, setIsOwnProfile] = useState(false);
 
   useEffect(() => {
     // 경로가 실제로 변경된 경우에만 로그 출력
@@ -302,37 +338,32 @@ const ProfilePage: React.FC = () => {
   };
 
   // 게시물 로딩
-  useEffect(() => {
-    const fetchPosts = async () => {
+  const fetchPosts = useCallback(
+    async (pageToFetch: number) => {
+      if (!user) return;
       try {
-        if (!user) return;
         setIsLoading(true);
-        const response = await backendApi.getUserPosts(user.id, page);
-
-        // 페이지가 0일 때는 기존 게시물을 초기화하고, 그 외에는 추가
-        if (page === 0) {
+        const response = await backendApi.getUserPosts(user.id, pageToFetch);
+        if (pageToFetch === 0) {
           setPosts(response.content);
         } else {
           setPosts((prev) => [...prev, ...response.content]);
         }
-
-        setHasMore(page < response.totalPages - 1);
+        setPage(pageToFetch);
+        setHasMore(pageToFetch < response.totalPages - 1);
       } catch (error) {
         console.error("게시물 로딩 실패:", error);
       } finally {
         setIsLoading(false);
       }
-    };
-
-    fetchPosts();
-  }, [user, page]);
+    },
+    [user]
+  );
 
   // 게시물 수정 처리
-  const handleEditPost = (post: Post) => {
-    setEditingPostId(post.id);
-    setTitle(post.title);
-    setContent(post.content);
-    setShowWriteForm(true);
+  const handleEditPost = (postToEdit: Post) => {
+    // TODO: Implement edit logic
+    toast(`'${postToEdit.title}' 수정 기능은 구현 예정입니다.`);
   };
 
   // 게시물 수정 폼 제출
@@ -377,50 +408,52 @@ const ProfilePage: React.FC = () => {
   };
 
   // 리뷰 데이터 로드
-  const fetchReviews = async (page: number) => {
-    if (!user) return;
-    try {
-      setLoading(true);
+  const fetchReviews = useCallback(
+    async (pageToFetch: number) => {
+      if (!user) return;
+      try {
+        setLoading(true);
+        console.log(
+          `사용자 ${user.username}의 리뷰 데이터 로드 시작 (페이지: ${pageToFetch})`
+        );
+        const [movieReviewsResponse, tvReviewsResponse] = await Promise.all([
+          backendApi.getUserReviews(user.username, pageToFetch),
+          backendApi.getUserTvReviews(user.username, pageToFetch),
+        ]);
+        console.log(
+          `영화 리뷰 ${movieReviewsResponse.content.length}개, TV 쇼 리뷰 ${tvReviewsResponse.content.length}개 로드 완료`
+        );
+        const allReviews: (MovieReview | TvShowReview)[] = [
+          ...movieReviewsResponse.content,
+          ...tvReviewsResponse.content,
+        ];
+        const sortedReviews = allReviews.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
 
-      console.log(`사용자 ${user.username}의 리뷰 데이터 로드 시작`);
+        if (pageToFetch === 0) {
+          setReviews(sortedReviews);
+        } else {
+          setReviews((prev) => [...prev, ...sortedReviews]);
+        }
+        setPage(pageToFetch);
 
-      // 영화 리뷰와 TV 쇼 리뷰를 병렬로 가져옴
-      const [movieReviewsResponse, tvReviewsResponse] = await Promise.all([
-        backendApi.getUserReviews(user.username, page),
-        backendApi.getUserTvReviews(user.username, page),
-      ]);
-
-      console.log(
-        `영화 리뷰 ${movieReviewsResponse.content.length}개, TV 쇼 리뷰 ${tvReviewsResponse.content.length}개 로드 완료`
-      );
-
-      // 두 결과를 합침
-      const allReviews = [
-        ...movieReviewsResponse.content,
-        ...tvReviewsResponse.content,
-      ];
-
-      // 날짜 기준으로 정렬 (최신순)
-      const sortedReviews = allReviews.sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-
-      setReviews(sortedReviews);
-
-      // 총 페이지 수는 두 API 중 더 큰 값을 사용
-      const maxTotalPages = Math.max(
-        movieReviewsResponse.totalPages || 0,
-        tvReviewsResponse.totalPages || 0
-      );
-      setTotalPages(maxTotalPages);
-    } catch (error) {
-      console.error("리뷰 로딩 실패:", error);
-      toast.error("리뷰를 불러오는데 실패했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  };
+        const maxTotalPages = Math.max(
+          movieReviewsResponse.totalPages || 0,
+          tvReviewsResponse.totalPages || 0
+        );
+        setTotalPages(maxTotalPages);
+        setHasMore(pageToFetch < maxTotalPages - 1);
+      } catch (error) {
+        console.error("리뷰 로딩 실패:", error);
+        toast.error("리뷰를 불러오는데 실패했습니다.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [user]
+  );
 
   // 스크랩 데이터 로드 함수 추가
   const loadScraps = useCallback(async () => {
@@ -466,20 +499,74 @@ const ProfilePage: React.FC = () => {
   }, [activeTab, user, loadScraps]);
 
   const handleLoadMore = () => {
+    if (isLoading || !hasMore) return;
+
     if (activeTab === "posts") {
-      setPage((prev) => prev + 1);
-    } else if (activeTab === "reviews" && page < totalPages - 1) {
-      setPage((prev) => prev + 1);
+      fetchPosts(page + 1);
+    } else if (activeTab === "reviews") {
       fetchReviews(page + 1);
     }
   };
 
+  // 좋아요 탭 데이터 로딩 함수
+  const fetchLikedContent = useCallback(
+    async (pageToFetch: number, type: "reviews" | "posts") => {
+      if (loadingLikedContent) return;
+      setLoadingLikedContent(true);
+      try {
+        let response: Page<MovieReview | TvShowReview | Post>;
+        if (type === "reviews") {
+          response = await backendApi.getMyLikedReviews(pageToFetch);
+        } else {
+          response = await backendApi.getMyLikedPosts(pageToFetch);
+        }
+        const newContent = response.content || [];
+        setLikedContent((prev) =>
+          pageToFetch === 0 ? newContent : [...prev, ...newContent]
+        );
+        setLikedContentPage(pageToFetch);
+        setHasMoreLikedContent(!response.last);
+      } catch (error) {
+        console.error(`좋아요 누른 ${type} 목록 가져오기 실패:`, error);
+        toast.error(
+          `좋아요 누른 ${type === "reviews" ? "리뷰" : "게시글"} 목록을 불러오는데 실패했습니다.`
+        );
+        setHasMoreLikedContent(false);
+      } finally {
+        setLoadingLikedContent(false);
+      }
+    },
+    [loadingLikedContent, likedContentType]
+  );
+
+  // 탭 변경 시 데이터 로드
+  useEffect(() => {
+    // Reset state and fetch data for the active tab
+    setPosts([]);
+    setReviews([]);
+    setLikedContent([]);
+    setPage(0);
+    setLikedContentPage(0);
+    setHasMore(true);
+    setHasMoreLikedContent(true);
+    setIsLoading(false);
+    setLoadingLikedContent(false);
+    setLoading(false);
+
+    if (activeTab === "posts") {
+      fetchPosts(0);
+    } else if (activeTab === "reviews") {
+      fetchReviews(0);
+    } else if (activeTab === "likes") {
+      fetchLikedContent(0, likedContentType);
+    } else if (activeTab === "scraps") {
+      loadScraps();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, likedContentType]);
+
   // 게시물 탭 렌더링
   const renderPostsTab = () => {
-    const loadMore = () => {
-      setPage((prev) => prev + 1);
-    };
-
     if (isLoading && posts.length === 0) {
       return (
         <div className="flex justify-center py-8">
@@ -550,7 +637,7 @@ const ProfilePage: React.FC = () => {
 
         <InfiniteScroll
           dataLength={posts.length}
-          next={loadMore}
+          next={handleLoadMore}
           hasMore={hasMore}
           loader={
             <div className="flex justify-center py-4">
@@ -565,56 +652,12 @@ const ProfilePage: React.FC = () => {
         >
           <div className="space-y-6">
             {posts.map((post) => (
-              <div
-                key={post.id}
-                className="border border-gray-200 rounded-lg bg-white p-4 shadow-sm"
-              >
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-lg font-semibold">{post.title}</h3>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleEditPost(post)}
-                      className="text-gray-600 hover:text-blue-600"
-                      title="수정"
-                    >
-                      <FaEdit />
-                    </button>
-                    <button
-                      onClick={() => handleDeletePost(post.id)}
-                      className="text-gray-600 hover:text-red-600"
-                      title="삭제"
-                    >
-                      <FaTrash />
-                    </button>
-                  </div>
-                </div>
-                <p className="mt-2 text-gray-700">{post.content}</p>
-                <div className="mt-3 flex justify-between items-center text-xs text-gray-500">
-                  <span>{formatDate(post.createdAt)}</span>
-                  <div className="flex items-center space-x-3">
-                    <div className="flex items-center space-x-1">
-                      <FaThumbsUp
-                        className={
-                          post.liked ? "text-blue-600" : "text-gray-400"
-                        }
-                      />
-                      <span>{post.likeCount}</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <FaThumbsDown
-                        className={
-                          post.disliked ? "text-red-600" : "text-gray-400"
-                        }
-                      />
-                      <span>{post.dislikeCount}</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <FaComment className="text-gray-400" />
-                      <span>{post.commentCount}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <PostCard
+                key={`post-${post.id}`}
+                post={post}
+                onEdit={handleEditPost}
+                onDelete={handleDeletePost}
+              />
             ))}
           </div>
         </InfiniteScroll>
@@ -637,35 +680,29 @@ const ProfilePage: React.FC = () => {
     }
 
     return (
-      <div className="mt-4">
-        <div className="space-y-4">
-          {reviews.map((review) => (
-            <div
-              key={review.id}
-              className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-lg">{review.movieTitle}</h3>
-                    <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
-                      {review.contentType === "tv" ? "TV 쇼" : "영화"}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center">
-                  <span className="text-yellow-400 mr-1">★</span>
-                  <span className="font-medium">{review.rating}</span>
-                </div>
-              </div>
-              <p className="text-gray-700 mb-3">{review.content}</p>
-              <div className="text-sm text-gray-500">
-                {formatDate(review.createdAt)}
-              </div>
-            </div>
-          ))}
+      <InfiniteScroll
+        dataLength={reviews.length}
+        next={handleLoadMore}
+        hasMore={hasMore}
+        loader={
+          <div className="flex justify-center py-4">
+            <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
+          </div>
+        }
+        endMessage={
+          <p className="text-center text-gray-500 py-4">
+            모든 리뷰를 불러왔습니다.
+          </p>
+        }
+      >
+        <div className="mt-4">
+          <div className="space-y-4">
+            {reviews.map((review) => (
+              <ReviewCard key={`review-${review.id}`} review={review as any} />
+            ))}
+          </div>
         </div>
-      </div>
+      </InfiniteScroll>
     );
   };
 
@@ -717,47 +754,100 @@ const ProfilePage: React.FC = () => {
 
   // 좋아요 탭 렌더링
   const renderLikesTab = () => {
-    if (loading) {
-      return <div className="text-center py-8">로딩 중...</div>;
-    }
+    const loadMoreLiked = () => {
+      if (!loadingLikedContent && hasMoreLikedContent) {
+        fetchLikedContent(likedContentPage + 1, likedContentType);
+      }
+    };
 
-    if (!reviews || reviews.length === 0) {
-      return (
-        <div className="text-center py-8 text-gray-500">
-          좋아요한 리뷰가 없습니다.
-        </div>
-      );
-    }
+    const renderLikedItem = (
+      item: Post | MovieReview | TvShowReview,
+      index: number
+    ) => {
+      if (
+        typeof (item as MovieReview | TvShowReview).rating === "number" &&
+        ("movieId" in item || "tvShowId" in item)
+      ) {
+        return (
+          <ReviewCard
+            key={`liked-review-${item.id}-${index}`}
+            review={item as MovieReview | TvShowReview}
+          />
+        );
+      } else if (
+        typeof (item as Post).commentCount === "number" &&
+        "title" in item
+      ) {
+        return (
+          <PostCard
+            key={`liked-post-${item.id}-${index}`}
+            post={item as Post}
+            // Pass edit/delete handlers ONLY if it's the user's own profile
+            // AND the active tab is 'posts' (or decide if deleting from 'likes' is allowed)
+            // For simplicity here, don't pass handlers in the Likes tab
+            // onEdit={isOwnProfile ? handleEditPost : undefined}
+            // onDelete={isOwnProfile ? handleDeletePost : undefined}
+          />
+        );
+      } else {
+        console.warn("Unknown liked item type in Likes tab:", item);
+        return (
+          <div key={`liked-unknown-${(item as any).id || index}`}>
+            알 수 없는 타입의 아이템
+          </div>
+        );
+      }
+    };
 
     return (
-      <div className="mt-4">
-        <div className="space-y-4">
-          {reviews.map((review) => (
-            <div
-              key={review.id}
-              className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-lg">{review.movieTitle}</h3>
-                    <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
-                      {review.contentType === "tv" ? "TV 쇼" : "영화"}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center">
-                  <span className="text-yellow-400 mr-1">★</span>
-                  <span className="font-medium">{review.rating}</span>
-                </div>
-              </div>
-              <p className="text-gray-700 mb-3">{review.content}</p>
-              <div className="text-sm text-gray-500">
-                {formatDate(review.createdAt)}
-              </div>
-            </div>
-          ))}
+      <div>
+        <div className="flex border-b mb-4">
+          <button
+            className={`py-2 px-4 text-sm font-medium ${likedContentType === "reviews" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+            onClick={() => setLikedContentType("reviews")}
+          >
+            리뷰
+          </button>
+          <button
+            className={`py-2 px-4 text-sm font-medium ${likedContentType === "posts" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+            onClick={() => setLikedContentType("posts")}
+          >
+            게시글
+          </button>
         </div>
+
+        {loadingLikedContent && likedContent.length === 0 && (
+          <div className="flex justify-center items-center h-40">
+            <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
+          </div>
+        )}
+        {!loadingLikedContent && likedContent.length === 0 && (
+          <p className="text-center text-gray-500 mt-8">
+            좋아요 누른 {likedContentType === "reviews" ? "리뷰가" : "게시글이"}{" "}
+            없습니다.
+          </p>
+        )}
+
+        <InfiniteScroll
+          dataLength={likedContent.length}
+          next={loadMoreLiked}
+          hasMore={hasMoreLikedContent}
+          loader={
+            <div className="flex justify-center py-4">
+              <div className="animate-spin h-8 w-8 border-4 border-gray-900 border-t-transparent rounded-full"></div>
+            </div>
+          }
+          endMessage={
+            likedContent.length > 0 ? (
+              <p className="text-center text-gray-500 py-4">
+                모든 목록을 불러왔습니다.
+              </p>
+            ) : null
+          }
+          className="space-y-4"
+        >
+          {likedContent.map(renderLikedItem)}
+        </InfiniteScroll>
       </div>
     );
   };
@@ -769,10 +859,10 @@ const ProfilePage: React.FC = () => {
         return renderPostsTab();
       case "reviews":
         return renderReviewsTab();
-      case "likes":
-        return renderLikesTab();
       case "scraps":
         return renderScrapsTab();
+      case "likes":
+        return renderLikesTab();
       default:
         return null;
     }
@@ -780,18 +870,21 @@ const ProfilePage: React.FC = () => {
 
   // 게시물 삭제 처리
   const handleDeletePost = async (postId: number) => {
-    if (!window.confirm("게시물을 삭제하시겠습니까?")) {
-      return;
-    }
-
-    try {
-      await backendApi.deletePost(postId);
-      // 게시물 목록에서 삭제된 게시물 제거
-      setPosts(posts.filter((post: Post) => post.id !== postId));
-      toast.success("게시물이 삭제되었습니다.");
-    } catch (error) {
-      console.error("게시물 삭제 실패:", error);
-      toast.error("게시물 삭제에 실패했습니다.");
+    if (window.confirm("정말로 이 게시물을 삭제하시겠습니까?")) {
+      const toastId = toast.loading("게시물 삭제 중...");
+      try {
+        await backendApi.deletePost(postId);
+        toast.success("게시물이 삭제되었습니다.", { id: toastId });
+        setPosts((prevPosts) => prevPosts.filter((p) => p.id !== postId));
+        setLikedContent((prevLiked) =>
+          prevLiked.filter(
+            (item) => !("commentCount" in item && item.id === postId)
+          )
+        );
+      } catch (error) {
+        console.error("게시물 삭제 실패:", error);
+        toast.error("게시물 삭제에 실패했습니다.", { id: toastId });
+      }
     }
   };
 
