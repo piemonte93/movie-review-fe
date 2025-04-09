@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosRequestConfig } from "axios";
 import { TMDB_API_BASE_URL, TMDB_API_KEY } from "../constants";
 import {
   Content,
@@ -12,24 +12,40 @@ import { TvShow } from "../types/content";
 import { useState, useEffect } from "react";
 
 // This will point to our Spring Boot backend
-const BASE_URL = "http://localhost:8080";
+export const BASE_URL = "http://localhost:8080";
 
 // Create axios instance with timeout
 export const apiClient = axios.create({
   baseURL: BASE_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
   timeout: 15000, // 15초 타임아웃
 });
 
 // 요청 인터셉터 추가
 apiClient.interceptors.request.use(
-  (config) => {
+  (config: AxiosRequestConfig) => {
+    // 1. Handle Authorization Token
     const token = localStorage.getItem("token");
     if (token) {
+      if (!config.headers) config.headers = {}; // Ensure headers object exists
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // 2. Handle Content-Type for FormData
+    if (config.data instanceof FormData) {
+      // If data is FormData, remove the Content-Type header
+      // to allow the browser to set it automatically with the correct boundary
+      if (config.headers && config.headers["Content-Type"]) {
+        delete config.headers["Content-Type"];
+        console.log("Removed Content-Type header for FormData request.");
+      }
+    } else {
+      // For other request types, ensure Content-Type is set to application/json if not already set
+      if (!config.headers) config.headers = {};
+      if (!config.headers["Content-Type"]) {
+        config.headers["Content-Type"] = "application/json";
+      }
+    }
+
     return config;
   },
   (error) => {

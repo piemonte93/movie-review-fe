@@ -983,3 +983,35 @@ export const getUserPostCount = async (userId: number): Promise<number> => {
     return 0;
   }
 };
+
+// New API function to update profile with potential image upload
+export const updateMyProfileApi = async (
+  formData: FormData
+): Promise<UserProfile> => {
+  console.log("Submitting profile update with FormData:");
+  // Optional: Log FormData contents for debugging (can be tricky)
+  // formData.forEach((value, key) => {
+  //   console.log(key, value);
+  // });
+
+  try {
+    // Use PUT request to the correct backend endpoint /api/profile/me
+    const response = await apiClient.put<UserProfile>(
+      "/api/profile/me",
+      formData,
+      {
+        headers: {
+          // Content-Type is automatically set
+        },
+      }
+    );
+    console.log("Profile update API response:", response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error(
+      "Error updating profile:",
+      error.response?.data || error.message
+    );
+    throw error;
+  }
+};

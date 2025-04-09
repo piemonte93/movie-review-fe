@@ -31,11 +31,13 @@ import {
   MovieReview,
   TvShowReview,
   apiClient,
+  BASE_URL,
 } from "../api/backendApi";
 import { formatDate } from "../utils/dateUtils";
-import ReviewCard from "../components/ReviewCard";
-import PostCard from "../components/PostCard";
+import ReviewCard from "../components/ReviewCard.tsx";
+import PostCard from "../components/PostCard.tsx";
 import InfiniteScroll from "react-infinite-scroll-component";
+import defaultAvatar from "../assets/default-profile.png";
 
 // MovieReview 인터페이스를 확장하여 contentType 속성 추가
 interface ExtendedMovieReview extends MovieReview {
@@ -1209,9 +1211,14 @@ const UserProfilePage: React.FC = () => {
             <div className="h-28 w-28 md:h-36 md:w-36 rounded-full overflow-hidden bg-gray-200 border border-gray-300">
               {profileData.user?.profileImageUrl ? (
                 <img
-                  src={profileData.user.profileImageUrl}
-                  alt="프로필 이미지"
+                  src={`${BASE_URL}${profileData.user.profileImageUrl}`}
+                  alt={`${profileData.user?.username}의 프로필 이미지`}
                   className="h-full w-full object-cover"
+                  onError={(e) => {
+                    if (e.currentTarget.src !== defaultAvatar) {
+                      e.currentTarget.src = defaultAvatar;
+                    }
+                  }}
                 />
               ) : (
                 <div className="h-full w-full flex items-center justify-center bg-gray-100">

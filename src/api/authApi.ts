@@ -376,6 +376,9 @@ export const authApi = {
         username: response.data.username || "사용자",
         email: response.data.email || "",
         roles: response.data.roles || ["ROLE_USER"],
+        profileImageUrl: response.data.profileImageUrl,
+        status: response.data.status,
+        bio: response.data.bio,
       };
 
       console.log("변환된 사용자 정보:", userData);

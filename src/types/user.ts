@@ -11,7 +11,12 @@ export interface User {
 }
 
 export interface UserProfile {
-  user: User;
+  id: number;
+  username: string;
+  email: string;
+  bio?: string;
+  profileImageUrl?: string;
+  roles: string[];
   followingCount: number;
   followerCount: number;
   watchedMoviesCount?: number;
