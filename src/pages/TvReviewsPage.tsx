@@ -344,7 +344,7 @@ const TvReviewsPage: React.FC = () => {
   const fetchReviews = async () => {
     try {
       setLoading(true);
-      const response = await backendApi.getAllTvReviews(0, reviewsPerPage);
+      const response = await backendApi.getAllTvReviews(0, reviewsPerPage); // 항상 0 페이지 요청
       if (response.content) {
         const formattedReviews = response.content.map((review: any) => ({
           ...review, // 기존 속성들 유지
@@ -356,35 +356,58 @@ const TvReviewsPage: React.FC = () => {
             profileImageUrl: review.userProfileImageUrl,
             reviewCount: 0, // Assuming reviewCount is not directly available, fetch later if needed
           },
-          // 수정: review.tvPosterPath -> review.moviePosterPath
+          // 수정: review.tvPosterPath -> review.moviePosterPath (이 부분은 확인 필요)
           tvPoster: review.moviePosterPath,
         }));
         setReviews(formattedReviews);
         setVisibleReviews(formattedReviews);
         setTotalPages(response.totalPages);
-        setHasMore(response.totalPages > 1);
+        // 다음 요청할 페이지 번호 설정 (API 응답은 0-based, 상태는 다음 요청할 페이지)
+        setPage(response.currentPage + 1); 
+        // 더 불러올 페이지 있는지 확인 (API 응답 기준)
+        setHasMore(response.currentPage < response.totalPages - 1);
+        console.log(
+          `TV 리뷰 초기 로드: 총 페이지=${response.totalPages}, 다음 요청=${response.currentPage + 1}, 더 있음=${response.currentPage < response.totalPages - 1}, 로드된 항목 수=${formattedReviews.length}, totalElements=${response.totalElements}`
+        );
       }
-      setLoading(false);
     } catch (error) {
       console.error("TV 리뷰 로딩 실패:", error);
       toast.error("리뷰를 불러오는데 실패했습니다.");
+      // AxiosError 인 경우 더 자세한 정보 로깅
+      if (axios.isAxiosError(error)) {
+        console.error("API 호출 오류 상세:", error.toJSON());
+      }
+    } finally {
       setLoading(false);
     }
   };
 
-  // Fix fetchMoreReviews similarly
+  // 추가 로드
   const fetchMoreReviews = async () => {
-    const nextPage = page + 1;
-    if (nextPage >= totalPages) {
-      setHasMore(false);
-      return;
+    // 로딩 중이거나 더 이상 데이터 없으면 중단
+    if (loading || !hasMore) {
+        console.log("TV 무한 스크롤 호출 무시: 로딩 중이거나 더 이상 데이터 없음", { loading, hasMore });
+        return;
     }
+
+    console.log(`TV 무한 스크롤: 다음 페이지 ${page} 로드 시도`); // 현재 'page' 상태 값 사용
+
+    // 이론상 page가 totalPages보다 크거나 같아질 수 없음 (hasMore가 false가 되므로)
+    // 하지만 방어적으로 체크
+    if (totalPages > 0 && page >= totalPages) {
+       console.log(`TV 더 불러올 페이지 없음: 요청 페이지=${page}, 총 페이지=${totalPages}`);
+       setHasMore(false);
+       return;
+    }
+
     try {
-      const response = await backendApi.getAllTvReviews(
-        nextPage,
-        reviewsPerPage
-      );
-      if (response.content) {
+      setLoading(true);
+      // 현재 'page' 상태 값으로 API 요청
+      const response = await backendApi.getAllTvReviews(page, reviewsPerPage);
+
+      console.log(`TV API 응답 받음: ${response.content?.length || 0}개, currentPage=${response.currentPage}, totalPages=${response.totalPages}`);
+
+      if (response.content && response.content.length > 0) {
         const formattedReviews = response.content.map((review: any) => ({
           ...review, // 기존 속성들 유지
           createdAt: convertBackendDateToISO(review.createdAt),
@@ -393,19 +416,52 @@ const TvReviewsPage: React.FC = () => {
             id: review.userId,
             username: review.username,
             profileImageUrl: review.userProfileImageUrl,
-            reviewCount: 0,
+            reviewCount: 0, // Assuming reviewCount is not directly available
           },
-          // 수정: review.tvPosterPath -> review.moviePosterPath
+          // 수정: review.tvPosterPath -> review.moviePosterPath (이 부분은 확인 필요)
           tvPoster: review.moviePosterPath,
         }));
-        setReviews((prev) => [...prev, ...formattedReviews]);
-        setVisibleReviews((prev) => [...prev, ...formattedReviews]);
-        setPage(nextPage);
-        setHasMore(response.totalPages > nextPage + 1);
+
+        // 리뷰 목록 업데이트 (중복 방지)
+        setReviews(prev => {
+           const newReviewsOnly = formattedReviews.filter(nr => !prev.some(pr => pr.id === nr.id));
+           const updated = [...prev, ...newReviewsOnly];
+           console.log(`TV 리뷰 상태 업데이트: ${prev.length}개 + ${newReviewsOnly.length}개 = ${updated.length}개`);
+           return updated;
+        });
+        // 표시 리뷰 목록 업데이트 (중복 방지)
+        setVisibleReviews(prev => {
+           const newReviewsOnly = formattedReviews.filter(nr => !prev.some(pr => pr.id === nr.id));
+           const updated = [...prev, ...newReviewsOnly];
+           console.log(`TV 표시 리뷰 상태 업데이트: ${prev.length}개 + ${newReviewsOnly.length}개 = ${updated.length}개`);
+           return updated;
+        });
+
+        // 다음 요청할 페이지 번호 업데이트 (API 응답 기준)
+        const nextPageToRequest = response.currentPage + 1;
+        setPage(nextPageToRequest);
+        // 더 불러올 페이지 있는지 업데이트 (API 응답 기준)
+        const stillHasMore = response.currentPage < response.totalPages - 1;
+        setHasMore(stillHasMore);
+        // totalPages도 업데이트 (혹시 변경될 수 있으므로)
+        setTotalPages(response.totalPages);
+
+        console.log(`TV API 응답 처리 완료: 다음 요청 페이지=${nextPageToRequest}, 더 있음=${stillHasMore}`);
+
+      } else {
+        // 응답 데이터가 없으면 더 이상 로드할 것 없음
+        setHasMore(false);
+        console.log("TV 응답에 콘텐츠가 없거나 비어있음, 더 불러올 데이터 없음");
       }
     } catch (error) {
       console.error("TV 리뷰 더 불러오기 실패:", error);
       toast.error("리뷰를 더 불러오는데 실패했습니다.");
+      // AxiosError 인 경우 더 자세한 정보 로깅
+      if (axios.isAxiosError(error)) {
+        console.error("API 호출 오류 상세:", error.toJSON());
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1109,7 +1165,7 @@ const TvReviewsPage: React.FC = () => {
   useEffect(() => {
     fetchReviews();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, navigate, location]);
+  }, []); // <-- 의존성 배열을 빈 배열로 수정
 
   // 스크롤 이벤트 리스너 추가
   useEffect(() => {
@@ -1335,8 +1391,8 @@ const TvReviewsPage: React.FC = () => {
   const reviewsToRender = showSearch ? searchResults : visibleReviews;
 
   // 프로필 이미지 URL 처리 함수 추가
-  const getProfileImageUrl = (imageUrl: string | null | undefined) => {
-    if (!imageUrl) return null;
+  const getProfileImageUrl = (imageUrl: string | null | undefined): string | undefined => {
+    if (!imageUrl) return undefined; // null 또는 undefined 이면 undefined 반환
 
     // 절대 URL이면 그대로 사용
     if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
@@ -1344,7 +1400,9 @@ const TvReviewsPage: React.FC = () => {
     }
 
     // 상대 URL이면 BASE_URL 추가
-    return `${BASE_URL}${imageUrl}`;
+    // BASE_URL 끝에 '/'가 없고 imageUrl 시작에 '/'가 없으면 추가
+    const separator = (!BASE_URL.endsWith('/') && !imageUrl.startsWith('/')) ? '/' : '';
+    return `${BASE_URL}${separator}${imageUrl}`; // BASE_URL과 조합하여 반환
   };
 
   return (

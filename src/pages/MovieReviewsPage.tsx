@@ -86,7 +86,7 @@ interface CommentResponse {
   created_at: string;
   updated_at: string | null;
   user_id: number;
-  // 추가 필드 - 백엔드에서 다양한 형태로 반환될 수 있음
+  // 추가 필드
   userId?: number;
   createdAt?: string;
   user?: {
@@ -94,6 +94,10 @@ interface CommentResponse {
     username: string;
     profileUrl: string | null;
   };
+  likeCount?: number;    // <--- 추가
+  dislikeCount?: number; // <--- 추가
+  liked?: boolean;       // <--- 추가 (TvReviewsPage와 통일)
+  disliked?: boolean;    // <--- 추가 (TvReviewsPage와 통일)
 }
 
 // 영화 리뷰 데이터 타입 정의
@@ -381,7 +385,8 @@ const MovieReviewsPage: React.FC = () => {
   // useEffect에서 fetchReviews 호출
   useEffect(() => {
     fetchReviews();
-  }, [page, navigate, location, fetchReviews]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // <-- 의존성 배열을 빈 배열로 수정
 
   // 리뷰 작성 처리
   const handleSubmitReview = async (e: React.FormEvent) => {
@@ -1448,8 +1453,8 @@ const MovieReviewsPage: React.FC = () => {
   const reviewsToRender = showSearch ? searchResults : visibleReviews;
 
   // 프로필 이미지 URL 처리 함수 추가
-  const getProfileImageUrl = (imageUrl: string | null | undefined) => {
-    if (!imageUrl) return null;
+  const getProfileImageUrl = (imageUrl: string | null | undefined): string | undefined => {
+    if (!imageUrl) return undefined; // null 또는 undefined 이면 undefined 반환
 
     // 절대 URL이면 그대로 사용
     if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
@@ -1457,7 +1462,8 @@ const MovieReviewsPage: React.FC = () => {
     }
 
     // 상대 URL이면 BASE_URL 추가
-    return `${BASE_URL}${imageUrl}`;
+    const separator = (!BASE_URL.endsWith('/') && !imageUrl.startsWith('/')) ? '/' : '';
+    return `${BASE_URL}${separator}${imageUrl}`;
   };
 
   return (

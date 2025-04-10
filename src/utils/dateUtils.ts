@@ -129,33 +129,37 @@ export const getPostDateByPattern = (
 
 /**
  * 날짜 문자열을 특정 형식으로 포맷팅합니다.
- * @param dateString - 포맷팅할 날짜 문자열
- * @param options - Intl.DateTimeFormatOptions 타입의 포맷 옵션
- * @param locale - 로케일 (기본값: 'ko-KR')
- * @returns 포맷팅된 날짜 문자열
+ * @param dateString - 포맷팅할 날짜 문자열 또는 Date 객체, 혹은 null/undefined
+ * @returns 포맷팅된 날짜 문자열 (예: "2023.04.10. 09:06")
  */
-export const formatDate = (dateString: string | Date): string => {
-  if (!dateString) return "";
+export const formatDate = (dateString: string | Date | null | undefined): string => {
+  if (!dateString) return ""; // 빈 문자열, null, undefined 처리
 
   try {
     const date =
       typeof dateString === "string" ? new Date(dateString) : dateString;
 
-    // 24시간 표기법으로 수정
-    return date.toLocaleString("ko-KR", {
+    // 유효하지 않은 날짜 확인
+    if (isNaN(date.getTime())) {
+      console.error("Invalid date value provided to formatDate:", dateString);
+      return typeof dateString === 'string' ? dateString : "유효하지 않은 날짜";
+    }
+
+    // 24시간 표기법 및 형식 정리 (YYYY.MM.DD. HH:MM)
+    const formatted = date.toLocaleString("ko-KR", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
-      hour12: false, // 24시간 표기법 사용
+      hour12: false,
     });
+
+    return formatted.replace(/\.\s/g, '.').replace(/\.$/, '');
+
   } catch (error) {
-    console.error("Error formatting date:", error);
-    // 오류 발생 시 원본 문자열이나 기본값 반환
-    return typeof dateString === "string"
-      ? dateString
-      : dateString.toISOString();
+    console.error("Error formatting date:", error, "Input:", dateString);
+    return "날짜 변환 오류";
   }
 };
 
